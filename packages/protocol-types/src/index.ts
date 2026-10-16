@@ -349,11 +349,25 @@ export type WalletRpcOperation =
   /** A key rotation the account already signed, submitted and paid for by the exit. */
   | 'ROTATE';
 
+/**
+ * XRPL's questions for a pool's attesters, answered at the exit like
+ * WALLET_RPC: one JSON request per operation, an allowlist each, never a
+ * general proxy (backend/xrpl/queries.ts).
+ *
+ *   REGISTER_TAG     a fresh destination tag and the commitments it credits
+ *   TAG_STATUS       what a tag has received and carried
+ *   NULLIFIER_SPENT  whether the pool holds a note's nullifier credential
+ *   ONRAMP_URL       a signed checkout URL, built from structured fields only
+ *   READ / SUBMIT    a per-site account's ledger reads and signed transactions
+ */
+export type XrplOperation = 'REGISTER_TAG' | 'TAG_STATUS' | 'NULLIFIER_SPENT' | 'ONRAMP_URL' | 'READ' | 'SUBMIT';
+
 export type MeshQuery =
   | { readonly kind: 'RING_SNAPSHOT'; readonly scope: PoolScope }
   | { readonly kind: 'RELAY_SNAPSHOT' }
   | { readonly kind: 'PRIVACY_CONDITIONS'; readonly scope: PoolScope }
   | { readonly kind: 'WALLET_RPC'; readonly operation: WalletRpcOperation; readonly encodedRequest: Hex }
+  | { readonly kind: 'XRPL'; readonly operation: XrplOperation; readonly encodedRequest: Hex }
   | { readonly kind: 'INTENT_STATUS'; readonly handle: StatusHandle }
   | { readonly kind: 'MESH_STATUS'; readonly handle: MessageHandle }
   | { readonly kind: 'POOL_RECEIPT'; readonly txHash: TxHash };
@@ -363,6 +377,7 @@ export type MeshQueryResult =
   | { readonly kind: 'RELAY_SNAPSHOT'; readonly value: RelaySnapshot }
   | { readonly kind: 'PRIVACY_CONDITIONS'; readonly value: PrivacyConditions }
   | { readonly kind: 'WALLET_RPC'; readonly value: Hex }
+  | { readonly kind: 'XRPL'; readonly value: Hex }
   | { readonly kind: 'INTENT_STATUS'; readonly value: IntentStatus }
   | { readonly kind: 'MESH_STATUS'; readonly value: MeshStatusEvent }
   | { readonly kind: 'POOL_RECEIPT'; readonly value: Hex };

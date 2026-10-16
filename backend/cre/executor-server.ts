@@ -74,6 +74,8 @@ export interface ExecutorServerOptions {
   readonly receipt?: (txHash: TxHash) => Promise<Hex>;
   /** WALLET_RPC (chain/wallet-rpc.ts). Optional; absent, it is refused. */
   readonly walletRpc?: QueryAnswererDeps['walletRpc'];
+  /** XRPL (xrpl/queries.ts). Optional; absent, it is refused. */
+  readonly xrpl?: QueryAnswererDeps['xrpl'];
   /**
    * The deployed CRE workflow's routes: GET /v1/cre/pending serves the
    * envelopes awaiting a decision, POST /v1/cre/release takes its tagged
@@ -241,6 +243,7 @@ export function createExecutorServer(options: ExecutorServerOptions = {}): Execu
         intentStatus: (handle) => executor.getStatus(handle),
         ...(options.receipt === undefined ? {} : { receipt: options.receipt }),
         ...(options.walletRpc === undefined ? {} : { walletRpc: options.walletRpc }),
+        ...(options.xrpl === undefined ? {} : { xrpl: options.xrpl }),
       });
 
   // Reassembles intents too large for one mesh message. See mesh/chunks.ts.

@@ -1,0 +1,3 @@
+/* The XRPL wallet has five tabs where the Arc one has four. */
+@media(max-width:760px){.nav{grid-template-columns:repeat(5,1fr)}}
+.extension .nav{grid-template-columns:repeat(5,1fr)}

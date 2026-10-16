@@ -1,0 +1,6 @@
+:root{color-scheme:light dark;font-family:system-ui,sans-serif}
+body{margin:0;background:Canvas;color:CanvasText}
+main{max-width:640px;margin:0 auto;padding:24px 16px}
+.actions{display:grid;gap:8px;margin:16px 0}
+button{min-height:44px;font:inherit;cursor:pointer}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}

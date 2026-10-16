@@ -42,7 +42,7 @@ const replacer = (_k: string, v: unknown) => (typeof v === 'bigint' ? `${v}n` : 
 const reviver = (_k: string, v: unknown) => (typeof v === 'string' && /^\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v);
 const utf8 = (s: string) => new TextEncoder().encode(s);
 
-async function keyFrom(passphrase: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+export async function keyFrom(passphrase: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   if (passphrase.length < 12) throw new Error('use a passphrase of at least 12 characters');
   const base = await crypto.subtle.importKey('raw', utf8(passphrase), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITERATIONS }, base,

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>opaque — connect</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="connect.css">
+</head>
+<body>
+<main class="connect">
+  <header><img src="media/logo.png" alt="opaque" width="942" height="200"><span class="local" id="network">XRPL</span></header>
+  <section id="idle">
+    <p class="origin" id="idle-title">Starting…</p>
+    <p class="status" id="idle-status" role="status">Verifying the relay directory and connecting through the mesh.</p>
+  </section>
+  <section id="request" hidden>
+    <p class="eyebrow">Request from</p>
+    <p class="origin" id="request-origin"></p>
+    <h2 id="request-title"></h2>
+    <p id="request-summary"></p>
+    <div id="fund-box" hidden>
+      <p>This site gets an XRPL account of its own, funded privately by an Opaque pool. The ledger shows the pool as its funder, never you.</p>
+      <label class="field" for="fund-amount"><span>Fund with (XRP, from your private notes)</span><input id="fund-amount" type="text" inputmode="numeric" pattern="[0-9]*" value="10"></label>
+      <label class="privacy-toggle" for="fund-tokens"><input id="fund-tokens" type="checkbox" checked><span><b>Also hold RLUSD</b><small>A trust line: 0.2 XRP of the account's reserve.</small></span></label>
+    </div>
+    <pre id="request-details" hidden></pre>
+    <div class="dialog-actions"><button class="secondary" id="reject" type="button">Reject</button><button class="primary" id="approve" type="button">Approve</button></div>
+    <p class="send-progress-log" id="progress" role="status" aria-live="polite" hidden></p>
+  </section>
+  <p class="fine-print">Every key that signs here signs once: the same transaction hands the account to a key nobody has seen yet.</p>
+</main>
+<script type="module" src="/src/xrpl-connect.ts"></script>
+</body>
+</html>

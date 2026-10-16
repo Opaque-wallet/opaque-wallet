@@ -1,0 +1,12 @@
+{
+  "$comment": "No mainnet pools yet. Mainnet keys are never shared with testnet: a key that signed on one network must not sign on the other.",
+  "network": {
+    "name": "xrpl-mainnet",
+    "displayName": "XRP Ledger",
+    "networkId": 0,
+    "wss": "wss://xrplcluster.com",
+    "explorer": "https://livenet.xrpl.org"
+  },
+  "attesters": { "count": 5, "quorum": 3 },
+  "pools": []
+}

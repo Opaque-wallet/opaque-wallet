@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>opaque — private XRP and RLUSD</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="xrpl.css">
+</head>
+<body>
+<div class="bg" aria-hidden="true"></div>
+<main class="wallet">
+  <header class="topbar">
+    <a class="brand" href="index.html" aria-label="Opaque home"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
+    <div class="top-actions">
+      <span class="network" id="network-label">XRPL</span>
+      <button class="account" id="account-button" type="button"><span class="identicon"><i></i></span><span><b>Opaque on XRPL</b><small id="account-short">Starting…</small></span><strong>⋮</strong></button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div><p class="eyebrow side-label">Wallet</p>
+        <nav class="nav" aria-label="Wallet navigation">
+          <button id="tab-home" aria-selected="true" type="button"><span class="nav-icon">⌂</span>Overview</button>
+          <button id="tab-send" aria-selected="false" type="button"><span class="nav-icon">↗</span>Send</button>
+          <button id="tab-receive" aria-selected="false" type="button"><span class="nav-icon">↙</span>Receive</button>
+          <button id="tab-activity" aria-selected="false" type="button"><span class="nav-icon">◷</span>Activity</button>
+          <button id="tab-apps" aria-selected="false" type="button"><span class="nav-icon">◫</span>Apps</button>
+        </nav>
+      </div>
+      <div class="side-foot"><a href="index.html">Back to opaque ↗</a></div>
+    </aside>
+
+    <section class="workspace">
+      <section class="view" id="view-home" aria-labelledby="tab-home">
+        <div class="balance-head">
+          <div><p class="eyebrow">Private balance</p><h1><span id="balance-main">—</span> <small id="balance-main-unit">XRP</small></h1><p id="note-count">Loading notes…</p></div>
+          <span class="shielded">▣ Shielded</span>
+        </div>
+        <div class="quick-actions">
+          <button id="action-send" type="button"><i>↗</i><span>Send</span></button>
+          <button id="action-receive" type="button"><i>↙</i><span>Receive</span></button>
+        </div>
+        <div class="dashboard">
+          <section class="panel">
+            <div class="panel-head"><div><p class="eyebrow">Assets</p><h2>Your private notes</h2></div><button id="refresh" type="button">Refresh</button></div>
+            <div id="assets"></div>
+            <p class="status" id="home-status" role="status"></p>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><div><p class="eyebrow">How it stays private</p><h2>On the XRP Ledger</h2></div><span class="local">Testnet</span></div>
+            <div class="budget">
+              <p>Your coins sit in a pool among notes of the same size. A payment proves it owns one of 8 of them without saying which, and the pool pays from its own account.</p>
+              <p>The pool's keys sign once each, and every payout swaps in keys nobody has seen yet. That protects against a future quantum computer by timing: an attacker gets a few seconds per key. It is not a mathematical guarantee.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view narrow" id="view-send" aria-labelledby="tab-send" hidden>
+        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">Private transfer</p><h1>Send</h1></div></div>
+        <form class="panel send-form" id="send-form">
+          <label class="field" for="send-asset"><span>Asset</span><select id="send-asset" class="network"></select></label>
+          <label class="amount" for="send-amount"><span>Amount</span><strong><input id="send-amount" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1"> <small id="send-unit">XRP</small></strong><p id="send-plan"></p></label>
+          <label class="field" for="recipient"><span>Recipient</span><input id="recipient" class="mono" type="text" placeholder="r…" autocomplete="off" spellcheck="false"><small>An XRPL address: a friend, an exchange, or another pool with its tag</small></label>
+          <label class="field" for="recipient-tag"><span>Destination tag (optional)</span><input id="recipient-tag" class="mono" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="Required by most exchanges"></label>
+          <fieldset class="privacy-choice">
+            <label class="privacy-toggle" for="wait-for-privacy"><input id="wait-for-privacy" type="checkbox"><span><b>Wait for stronger privacy</b><small>Settles once the pool has enough fresh notes around yours, and no later than the time below.</small></span></label>
+            <p class="immediate-note" id="immediate-settlement">Send now — usually settles in under a minute.</p>
+            <label class="field deadline-field" id="privacy-deadline-wrap" for="privacy-deadline" hidden><span>Settle no later than</span><input id="privacy-deadline" type="datetime-local" autocomplete="off" disabled></label>
+          </fieldset>
+          <button class="primary" id="send-button" type="submit">Send privately</button>
+          <p class="status" id="send-status" role="status"></p>
+        </form>
+      </section>
+
+      <section class="view narrow" id="view-receive" aria-labelledby="tab-receive" hidden>
+        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">Receive privately</p><h1>Receive</h1><p>A fresh tag on the pool's address, made for this one payment. Whoever pays it sees the pool and the tag, never you. What arrives becomes notes only this browser can spend.</p></div></div>
+        <section class="panel send-form">
+          <label class="field" for="receive-asset"><span>Asset</span><select id="receive-asset" class="network"></select></label>
+          <label class="field" for="receive-expected"><span>Expected amount (optional)</span><input id="receive-expected" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="e.g. 250"></label>
+          <button class="primary" id="receive-button" type="button">New receive tag</button>
+          <p class="status" id="receive-status" role="status"></p>
+          <div id="receive-result" hidden>
+            <div class="detail"><span>Pay to</span><code id="receive-address"></code></div>
+            <div class="detail"><span>Destination tag</span><strong id="receive-tag"></strong></div>
+            <div class="dialog-actions"><button class="secondary" id="copy-address" type="button">Copy address</button><button class="secondary" id="copy-tag" type="button">Copy tag</button></div>
+            <p class="fine-print">The tag is required: the pool refuses payments without one. Any amount works; what doesn't fill a whole note waits on the tag for the next payment.</p>
+            <div id="buy-box" hidden>
+              <p class="eyebrow">Buy with card or bank</p>
+              <label class="field" for="buy-amount"><span>Spend (USD)</span><input id="buy-amount" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="50"></label>
+              <button class="secondary" id="buy-button" type="button">Buy on MoonPay ↗</button>
+              <p class="fine-print">Opens MoonPay in a new tab. MoonPay knows who bought, how much, when, and this tag; the ledger shows MoonPay paying the pool.</p>
+            </div>
+          </div>
+        </section>
+        <section class="panel activity"><div class="panel-head"><div><p class="eyebrow">Receive tags</p><h2>Made in this browser</h2></div><button id="refresh-tags" type="button">Refresh</button></div><div id="tag-list"></div></section>
+      </section>
+
+      <section class="view" id="view-apps" aria-labelledby="tab-apps" hidden>
+        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">Private access</p><h1>Apps</h1><p>Each XRPL app you connect through Opaque gets an account of its own, funded by a pool: the app sees an address that leads nowhere. Close one to turn what is left, reserve included, back into notes.</p></div></div>
+        <section class="panel activity"><div id="site-list"></div><p class="status" id="apps-status" role="status"></p></section>
+      </section>
+
+      <section class="view" id="view-activity" aria-labelledby="tab-activity" hidden>
+        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">History</p><h1>Activity</h1><p>Private transfers made in this browser.</p></div></div>
+        <section class="panel activity"><div id="sent-list"></div></section>
+      </section>
+    </section>
+  </div>
+  <footer id="boot-error" role="alert" hidden></footer>
+</main>
+
+<dialog id="send-progress-dialog">
+  <div class="dialog-head"><div><p class="eyebrow">Private transfer</p><h2>Sending privately</h2></div></div>
+  <p class="send-progress-copy">Each note's proof is built in this browser and sent through three relays. Keep this window open until every note is on its way.</p>
+  <p class="send-progress-log" id="send-progress-log" role="status" aria-live="polite"></p>
+</dialog>
+
+<dialog id="account-dialog">
+  <form method="dialog" class="dialog-head"><div><p class="eyebrow">This browser</p><h2>Opaque on XRPL</h2></div><button value="close" aria-label="Close">×</button></form>
+  <div class="detail"><span>Network</span><strong id="account-network">—</strong></div>
+  <div class="detail"><span>Privacy backend</span><strong id="account-stack">—</strong></div>
+  <div class="backup">
+    <p class="eyebrow">Backup</p>
+    <p>Your notes exist only in this browser, and whoever holds them can spend them. A backup is encrypted under this passphrase: without it nobody can open the file, you included.</p>
+    <label class="field" for="backup-pass"><span>Passphrase (12+ characters)</span><input id="backup-pass" type="password" autocomplete="new-password" minlength="12"></label>
+    <div class="dialog-actions"><button class="secondary" id="backup-export" type="button">Download backup</button><button class="secondary" id="backup-import" type="button">Restore from file</button></div>
+    <input id="backup-file" type="file" accept="application/json,.json" hidden>
+    <p class="status" id="backup-status" role="status"></p>
+  </div>
+</dialog>
+<script type="module" src="/src/xrpl-app.ts"></script>
+</body>
+</html>

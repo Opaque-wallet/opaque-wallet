@@ -1,0 +1,22 @@
+{
+  "name": "opaque-xrpl-demo-dapp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "An ordinary XRPL dapp, on xrpl-connect, that uses Opaque through its adapter: the X3 exit check's DEX trade, AMM deposit and NFT purchase.",
+  "scripts": {
+    "dev": "vite"
+  },
+  "comment": [
+    "A test fixture, kept out of frontend/ on purpose: xrpl-connect brings the",
+    "Xaman, GemWallet and Xyra SDKs, which the wallet must never bundle. Here",
+    "it is the dapp's dependency, as it would be on any real dapp."
+  ],
+  "dependencies": {
+    "xrpl": "5.3.0",
+    "xrpl-connect": "1.0.0"
+  },
+  "devDependencies": {
+    "vite": "^8.2.2"
+  }
+}

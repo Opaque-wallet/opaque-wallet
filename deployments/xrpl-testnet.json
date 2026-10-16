@@ -1,0 +1,82 @@
+{
+  "$comment": "Written by backend/xrpl/setup-pools.ts. RLUSD here is a test issuer of Opaque's, set up like Ripple's (clawback on), because testnet RLUSD only comes from a web faucet.",
+  "network": {
+    "name": "xrpl-testnet",
+    "displayName": "XRPL Testnet",
+    "networkId": 1,
+    "wss": "wss://s.altnet.rippletest.net:51233",
+    "explorer": "https://testnet.xrpl.org"
+  },
+  "attesters": {
+    "count": 3,
+    "quorum": 2
+  },
+  "pools": [
+    {
+      "symbol": "XRP",
+      "asset": {
+        "kind": "XRP"
+      },
+      "spendFee": "200100",
+      "account": "rw5r7pX37iAtLEh1VZdciHaFpduftUtjYe",
+      "sizes": [
+        1000000,
+        10000000,
+        100000000
+      ],
+      "deployedAtLedger": 21585269,
+      "moonpay": "xrp"
+    },
+    {
+      "symbol": "RLUSD",
+      "asset": {
+        "kind": "IOU",
+        "currency": "524C555344000000000000000000000000000000",
+        "issuer": "rpEJVjwRVZ8Q2ddgpHVukxgWKz9L9UwFzF"
+      },
+      "spendFee": "500000",
+      "account": "rPNFdbacMgCk6diE8wtyBxh3ggro2QLWK5",
+      "sizes": [
+        1000000,
+        10000000,
+        100000000
+      ],
+      "deployedAtLedger": 21585269,
+      "moonpay": null
+    },
+    {
+      "symbol": "USDC",
+      "asset": {
+        "kind": "IOU",
+        "currency": "USD",
+        "issuer": "rDzYkrDBG8uLa5EotddkzhZnAuFXXxf8Bu"
+      },
+      "spendFee": "500000",
+      "moonpay": null,
+      "account": "rfyGTnEH8fLeucbBxxpy24dsgXoFQnHJMZ",
+      "sizes": [
+        1000000,
+        10000000,
+        100000000
+      ],
+      "deployedAtLedger": 21586528
+    },
+    {
+      "symbol": "tMPT",
+      "asset": {
+        "kind": "MPT",
+        "issuanceId": "014962715F7B95F09A70E16683B1D6310304CC26C816F393",
+        "scale": 2
+      },
+      "spendFee": "500000",
+      "moonpay": null,
+      "account": "r9J16ivxW5WcED3u5rscm4AhW6W2fPo9L9",
+      "sizes": [
+        1000000,
+        10000000,
+        100000000
+      ],
+      "deployedAtLedger": 21586542
+    }
+  ]
+}

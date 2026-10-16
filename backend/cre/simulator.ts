@@ -32,7 +32,8 @@ export interface CreSimulatorOptions {
   readonly credentialMac: Uint8Array;
   readonly policyVersion: string;
   readonly releaseTtlSeconds: bigint;
-  readonly attester: {
+  /** Arc's FORS attester. Absent on XRPL, whose attester quorum verifies the proof itself. */
+  readonly attester?: {
     /** One attester can serve several pools: then, the identity for the spend's pool. */
     readonly identity: AttesterIdentity | ((scope: PoolScope) => AttesterIdentity);
     readonly current: () => Promise<{ readonly forsSeed: Uint8Array; readonly useCount: bigint }>;

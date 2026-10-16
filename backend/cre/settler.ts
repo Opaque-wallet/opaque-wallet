@@ -42,7 +42,12 @@ export interface SettlerOptions {
   readonly credentialMac: Uint8Array;
   readonly policyVersion: string;
   readonly releaseTtlSeconds: bigint;
-  readonly attester: {
+  /**
+   * Arc's FORS attester, which replaces the proof with its signature. Absent
+   * (XRPL), the release carries the spend with its proof, because the chain's
+   * own attester quorum verifies it before it co-signs anything.
+   */
+  readonly attester?: {
     /** One attester can serve several pools: then, the identity for the spend's pool. */
     readonly identity: AttesterIdentity | ((scope: PoolScope) => AttesterIdentity);
     readonly current: () => Promise<{ readonly forsSeed: Uint8Array; readonly useCount: bigint }>;
@@ -89,6 +94,16 @@ export function pendingForCre(executor: OpaqueExecutor, now: UnixSeconds, maxByt
   return { intents };
 }
 
+/**
+ * Refusals no retry can change, raised before anything was broadcast: the
+ * proof is bad, the note was already spent (an XRPL attester checks the
+ * ledger's credential before it signs), or the chain says the payment can
+ * never land (a non-retryable SETTLEMENT_REVERTED, from a dry run).
+ */
+const isFinal = (error: unknown): error is ProtocolFailure & { code: 'PROOF_REJECTED' | 'NULLIFIER_SPENT' | 'SETTLEMENT_REVERTED' } =>
+  error instanceof ProtocolFailure && (error.code === 'PROOF_REJECTED' || error.code === 'NULLIFIER_SPENT'
+    || (error.code === 'SETTLEMENT_REVERTED' && !error.retryable));
+
 const tagMatches = (expected: string, actual: unknown): boolean => {
   if (typeof actual !== 'string' || !/^0x[0-9a-f]{64}$/.test(actual)) return false;
   return timingSafeEqual(Buffer.from(fromHex(expected as never)), Buffer.from(fromHex(actual as never)));
@@ -99,7 +114,7 @@ export function createSettler(options: SettlerOptions): Settler {
   const store = executor.store;
   const now = options.now ?? (() => BigInt(Math.floor(Date.now() / 1000)) as UnixSeconds);
   const identityFor = (scope: PoolScope): AttesterIdentity =>
-    typeof options.attester.identity === 'function' ? options.attester.identity(scope) : options.attester.identity;
+    typeof options.attester!.identity === 'function' ? options.attester!.identity(scope) : options.attester!.identity;
   const lastTry = new Map<IntentId, number>();
 
   // ONE ATTESTATION AT A TIME, FROM SIGNING TO A LANDED TRANSACTION.
@@ -128,7 +143,7 @@ export function createSettler(options: SettlerOptions): Settler {
    */
   async function untilConsumed(used: { readonly useCount: bigint; readonly generation?: number }): Promise<void> {
     for (let attempt = 0; attempt < 15; attempt++) {
-      const seen = await options.attester.current() as { readonly useCount: bigint; readonly generation?: number };
+      const seen = await options.attester!.current() as { readonly useCount: bigint; readonly generation?: number };
       if (seen.generation !== used.generation || seen.useCount > used.useCount) return;
       await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
@@ -177,8 +192,14 @@ export function createSettler(options: SettlerOptions): Settler {
       // Open with the released key, and hold CRE's approval to exactly this
       // spend: the committed hash, the approved recipient, the intent's pool.
       let spend: PrivateSpend;
+      let beside: { readonly destination?: unknown } = {};
       try {
-        spend = asPrivateSpend(decodeIntentPlaintext(openBulk(fromHex(decision.k as never), record.intent.spendHash, record.intent.encryptedPayload)).spend);
+        const opened = decodeIntentPlaintext(openBulk(fromHex(decision.k as never), record.intent.spendHash, record.intent.encryptedPayload)).spend;
+        spend = asPrivateSpend(opened);
+        // An XRPL payment names its account and tag beside the spend. Not
+        // trusted here: the spend's recipient binds both, and every XRPL
+        // attester recomputes that binding before it signs.
+        if (opened['destination'] !== undefined) beside = { destination: opened['destination'] };
       } catch {
         refuse(intentId, 'INVALID_INPUT', 'the released key does not open this payment');
         return;
@@ -198,8 +219,10 @@ export function createSettler(options: SettlerOptions): Settler {
       const checked = spend;
       await oneAtATime(async () => {
         const at = now();
-        const key = await options.attester.current();
-        const attested = attestRingSpend({ spend: checked, identity: identityFor(checked.scope), ...key });
+        const key = options.attester === undefined ? undefined : await options.attester.current();
+        const attested = key === undefined
+          ? { ...checked, ...beside } as PrivateSpend
+          : attestRingSpend({ spend: checked, identity: identityFor(checked.scope), ...key });
         const release = issueRelease({
           intentId, spend: attested, policyVersion: options.policyVersion,
           issuedAt: at, ttlSeconds: options.releaseTtlSeconds, secret: options.credentialMac,
@@ -208,11 +231,11 @@ export function createSettler(options: SettlerOptions): Settler {
         // the transition that permits it, so a crash cannot mint a second one.
         store.authorize({ intentId, release, now: at });
         await deliver(intentId, release);
-        if (store.get(intentId)?.state === 'SETTLED') await untilConsumed(key);
+        if (key !== undefined && store.get(intentId)?.state === 'SETTLED') await untilConsumed(key);
       });
     } catch (error) {
       options.onError?.(intentId, error);
-      if (error instanceof ProtocolFailure && error.code === 'PROOF_REJECTED') refuse(intentId, 'PROOF_REJECTED', error.message);
+      if (isFinal(error)) refuse(intentId, error.code, error.message);
       // Anything else after authorisation is retried from the outbox.
     } finally {
       store.releaseClaim(intentId);
@@ -246,6 +269,9 @@ export function createSettler(options: SettlerOptions): Settler {
         await oneAtATime(() => deliver(record.intentId, outbox));
       } catch (error) {
         options.onError?.(record.intentId, error);
+        // Nothing of this intent's was ever broadcast, so a refusal now is not
+        // about a transaction of its own that may yet land.
+        if (record.broadcast === undefined && isFinal(error)) refuse(record.intentId, error.code, error.message);
       } finally {
         store.releaseClaim(record.intentId);
       }

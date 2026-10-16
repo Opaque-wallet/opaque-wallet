@@ -3,7 +3,7 @@
   "version": "1.0.0-review",
   "private": true,
   "type": "module",
-  "description": "Opaque V1 \u2014 relay mesh (\u00a75) and CRE confidential execution. Swarnim, S3/S4.",
+  "description": "Opaque V1 — relay mesh (§5) and CRE confidential execution. Swarnim, S3/S4.",
   "engines": {
     "node": ">=22.18"
   },
@@ -12,7 +12,16 @@
     "typecheck": "tsc --noEmit",
     "mesh:keys": "node mesh/local-mesh.ts --out ./.mesh",
     "mesh:local": "node mesh/local-mesh.ts --out ./.mesh --serve",
-    "test:chain": "node --test chain/test/*.test.ts"
+    "test:chain": "node --test chain/test/*.test.ts",
+    "test:xrpl": "node --test xrpl/test/*.test.ts onramp/test/*.test.ts",
+    "xrpl:setup": "node --use-system-ca xrpl/setup-pools.ts",
+    "xrpl:e2e": "node --use-system-ca xrpl/e2e-payment.ts",
+    "xrpl:e2e:receive": "node --use-system-ca xrpl/e2e-receive.ts",
+    "xrpl:stack": "node --use-system-ca xrpl/stack.ts",
+    "xrpl:e2e:browser": "node --use-system-ca scripts/e2e-xrpl-browser.ts",
+    "xrpl:spike:sites": "node --use-system-ca xrpl/spike-sites.ts",
+    "xrpl:e2e:dapp": "node --use-system-ca scripts/e2e-xrpl-dapp.ts",
+    "xrpl:e2e:mpt": "node --use-system-ca xrpl/e2e-mpt.ts"
   },
   "comment": [
     "Runs .ts directly: Node >=22.18 strips types natively, so there is no build",
@@ -26,7 +35,7 @@
     "",
     "`test` is offline and deterministic. `test:chain` reads the LIVE Arc",
     "deployment, which is the only way to catch an ABI that has drifted from the",
-    "deployed bytecode \u2014 but it needs a network, so it is a separate script",
+    "deployed bytecode — but it needs a network, so it is a separate script",
     "rather than something that turns CI red when an RPC has a bad minute."
   ],
   "dependencies": {
@@ -34,7 +43,11 @@
     "@noble/post-quantum": "^0.7.1",
     "@opaque/pq-wallet": "file:../packages/pq-wallet",
     "@opaque/protocol-types": "file:../packages/protocol-types",
-    "viem": "^2.56.3"
+    "ripple-address-codec": "^5.0.1",
+    "ripple-binary-codec": "^2.11.0",
+    "ripple-keypairs": "^3.1.0",
+    "viem": "^2.56.3",
+    "xrpl": "^5.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

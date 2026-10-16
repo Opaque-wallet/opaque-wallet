@@ -22,10 +22,12 @@
     "resolveJsonModule": true
   },
   "include": [
+    "onramp",
     "mesh",
     "cre",
     "zk",
     "chain",
+    "xrpl",
     "stack.ts"
   ]
 }

@@ -48,6 +48,7 @@ frontend/media/**/*.png
 # the wallet, which changes every time the mesh is rebuilt.
 backend/.stack/
 frontend/public/stack.json
+frontend/public/xrpl-stack.json
 
 # Vercel CLI link
 .vercel

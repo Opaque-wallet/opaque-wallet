@@ -30,6 +30,7 @@ import {
   type StatusHandle,
   type TxHash,
   type WalletRpcOperation,
+  type XrplOperation,
 } from '@opaque/protocol-types';
 import { asPoolScope, assertHex, encodeBigint, fromHex } from '@opaque/protocol-types/codecs.js';
 
@@ -47,8 +48,10 @@ const ANSWERED = new Set<MeshQuery['kind']>([
   'INTENT_STATUS',
   'POOL_RECEIPT',
   'WALLET_RPC',
+  'XRPL',
 ]);
 const WALLET_OPERATIONS = new Set<WalletRpcOperation>(['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE']);
+const XRPL_OPERATIONS = new Set<XrplOperation>(['REGISTER_TAG', 'TAG_STATUS', 'NULLIFIER_SPENT', 'ONRAMP_URL', 'READ', 'SUBMIT']);
 
 const refuse = (message: string): never => {
   throw new ProtocolFailure('INVALID_INPUT', message);
@@ -89,6 +92,12 @@ export function decodeMeshQuery(raw: unknown): MeshQuery {
       assertHex(q['encodedRequest'], 'encodedRequest');
       return { kind: 'WALLET_RPC', operation: operation as WalletRpcOperation, encodedRequest: q['encodedRequest'] as Hex };
     }
+    case 'XRPL': {
+      const operation = q['operation'];
+      if (typeof operation !== 'string' || !XRPL_OPERATIONS.has(operation as XrplOperation)) refuse(`no XRPL operation ${String(operation)}`);
+      assertHex(q['encodedRequest'], 'encodedRequest');
+      return { kind: 'XRPL', operation: operation as XrplOperation, encodedRequest: q['encodedRequest'] as Hex };
+    }
   }
   return refuse('unreachable');
 }
@@ -100,6 +109,8 @@ export interface QueryAnswererDeps {
   readonly receipt?: (txHash: TxHash) => Promise<Hex>;
   /** Optional: chain/wallet-rpc.ts createWalletRpcAnswerer. Absent, WALLET_RPC is refused. */
   readonly walletRpc?: (operation: WalletRpcOperation, encodedRequest: Hex) => Promise<Hex>;
+  /** Optional: xrpl/queries.ts createXrplAnswerer. Absent, XRPL is refused. */
+  readonly xrpl?: (operation: XrplOperation, encodedRequest: Hex) => Promise<Hex>;
 }
 
 export function createQueryAnswerer(deps: QueryAnswererDeps): (query: MeshQuery) => Promise<MeshQueryResult> {
@@ -122,6 +133,10 @@ export function createQueryAnswerer(deps: QueryAnswererDeps): (query: MeshQuery)
       case 'WALLET_RPC': {
         if (deps.walletRpc === undefined) refuse('this exit does not answer WALLET_RPC');
         return { kind: 'WALLET_RPC', value: await deps.walletRpc!(query.operation, query.encodedRequest) };
+      }
+      case 'XRPL': {
+        if (deps.xrpl === undefined) refuse('this exit does not answer XRPL');
+        return { kind: 'XRPL', value: await deps.xrpl!(query.operation, query.encodedRequest) };
       }
       default:
         return refuse(`this exit does not answer ${query.kind}`);

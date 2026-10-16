@@ -1,3 +1,13 @@
+## Opaque on the XRP Ledger
+
+Private XRP and RLUSD on the XRP Ledger. Hash-based ring proofs, one-time-tag receiving, single-use keys against quantum attacks, and a fresh account for every XRPL dapp. Built on Batch and Credentials, no smart contracts needed.
+
+Live on XRPL **testnet**. To run the wallet, start `cd backend && npm run xrpl:stack`, then `cd frontend && npm run dev`, and open `/xrpl.html`. How it works, the testnet results, and what's left: [docs/xrpl.md](docs/xrpl.md).
+
+The rest of this README is Opaque on Arc, which this repo builds on.
+
+---
+
 <div align="center">
 
 <img src="frontend/media/logo.png" alt="Opaque — post quantum" width="420">
