@@ -1,0 +1,46 @@
+{
+  "name": "opaque-frontend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "opaque's landing page and wallet. TypeScript, built with Vite.",
+  "scripts": {
+    "dev": "vite",
+    "build": "VITE_NETWORK=mainnet vite build && VITE_NETWORK=testnet vite build --outDir dist/testnet",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test 'src/**/*.test.ts'",
+    "preview": "vite preview",
+    "ext": "npm run build && node ../extension/build.mjs",
+    "api": "node --watch ../backend/server.js"
+  },
+  "comment": [
+    "`npm install && npm run dev` is the whole setup. Vite serves index.html",
+    "(landing) and app.html (wallet), transpiles TypeScript on the fly and",
+    "hot-reloads. /api is proxied to the backend on :8402, so run `npm run api`",
+    "in a second terminal when you need it — the UI runs fine without it.",
+    "",
+    "`npm run ext` builds and then assembles extension/dist, the unpacked",
+    "Chrome extension. The wallet is written to Manifest V3's rules (no inline",
+    "<script>, no onclick=) so one UI ships to both the web and the extension;",
+    "extension/build.mjs fails loudly if that ever stops being true.",
+    "",
+    "These dependencies do NOT reach the scanner. frontend/ is a SIBLING of",
+    "../src, never a parent, so Node's upward module resolution cannot see this",
+    "node_modules from shipped code. Do not introduce workspaces or a root",
+    "node_modules — that is exactly what would break it.",
+    "",
+    "vercel.json installs ../backend, ../packages/* and ../graph as well: the",
+    "wallet bundles their source, and a bare import there resolves from THAT",
+    "directory's node_modules, never this one. vercel.json allows no comments",
+    "(its schema refuses unknown keys, and the deploy fails), so this is here."
+  ],
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "@opaque/protocol-types": "file:../packages/protocol-types",
+    "@opaque/zk": "file:../backend/zk",
+    "gsap": "^3.15.0"
+  }
+}

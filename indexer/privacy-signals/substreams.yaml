@@ -1,0 +1,25 @@
+specVersion: v0.1.0
+package:
+  name: opaque_privacy_signals
+  version: v0.1.0
+  description: Aggregate-only privacy signals for EVM payment pools and relay directories.
+
+protobuf:
+  files:
+    - privacy_signals.proto
+  importPaths:
+    - ./proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ./target/wasm32-unknown-unknown/release/opaque_privacy_signals.wasm
+
+modules:
+  - name: map_privacy_signals
+    kind: map
+    initialBlock: 0
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:opaque.privacy.v1.PrivacySignalBlock

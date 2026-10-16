@@ -1,0 +1,17 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "name": "commitment", "type": "bytes32"},
+      {"indexed": false, "name": "index", "type": "uint256"}
+    ],
+    "name": "Deposited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [{"indexed": false, "name": "ring", "type": "bytes32[]"}],
+    "name": "RingUsed",
+    "type": "event"
+  }
+]

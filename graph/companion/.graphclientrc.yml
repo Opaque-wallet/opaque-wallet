@@ -1,0 +1,37 @@
+# Read-only Graph Client composition for the judge-facing Privacy Sentinel.
+# This file is deliberately separate from graph/src/client.ts, which remains
+# Opaque's tested operational Graph boundary.
+sources:
+  - name: opaqueStudio
+    handler:
+      graphql:
+        # Build against the reviewed public query surface; execute against Studio.
+        # This avoids a Graph Client introspection incompatibility with Studio.
+        source: ./schemas/opaque-studio.graphql
+        endpoint: https://api.studio.thegraph.com/query/1760100/opaque/v0.3.0
+        method: POST
+        retry: 1
+        timeout: 10000
+    transforms:
+      - encapsulate:
+          name: opaque
+          applyTo:
+            query: true
+  - name: arbitrumUsdc
+    handler:
+      graphql:
+        # Execution remains live through The Graph Gateway. The local schema is
+        # only the stable public transfer-query contract needed for generation.
+        source: ./schemas/arbitrum-usdc.graphql
+        # Graph Network source: Arbitrum USDC, pinned subgraph ID.
+        # `graphclient build` substitutes GRAPH_GATEWAY_API_KEY from graph/.env.
+        endpoint: https://gateway.thegraph.com/api/${GRAPH_GATEWAY_API_KEY}/subgraphs/id/9J9RwHsMK3vNoZaoMcHJuCeuDhUZmJ5fqvS59c4ZSmEQ
+        retry: 1
+        timeout: 10000
+    transforms:
+      - encapsulate:
+          name: settlement
+          applyTo:
+            query: true
+documents:
+  - ./documents/*.graphql

@@ -1,0 +1,42 @@
+query OpaquePublicContext {
+  opaque {
+    _meta {
+      hasIndexingErrors
+      block {
+        number
+        timestamp
+      }
+    }
+    ringPools(first: 1000) {
+      id
+      poolSize
+      observedAt
+    }
+    relayNodes(first: 1000) {
+      id
+      operatorId
+      reliabilityScore
+      batchOccupancy
+      recentSelectionCount
+      lastSeenAt
+    }
+  }
+}
+
+query SettlementPublicContext {
+  settlement {
+    _meta {
+      hasIndexingErrors
+      block {
+        number
+        timestamp
+      }
+    }
+    transfers(first: 50) {
+      id
+      from
+      to
+      value
+    }
+  }
+}

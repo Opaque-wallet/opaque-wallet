@@ -1,0 +1,38 @@
+{
+  "name": "@opaque/graph",
+  "version": "1.0.0-review",
+  "private": true,
+  "type": "module",
+  "description": "Opaque V1 — subgraph schema and the selection algorithms it feeds: ring decoys (§8.1) and the Markov hop chain (§8.2). Aditya.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "/Users/adityamane/.bun/bin/bun test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "subgraph:render": "bun scripts/render-manifest.ts",
+    "subgraph:codegen": "graph codegen subgraph.yaml",
+    "subgraph:build": "graph build subgraph.yaml",
+    "companion:build": "graphclient build --dir companion",
+    "companion:build:live": "/Users/adityamane/.bun/bin/bun --env-file=.env ./node_modules/.bin/graphclient build --dir companion",
+    "companion:validate": "graphclient validate --dir companion",
+    "sentinel:serve": "/Users/adityamane/.bun/bin/bun sentinel/stdio.ts",
+    "sentinel:serve:http": "/Users/adityamane/.bun/bin/bun sentinel/http-entry.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@noble/hashes": "^2.4.0",
+    "@opaque/protocol-types": "file:../packages/protocol-types"
+  },
+  "devDependencies": {
+    "@graphprotocol/client-cli": "^3.0.7",
+    "@graphprotocol/graph-cli": "^0.98.1",
+    "@graphprotocol/graph-ts": "^0.38.0",
+    "@graphql-mesh/transform-encapsulate": "^0.95.0",
+    "@types/node": "^22.15.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,22 @@
+[package]
+name = "opaque-privacy-signals"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Reusable public privacy-signal Substreams module for EVM payment pools and relay directories"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ethabi = "17"
+prost = "0.13"
+substreams = "0.7.6"
+substreams-ethereum = "0.11.1"
+
+[build-dependencies]
+prost-build = "0.13"
+protoc-bin-vendored = "3"
+
+[target.wasm32-unknown-unknown.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }

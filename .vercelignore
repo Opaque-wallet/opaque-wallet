@@ -1,0 +1,16 @@
+# What `vercel deploy` from the repo root must never upload. The site builds
+# from frontend/ but installs siblings, so the whole checkout is the upload.
+**/.env
+**/.env.*
+!**/.env.example
+**/*.env
+**/*.key
+backend/.stack
+backend/deploy/config
+backend/mesh/deploy/config
+**/node_modules
+contracts/lib
+contracts/out
+contracts/cache
+contracts/broadcast
+**/.graphclient

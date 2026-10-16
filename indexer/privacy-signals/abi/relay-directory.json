@@ -1,0 +1,26 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "name": "nodeId", "type": "bytes32"},
+      {"indexed": true, "name": "operator", "type": "address"},
+      {"indexed": false, "name": "endpoint", "type": "string"},
+      {"indexed": false, "name": "kemKeyCommitment", "type": "bytes32"},
+      {"indexed": false, "name": "epoch", "type": "uint64"}
+    ],
+    "name": "RelayAnnounced",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "name": "nodeId", "type": "bytes32"},
+      {"indexed": false, "name": "reliabilityBps", "type": "uint16"},
+      {"indexed": false, "name": "batchOccupancy", "type": "uint16"},
+      {"indexed": false, "name": "recentSelections", "type": "uint32"},
+      {"indexed": false, "name": "observedAt", "type": "uint64"}
+    ],
+    "name": "RelayHealth",
+    "type": "event"
+  }
+]

@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package opaque.privacy.v1;
+
+// A deliberately aggregate-only record. It never carries a note secret,
+// recipient, depositor, selected ring members, or a relay route.
+message PrivacySignalBlock {
+  uint64 block_number = 1;
+  repeated PrivacySignal signals = 2;
+}
+
+message PrivacySignal {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    POOL_DEPOSIT = 1;
+    RING_OBSERVED = 2;
+    RELAY_ANNOUNCED = 3;
+    RELAY_HEALTH = 4;
+  }
+
+  Kind kind = 1;
+  // Pool address for pool signals, RelayDirectory address for relay signals.
+  string source = 2;
+  // Public relay identifier only. Empty for pool-only signals.
+  string relay_id = 3;
+  // Public operator address for diversity aggregation. Empty where irrelevant.
+  string operator = 4;
+  // Ring cardinality; no members are exported.
+  uint32 ring_size = 5;
+  // Relay aggregate telemetry in basis points/counts. Zero where irrelevant.
+  uint32 reliability_bps = 6;
+  uint32 batch_occupancy = 7;
+  uint32 recent_selections = 8;
+  uint64 observed_at = 9;
+}

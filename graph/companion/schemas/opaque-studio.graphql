@@ -1,0 +1,35 @@
+"""The public, read-only portion of Opaque's live Studio subgraph used by Privacy Sentinel."""
+scalar BigInt
+
+type Block {
+  number: Int!
+  timestamp: Int!
+}
+
+type Meta {
+  hasIndexingErrors: Boolean!
+  block: Block!
+}
+
+type RingPool {
+  id: ID!
+  poolSize: Int!
+  observedAt: BigInt!
+}
+
+type RelayNode {
+  id: ID!
+  # Older live rows may predate RelayHealth. The companion excludes an
+  # incomplete row rather than manufacturing a readiness value.
+  operatorId: String
+  reliabilityScore: BigInt
+  batchOccupancy: BigInt
+  recentSelectionCount: BigInt
+  lastSeenAt: BigInt
+}
+
+type Query {
+  _meta: Meta
+  ringPools(first: Int): [RingPool!]!
+  relayNodes(first: Int): [RelayNode!]!
+}

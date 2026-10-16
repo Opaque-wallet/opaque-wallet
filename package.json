@@ -1,0 +1,33 @@
+{
+  "name": "opaque-xrpl",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Opaque on the XRP Ledger: private XRP and RLUSD, single-use keys, private access to XRPL dapps.",
+  "license": "MIT",
+  "bin": {
+    "nonce0": "./bin/nonce0.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "spike": "node --use-system-ca backend/xrpl/spike.ts",
+    "test": "node --test test/*.test.js",
+    "smoke": "npm pack --silent && D=$(mktemp -d) && tar xzf opaque-xrpl-*.tgz -C $D && cp -r test/fixtures $D/fixtures && node $D/package/bin/nonce0.js scan $D/fixtures --json; rm -rf $D opaque-xrpl-*.tgz",
+    "test:all": "npm test && npm --prefix packages/protocol-types test && npm --prefix packages/pq-wallet test && npm --prefix packages/ring-client test && npm --prefix graph test && npm --prefix backend test && npm --prefix frontend test",
+    "typecheck:all": "npm --prefix packages/protocol-types run typecheck && npm --prefix packages/pq-wallet run typecheck && npm --prefix packages/ring-client run typecheck && npm --prefix graph run typecheck && npm --prefix backend run typecheck && npm --prefix frontend run typecheck"
+  },
+  "comment": [
+    "Runs .ts directly: Node >=22.18 strips types, so there is no build step.",
+    "Built on Opaque (github.com/minrawsjar/Opaque), flattened into this repo;",
+    "clone with --recurse-submodules for contracts/lib/forge-std."
+  ],
+  "dependencies": {
+    "xrpl": "^5.3.0"
+  }
+}

@@ -1,0 +1,53 @@
+node_modules/
+.env
+*.env
+*.env.local
+# Seeding accounts and their notes (backend/chain/fill-pools.ts): keys and spendable secrets.
+.env.seeders.json
+!.env.example
+
+# foundry build output. lib/ is git submodules and stays TRACKED.
+contracts/out/
+contracts/cache/
+
+# rust / substreams
+indexer/target/
+*.spkg
+
+# scanner rpc cache (committed only for the demo fixture, see test/fixtures/cache/)
+.nonce0-cache/
+
+# npm pack artifacts
+nonce0-*.tgz
+
+.DS_Store
+
+# assembled unpacked extension — rebuild with `node extension/build.mjs`
+extension/dist/
+extension/*.zip
+
+# vite build output
+frontend/dist/
+
+# workspace installs (file: deps symlink across packages)
+packages/*/node_modules/
+backend/node_modules/
+
+# Agent skills, installed per-project by `npx skills add`.
+.agents/
+skills-lock.json
+.claude/skills/
+
+# hero source renders. The page only ever loads the .webp beside each of
+# these; the PNGs are the masters kept for re-encoding at another size or
+# quality. ~70 MB, and git keeps blobs forever, so they stay out of history.
+frontend/media/**/*.png
+
+# local stack (backend/stack.ts): dev-only CRE key, credential MAC and relay
+# keys — secrets, regenerated on demand — and the public config it writes for
+# the wallet, which changes every time the mesh is rebuilt.
+backend/.stack/
+frontend/public/stack.json
+
+# Vercel CLI link
+.vercel

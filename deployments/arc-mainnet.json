@@ -1,0 +1,170 @@
+{
+  "$comment": "Arc MAINNET. Same rules as arc-testnet.json: public values only, null means NOT DEPLOYED. Selected by OPAQUE_NETWORK=mainnet (Node) or VITE_NETWORK=mainnet (Vite); testnet stays the default. The mainnet attester, mesh and egress keys are NEW, never shared with testnet: FORS keys are few-time, so a key that signed on testnet must not sign here. Secrets: backend/mainnet.env (gitignored).",
+  "network": {
+    "name": "arc-mainnet",
+    "displayName": "Arc Mainnet",
+    "chainId": 5042,
+    "rpcUrl": "https://rpc.mainnet.arc.io",
+    "rpcFallbacks": [
+      "https://rpc.quicknode.mainnet.arc.io",
+      "https://rpc.blockdaemon.mainnet.arc.io"
+    ],
+    "explorer": "https://explorer.arc.io",
+    "sitePath": "",
+    "nativeCurrency": {
+      "name": "USDC",
+      "symbol": "USDC",
+      "decimals": 18
+    }
+  },
+  "tokens": {
+    "usdc": {
+      "$comment": "Checked live: symbol USDC, 6 decimals, same address as testnet.",
+      "address": "0x3600000000000000000000000000000000000000",
+      "decimals": 6
+    }
+  },
+  "contracts": {
+    "pqKeyRegistry": {
+      "address": "0x33a9d3e188835e8287f55a1a8cb7bd6554ed2faf",
+      "deployedAtBlock": 25919198,
+      "tx": "0x66137ae8a679e2ee9f6a92fe852308c03f625432b19d462f27d97392b21ac9c3"
+    },
+    "pqAccountValidator": {
+      "address": "0x7786dfcd410c712f5b72dd6b0e7c8c74aaf88e4b",
+      "deployedAtBlock": 25919199,
+      "tx": "0x82a3b0303c2fdb89492980072c8cdff0f169ca3f851fbfa2c86586779654cf23"
+    },
+    "pqAccountImplementation": {
+      "address": "0x9a1c7294dc884954ebf4fcb2ba04f8bf814bb58e",
+      "deployedAtBlock": 25919205,
+      "tx": "0x42629e7bd74815ef44caab74ac88cf7e0c548d5a33067f3e8dc25d849bd33074"
+    },
+    "pqAccountFactory": {
+      "address": "0x5f8bd9531a08b6c06eeb41d9f617038e38d40206",
+      "deployedAtBlock": 25919208,
+      "tx": "0x5381a5f739f79bdfb115757b78757f80a8d994dc27cbce4a1b9f6f286d54f974",
+      "$comment": "Staked 1 USDC in EntryPoint v0.7 (0x0000000071727de22e5e9d8baf0edac6f37da032), 1-day unstake delay, no owner: tx 0x2b5dedcb14bc8fcbabc93de93e046189e37e63957f9505e82a983ae888951206 at block 25919212."
+    },
+    "relayDirectory": {
+      "address": "0x342ced088848740b7b3885c70c5ae6368f79d281",
+      "deployedAtBlock": 25919216,
+      "tx": "0xdddb3ebb813c47494db261d416efb0178608940bdc1a7ed6a1071aaeab2ea321"
+    },
+    "singleNotePqVerifier": null,
+    "attestedRingVerifier": {
+      "address": "0x106a00d85cc9f9ea73e0668e8f5c2f6418cb0eee",
+      "deployedAtBlock": 25920812
+    },
+    "attestedRingVerifier2": {
+      "address": "0xf6a63838f994707047c9de5f28086400092b87bd",
+      "deployedAtBlock": 25920819
+    },
+    "attestedRingVerifier5": {
+      "address": "0xfa623d2f16f6527157dbae64e5b9942c1c779b0c",
+      "deployedAtBlock": 25920827
+    },
+    "attestedRingVerifier10": {
+      "address": "0xf26e0b7e09d29d3c0cd97eb3052386edfe512e58",
+      "deployedAtBlock": 25920831
+    },
+    "attestedRingVerifier20": {
+      "address": "0xc400153290e32cdcacd744c1ad3167837d1e4303",
+      "deployedAtBlock": 25920842
+    },
+    "attestedRingVerifier50": {
+      "address": "0xb2e3a31ccfe113224440db023a7e6c0a604b07e6",
+      "deployedAtBlock": 25920850
+    },
+    "attestedRingVerifier100": {
+      "address": "0x97a4556e8047fa6de14558398963734dd6c0a5d8",
+      "deployedAtBlock": 25920858
+    },
+    "crePolicyGate": null,
+    "creBatchSettlement": null
+  },
+  "accounts": {
+    "$comment": "The mainnet attester. Its ECDSA key registers its FORS key once in pqKeyRegistry and then has no power.",
+    "attester": "0x84ce05dceae891f1c89be840e5fa190bcbdac0e3"
+  },
+  "pools": [
+    {
+      "$comment": "RING_8, deployed 2026-10-14 by contracts/script/deploy-pools-mainnet.sh, verified live: capabilities() = RING_8/8/denomination, every verifier names the mainnet attester, whose FORS key is registered (0/32 uses). Each pool is spendable once it holds 8 deposits. UNAUDITED.",
+      "address": "0xb753058ec7a8cf29d96288a5e5ae5c01c23221ea",
+      "denomination": 1000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier",
+      "deployedAtBlock": 25920814
+    },
+    {
+      "address": "0x4cc97933541d3411ca22c4303e8fdf7fe7fe64f7",
+      "denomination": 2000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier2",
+      "deployedAtBlock": 25920823
+    },
+    {
+      "address": "0xcf4fc5093bcae2999e7059329d8df1fe4153e1ac",
+      "denomination": 5000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier5",
+      "deployedAtBlock": 25920830
+    },
+    {
+      "address": "0xe3d1c899d2700559403341db5dc26577d2669026",
+      "denomination": 10000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier10",
+      "deployedAtBlock": 25920837
+    },
+    {
+      "address": "0x6902a8c0e75d12efe138ed829a2156a3225abbf9",
+      "denomination": 20000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier20",
+      "deployedAtBlock": 25920846
+    },
+    {
+      "address": "0x8406e07a27c6c38f4089d5174840b9db53bbb745",
+      "denomination": 50000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier50",
+      "deployedAtBlock": 25920854
+    },
+    {
+      "address": "0x91c5d56b77b2e1453647d37ca6350194a4c42bd4",
+      "denomination": 100000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier100",
+      "deployedAtBlock": 25920862
+    }
+  ],
+  "erc4337": {
+    "$comment": "All three EntryPoints verified deployed on Arc mainnet; Pimlico public endpoint serves chain 5042 (eth_supportedEntryPoints checked 2026-10-14).",
+    "entryPoints": {
+      "v0.6": "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",
+      "v0.7": "0x0000000071727de22e5e9d8baf0edac6f37da032",
+      "v0.8": "0x4337084d9e255ff0702461cf8895ce9e3b5ff108"
+    },
+    "preferredEntryPoint": "v0.7",
+    "bundlerUrl": "https://public.pimlico.io/v2/5042/rpc",
+    "bundlerApiKeyEnv": "PIMLICO_API_KEY"
+  },
+  "mesh": {
+    "$comment": "Trust root of the MAINNET relay directory, derived from the mainnet MESH_MASTER (backend/mainnet.env). Not the testnet root.",
+    "genesis": 1791979790,
+    "trustRoot": {
+      "signerCommitment": "0xa4bfe5bbd010f1c16ff6dc2019d16f42e4c21166b6acb784b709344801ed7c60",
+      "minVersion": 0
+    }
+  },
+  "services": {
+    "$comment": "Endpoints, not keys. graphUrl assumes the opaque-mainnet subgraph lives in the same Studio account (1760100) as testnet's.",
+    "graphUrl": "https://api.studio.thegraph.com/query/1760100/opaque-mainnet/v0.3.0",
+    "meshExitUrl": "https://opaque-mainnet-production-28a9.up.railway.app/v1/mesh",
+    "releaseEgressUrl": null,
+    "creTriggerUrl": null,
+    "relayDirectoryUrl": null
+  },
+  "deployer": "0x54d303b3a5c4586b67a94ce205e5108058cb4e23"
+}

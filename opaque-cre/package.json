@@ -1,0 +1,23 @@
+{
+  "name": "opaque-cre",
+  "version": "1.0.0-review",
+  "private": true,
+  "type": "module",
+  "description": "Opaque \u2014 the Chainlink CRE confidential workflow and its key ceremony.",
+  "scripts": {
+    "keys": "node tools/make-keys.ts",
+    "simulate": "cre workflow simulate ./confidential-intent --target staging-settings --non-interactive --trigger-index 0 --env .env.live"
+  },
+  "comment": [
+    "Root deps exist for tools/ ONLY, which runs under Node. The workflow itself",
+    "runs under Javy/QuickJS and takes its dependencies from",
+    "confidential-intent/package.json. `simulate` reads the two secrets from",
+    ".env.live (names in secrets.live.yaml); nothing prints them."
+  ],
+  "dependencies": {
+    "@opaque/protocol-types": "file:../packages/protocol-types",
+    "@noble/ciphers": "^2.0.1",
+    "@noble/hashes": "^2.4.0",
+    "@noble/post-quantum": "^0.7.1"
+  }
+}

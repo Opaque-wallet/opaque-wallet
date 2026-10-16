@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "for d in ../packages/protocol-types ../packages/pq-wallet ../packages/ring-client ../graph ../backend; do npm ci --omit=dev --no-audit --no-fund --prefix \"$d\" || exit 1; done && npm ci --no-audit --no-fund"
+}

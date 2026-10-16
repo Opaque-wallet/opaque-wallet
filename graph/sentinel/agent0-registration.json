@@ -1,0 +1,17 @@
+{
+  "name": "Opaque Privacy Sentinel",
+  "description": "A read-only public privacy-conditions agent for Opaque. It explains aggregate ring and relay conditions without receiving payment intent, note secrets, recipients, selected decoys, routes, proofs, or keys.",
+  "version": "0.1.0",
+  "mcpEndpoint": "${OPAQUE_SENTINEL_MCP_URL}",
+  "mcpVersion": "2025-11-25",
+  "mcpTools": [
+    "get_privacy_context",
+    "explain_privacy_readiness",
+    "list_public_privacy_signals"
+  ],
+  "supportedTrusts": [
+    "tee-attestation"
+  ],
+  "x402Support": false,
+  "privacyBoundary": "Read-only public aggregate data only. This agent cannot authorize, route, delay, sign, submit, or settle a payment."
+}

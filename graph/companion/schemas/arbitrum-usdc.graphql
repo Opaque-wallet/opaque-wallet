@@ -1,0 +1,24 @@
+"""Stable public transfer-query surface for the live Arbitrum USDC Graph Network source."""
+scalar BigInt
+
+type Block {
+  number: Int!
+  timestamp: Int!
+}
+
+type Meta {
+  hasIndexingErrors: Boolean!
+  block: Block!
+}
+
+type Transfer {
+  id: ID!
+  from: String!
+  to: String!
+  value: BigInt!
+}
+
+type Query {
+  _meta: Meta
+  transfers(first: Int): [Transfer!]!
+}

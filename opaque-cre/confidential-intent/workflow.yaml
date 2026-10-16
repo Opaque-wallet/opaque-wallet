@@ -1,0 +1,35 @@
+# ==========================================================================
+# CRE WORKFLOW SETTINGS FILE
+# ==========================================================================
+# staging and production are Arc testnet's stack; mainnet-settings is Arc
+# mainnet's, with its own keys (secretSuffix _MAINNET, secrets.mainnet.yaml).
+staging-settings:
+  user-workflow:
+    workflow-name: "opaque-confidential-release"
+    # Chainlink-hosted and off-chain: the org's account, no wallet, no gas.
+    # The on-chain registry is on Ethereum mainnet.
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.staging.json"
+    secrets-path: "../secrets.live.yaml"
+
+# ==========================================================================
+production-settings:
+  user-workflow:
+    workflow-name: "opaque-confidential-release-production"
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.production.json"
+    secrets-path: "../secrets.live.yaml"
+
+# ==========================================================================
+mainnet-settings:
+  user-workflow:
+    workflow-name: "opaque-confidential-release-mainnet"
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.mainnet.json"
+    secrets-path: "../secrets.mainnet.yaml"
