@@ -20,6 +20,7 @@ import { createMeshTransport } from '../mesh/client.ts';
 import { buildLocalMesh, serveLocalMesh } from '../mesh/local-mesh.ts';
 import type { MeshMessageKind } from '../mesh/transport.ts';
 import { buildRingSpend, deriveCommitment } from '../zk/index.ts';
+import type { XrplSpend } from './attester.ts';
 import { startXrpl, xrplAnswerer, type XrplNode } from './node.ts';
 import { recipientFor, type XrplDestination } from './protocol.ts';
 import type { XrplSend } from './queries.ts';
@@ -33,6 +34,8 @@ export interface Harness {
   /** The XRPL mesh query, as the wallet sends it. */
   readonly xrpl: XrplSend;
   ring(scope: PoolScope): Promise<RingSnapshot>;
+  /** A proven ring spend of the note to `destination`, as the wallet builds one. */
+  spend(scope: PoolScope, noteSecret: Uint8Array, destination: XrplDestination): Promise<XrplSpend>;
   /** Proof, credential, seal, mesh, CRE stand-in, attesters. The status comes back through the mesh. */
   pay(scope: PoolScope, noteSecret: Uint8Array, destination: XrplDestination): Promise<IntentStatus>;
   check(name: string, ok: boolean, detail: string): void;
@@ -87,15 +90,21 @@ export async function startHarness(basePort: number): Promise<Harness> {
     (await transport.query({ kind: 'XRPL', operation, encodedRequest }, await pathFor())).value as Hex;
   const ring = async (scope: PoolScope) => (await transport.query({ kind: 'RING_SNAPSHOT', scope }, await pathFor())).value as RingSnapshot;
 
+  const spendOf = async (scope: PoolScope, noteSecret: Uint8Array, destination: XrplDestination) => {
+    const snapshot = await ring(scope);
+    const decoys = selectDecoys({ scope, snapshot, exclude: deriveCommitment(noteSecret, scope) });
+    const t0 = Date.now();
+    const spend = buildRingSpend({ scope, recipient: recipientFor(destination), noteSecret, decoys });
+    log(`  proof built in ${Date.now() - t0} ms; ring of 8 from ${snapshot.candidates.length} deposits`);
+    return spend;
+  };
+
   return {
     node, client, xrpl, ring,
+    spend: async (scope, noteSecret, destination) => ({ ...await spendOf(scope, noteSecret, destination), destination }),
     async pay(scope, noteSecret, destination) {
-      const snapshot = await ring(scope);
-      const decoys = selectDecoys({ scope, snapshot, exclude: deriveCommitment(noteSecret, scope) });
       const recipient = recipientFor(destination);
-      const t0 = Date.now();
-      const spend = buildRingSpend({ scope, recipient, noteSecret, decoys });
-      log(`  proof built in ${Date.now() - t0} ms; ring of 8 from ${snapshot.candidates.length} deposits`);
+      const spend = await spendOf(scope, noteSecret, destination);
       const credential = issueCredential({ recipient, policyVersion: POLICY, expiresAt: (nowS() + 3600n) as UnixSeconds }, credentialMac);
       const seal = createIntentSealer({
         crePublicKey: intentKeys.publicKey, encryptionKeyId: KEY_ID,

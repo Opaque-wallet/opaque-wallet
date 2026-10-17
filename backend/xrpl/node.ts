@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Client } from 'xrpl';
+import { Client, xrpToDrops } from 'xrpl';
 
 import { ProtocolFailure, type PoolScope, type RingSnapshot, type UnixSeconds } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
@@ -36,12 +36,19 @@ interface AttesterFile {
   readonly index: Record<string, Record<string, number>>;
 }
 
-/** The attesters' seeds, created on first use. Secrets: never printed, file mode 0600. */
+/**
+ * The attesters' seeds, created on first use. Secrets: never printed, file mode 0600.
+ * A hosted node brings the seeds that own the pools' signer lists instead, in
+ * XRPL_ATTESTER_SEEDS (comma-separated hex); after that first boot the file,
+ * on the service's volume, is the record, key positions included.
+ */
 export function attesterFile(dir = XRPL_STATE, count = xrplDeployment.attesters.count): AttesterFile {
   const file = join(dir, 'attesters.json');
   if (!existsSync(file)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const fresh: AttesterFile = { seeds: Array.from({ length: count }, () => toHex(crypto.getRandomValues(new Uint8Array(32)))), index: {} };
+    const given = process.env['XRPL_ATTESTER_SEEDS']?.split(',').map((s) => s.trim().toLowerCase());
+    if (given !== undefined && given.some((s) => !/^0x[0-9a-f]{64}$/.test(s))) throw new Error('XRPL_ATTESTER_SEEDS must be comma-separated 32-byte hex seeds');
+    const fresh: AttesterFile = { seeds: given ?? Array.from({ length: count }, () => toHex(crypto.getRandomValues(new Uint8Array(32)))), index: {} };
     writeFileSync(file, JSON.stringify(fresh), { mode: 0o600 });
   }
   const state = JSON.parse(readFileSync(file, 'utf8')) as AttesterFile;
@@ -65,6 +72,8 @@ export const xrplScopes = (): PoolScope[] =>
 /** The exit's XRPL answers (xrpl/queries.ts), from a running node. MoonPay unset: no Buy. */
 export function xrplAnswerer(node: XrplNode, moonpay?: CheckoutConfig): XrplSend {
   const sourceOf = (pool: string) => node.pools.get(pool)?.source ?? (() => { throw new ProtocolFailure('INVALID_INPUT', 'no XRPL pool at that address'); })();
+  // ponytail: one faucet call at a time, since the faucet limits by IP; a queue if testnet traffic grows.
+  let fauceting = false;
   return createXrplAnswerer({
     registerTag: (pool, tag, registration) => node.registerTag(pool, tag, registration),
     async tagStatus(pool, tag) {
@@ -83,6 +92,29 @@ export function xrplAnswerer(node: XrplNode, moonpay?: CheckoutConfig): XrplSend
         // Only a registered tag: a purchase must never land where nothing credits it.
         if (!sourceOf(pool).registered(tag)) throw new ProtocolFailure('INVALID_INPUT', 'register the tag before buying to it');
         return checkoutUrl(moonpay, { currencyCode: deployed.moonpay, walletAddress: pool, walletAddressTag: tag, fiatAmount });
+      },
+    }),
+    // Testnet: a fresh faucet account pays the tag, so a visitor with no test XRP can still deposit.
+    ...(xrplDeployment.network.name !== 'xrpl-testnet' ? {} : {
+      async faucet(pool: string, tag: number) {
+        if (xrplDeployment.pools.find((p) => p.account === pool)?.symbol !== 'XRP') throw new ProtocolFailure('INVALID_INPUT', 'the faucet pays XRP only');
+        if (!sourceOf(pool).registered(tag)) throw new ProtocolFailure('INVALID_INPUT', 'register the tag before funding it');
+        if (fauceting) throw new ProtocolFailure('MESH_UNAVAILABLE', 'the faucet is busy: try again in a minute', true);
+        fauceting = true;
+        try {
+          const { wallet, balance } = await node.client.fundWallet();
+          // 95 is nine 10s and five 1s, what a fresh tag holds; the rest stays as the account's reserve.
+          const xrp = Math.min(95, Math.floor(balance) - 2);
+          const paid = await node.client.submitAndWait(
+            { TransactionType: 'Payment', Account: wallet.address, Destination: pool, Amount: xrpToDrops(xrp), DestinationTag: tag },
+            { autofill: true, wallet },
+          );
+          const result = (paid.result.meta as { TransactionResult?: string } | undefined)?.TransactionResult;
+          if (result !== 'tesSUCCESS') throw new ProtocolFailure('MESH_UNAVAILABLE', `the faucet's payment failed: ${result}`, true);
+          return { xrp, hash: paid.result.hash };
+        } finally {
+          fauceting = false;
+        }
       },
     }),
   });

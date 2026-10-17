@@ -21,7 +21,8 @@
     "xrpl:e2e:browser": "node --use-system-ca scripts/e2e-xrpl-browser.ts",
     "xrpl:spike:sites": "node --use-system-ca xrpl/spike-sites.ts",
     "xrpl:e2e:dapp": "node --use-system-ca scripts/e2e-xrpl-dapp.ts",
-    "xrpl:e2e:mpt": "node --use-system-ca xrpl/e2e-mpt.ts"
+    "xrpl:e2e:mpt": "node --use-system-ca xrpl/e2e-mpt.ts",
+    "xrpl:smoke:hosted": "node --use-system-ca scripts/smoke-xrpl-hosted.ts"
   },
   "comment": [
     "Runs .ts directly: Node >=22.18 strips types natively, so there is no build",

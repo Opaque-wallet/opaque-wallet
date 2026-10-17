@@ -51,7 +51,7 @@ const ANSWERED = new Set<MeshQuery['kind']>([
   'XRPL',
 ]);
 const WALLET_OPERATIONS = new Set<WalletRpcOperation>(['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE']);
-const XRPL_OPERATIONS = new Set<XrplOperation>(['REGISTER_TAG', 'TAG_STATUS', 'NULLIFIER_SPENT', 'ONRAMP_URL', 'READ', 'SUBMIT']);
+const XRPL_OPERATIONS = new Set<XrplOperation>(['REGISTER_TAG', 'TAG_STATUS', 'NULLIFIER_SPENT', 'ONRAMP_URL', 'FAUCET', 'READ', 'SUBMIT']);
 
 const refuse = (message: string): never => {
   throw new ProtocolFailure('INVALID_INPUT', message);

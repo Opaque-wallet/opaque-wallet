@@ -20,6 +20,12 @@
 // the account is gone and its XRP came back to the pool under the wallet's tag.
 // Fails if the wallet or the popup sent a request anywhere but their origin
 // and the stack.
+//
+// With --walletconnect (WALLETCONNECT_PROJECT_ID set), the dapp connects with
+// xrpl-connect's OWN WalletConnect adapter instead, as a dapp that has never
+// heard of Opaque would: its link is pasted into Opaque's connect page, whose
+// relay socket goes through the stack (sockets are policed too). Message
+// signing is not a WalletConnect method, so that one step is skipped.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -39,6 +45,9 @@ const ROOT = join(HERE, '..', '..');
 const WALLET = 'http://127.0.0.1:5199';
 const DAPP = 'http://localhost:5299';
 const CLOSE = process.argv.includes('--close');
+const WC = process.argv.includes('--walletconnect') ? process.env['WALLETCONNECT_PROJECT_ID'] ?? '' : undefined;
+if (WC === '') throw new Error('--walletconnect needs WALLETCONNECT_PROJECT_ID (a Reown project id)');
+if (WC !== undefined && CLOSE) throw new Error('--close runs without --walletconnect');
 const log = (s: string) => process.stdout.write(`${s}\n`);
 let failures = 0;
 const check = (name: string, ok: boolean, detail: string) => {
@@ -104,17 +113,22 @@ try {
   const offer = (await send({ TransactionType: 'NFTokenCreateOffer', Account: minter.address, NFTokenID: nftId, Amount: '1000000', Flags: NFTokenCreateOfferFlags.tfSellNFToken }, minter)).meta as { offer_id?: string };
   log('  market ready: a DEX offer, the XRP/RLUSD AMM, an NFT for sale at 1 XRP');
 
-  children.push(await start('node', ['--use-system-ca', 'xrpl/stack.ts'], join(ROOT, 'backend'), /wallet cfg/));
+  // WalletConnect's relay and Verify are reached through the stack's one port.
+  children.push(await start('node', ['--use-system-ca', 'xrpl/stack.ts'], join(ROOT, 'backend'), /wallet cfg/,
+    WC === undefined ? {} : { PORT: '18990', WALLETCONNECT_PROJECT_ID: WC }));
   children.push(await start('npx', ['vite', '--port', '5199', '--strictPort', '--host', '127.0.0.1'], join(ROOT, 'frontend'), /ready in|Local:/));
   children.push(await start('npx', ['vite', '--port', '5299', '--strictPort', '--host', 'localhost'], join(ROOT, 'demo', 'xrpl-dapp'), /ready in|Local:/));
 
   browser = await chromium.launch({ channel: 'chrome', headless: true });
   const context = await browser.newContext();
   const outside: string[] = [];
-  const police = (p: any) => p.on('request', (r: any) => {
-    const u = r.url();
-    if (!u.startsWith('http://127.0.0.1:') && !u.startsWith('blob:') && !u.startsWith('data:')) outside.push(u);
-  });
+  const police = (p: any) => {
+    p.on('request', (r: any) => {
+      const u = r.url();
+      if (!u.startsWith('http://127.0.0.1:') && !u.startsWith('blob:') && !u.startsWith('data:')) outside.push(u);
+    });
+    p.on('websocket', (ws: any) => { if (!ws.url().startsWith('ws://127.0.0.1:')) outside.push(ws.url()); });
+  };
 
   // ── the wallet: 20 XRP of notes, received by tag ─────────────────────────
   const wallet = await context.newPage();
@@ -136,8 +150,15 @@ try {
 
   // ── the dapp ─────────────────────────────────────────────────────────────
   const dapp = await context.newPage();
-  await dapp.goto(`${DAPP}/?wallet=${encodeURIComponent(`${WALLET}/xrpl-connect.html`)}&currency=${currency}&issuer=${ISSUER}&nftOffer=${offer.offer_id}`);
+  await dapp.goto(`${DAPP}/?wallet=${encodeURIComponent(`${WALLET}/xrpl-connect.html`)}&currency=${currency}&issuer=${ISSUER}&nftOffer=${offer.offer_id}${WC === undefined ? '' : `&wc=${WC}`}`);
   let popup: any;
+  if (WC !== undefined) {
+    // The user opens Opaque's connect page themselves; nothing opens it for them.
+    popup = await context.newPage();
+    police(popup);
+    await popup.goto(`${WALLET}/xrpl-connect.html`);
+    await popup.waitForFunction(() => !(document.getElementById('wc-form') as HTMLElement).hidden, null, { timeout: 90_000 });
+  }
   const logged = (id: string) => dapp.waitForFunction((k: string) => new RegExp(`^${k}( failed)?:`, 'm').test(document.getElementById('log')?.textContent ?? ''), id, { timeout: 300_000, polling: 1_000 });
   const lineOf = async (id: string) => ((await dapp.textContent('#log')) ?? '').split('\n').find((l: string) => l.startsWith(`${id}:`) || l.startsWith(`${id} failed:`)) ?? '';
   /** Clicks in the dapp, approves in the popup, returns the dapp's log line. */
@@ -148,6 +169,12 @@ try {
       popup = await opened;
       police(popup);
     }
+    if (id === 'connect-wc') {
+      // The link the dapp shows, pasted into Opaque, as a person would.
+      await dapp.waitForFunction(() => /^wc:/.test(document.getElementById('wc-uri')?.textContent ?? ''), null, { timeout: 60_000 });
+      await popup.fill('#wc-uri', String(await dapp.textContent('#wc-uri')));
+      await popup.click('#wc-connect');
+    }
     await popup.waitForFunction((t: string) => new RegExp(t).test(document.getElementById('request-title')?.textContent ?? '')
       && !(document.getElementById('approve') as HTMLButtonElement).disabled, title.source, { timeout: 120_000 });
     await popup.click('#approve');
@@ -156,17 +183,19 @@ try {
   }
 
   const t0 = Date.now();
-  const connected = await act('connect', /Connect privately/);
+  const connected = await act(WC === undefined ? 'connect' : 'connect-wc', /Connect privately/);
   const site = /connected (r\w+)/.exec(connected)?.[1] ?? '';
-  check('connect: a fresh account for the dapp, funded privately', site !== '', `${connected} in ${Math.round((Date.now() - t0) / 1000)} s`);
+  check(`connect${WC === undefined ? '' : ' over WalletConnect'}: a fresh account for the dapp, funded privately`, site !== '', `${connected} in ${Math.round((Date.now() - t0) / 1000)} s`);
   const trade = await act('trade', /Sign and submit/);
   check('a DEX trade from the dapp', /tesSUCCESS/.test(trade), trade);
   const amm = await act('amm', /Sign and submit/);
   check('an AMM deposit from the dapp', /tesSUCCESS/.test(amm), amm);
   const nft = await act('nft', /Sign \(the site submits it\)/);
   check('an NFT bought by a dapp that submits itself', /tesSUCCESS/.test(nft), nft);
-  const message = await act('message', /Sign a message/);
-  check('signMessage', /signature/.test(message), message);
+  if (WC === undefined) {
+    const message = await act('message', /Sign a message/);
+    check('signMessage', /signature/.test(message), message);
+  }
 
   // ── what the ledger says about the dapp's account ───────────────────────
   const history = (await client.request({ command: 'account_tx', account: site, forward: true, limit: 50 })).result.transactions;

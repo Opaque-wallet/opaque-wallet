@@ -30,6 +30,8 @@ export interface XrplAnswererDeps {
   isSpent(pool: string, nullifier: Nullifier): Promise<boolean>;
   /** Absent: Buy is not offered by this exit. */
   onrampUrl?(pool: string, tag: number, fiatAmount: number): Promise<string>;
+  /** Absent: not a testnet, so no faucet. */
+  faucet?(pool: string, tag: number): Promise<{ readonly xrp: number; readonly hash: string }>;
   /** One allowlisted ledger read (READ_COMMANDS). */
   read?(command: string, params: Record<string, unknown>): Promise<unknown>;
   /** A signed transaction blob, as any public node takes one. */
@@ -66,6 +68,10 @@ export function createXrplAnswerer(deps: XrplAnswererDeps): XrplSend {
     async ONRAMP_URL(r) {
       if (deps.onrampUrl === undefined) refuse('this exit does not offer Buy');
       return { url: await deps.onrampUrl!(str(r['pool'], 'pool'), int(r['tag'], 'tag'), int(r['fiatAmount'], 'fiatAmount')) };
+    },
+    async FAUCET(r) {
+      if (deps.faucet === undefined) refuse('this exit has no faucet');
+      return deps.faucet!(str(r['pool'], 'pool'), int(r['tag'], 'tag'));
     },
     async READ(r) {
       const command = str(r['command'], 'command');
@@ -123,6 +129,9 @@ export const nullifierSpent = async (send: XrplSend, pool: string, nullifier: Nu
 
 export const onrampUrl = async (send: XrplSend, pool: string, tag: number, fiatAmount: number) =>
   (await xrplCall<{ url: string }>(send, 'ONRAMP_URL', { pool, tag, fiatAmount })).url;
+
+export const faucetDeposit = (send: XrplSend, pool: string, tag: number) =>
+  xrplCall<{ xrp: number; hash: string }>(send, 'FAUCET', { pool, tag });
 
 /** site.ts's ledger, through the mesh: what a per-site account reads and sends. */
 export const meshLedger = (send: XrplSend): Ledger => ({

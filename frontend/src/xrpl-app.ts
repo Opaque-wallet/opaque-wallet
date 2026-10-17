@@ -5,6 +5,7 @@ import type { NoteSummary, UnixSeconds } from '@opaque/protocol-types';
 
 import { isAccount } from '../../backend/xrpl/protocol.ts';
 import { xrplDeployment } from '../../deployments/xrpl.ts';
+import { networkPicker } from './lib/network-picker.ts';
 import { paymentDeadline } from './lib/payment-deadline.ts';
 import { poolBySymbol, startXrplWallet, symbolOf, UNIT, type ReceiveTag, type Sent, type XrplWallet } from './lib/xrpl-runtime.ts';
 
@@ -107,7 +108,7 @@ async function renderPlan(): Promise<void> {
   const amount = Number(el<HTMLInputElement>('send-amount').value);
   if (!Number.isInteger(amount) || amount <= 0) { setStatus('send-plan', 'Whole amounts only: notes are 1, 10 and 100.'); return; }
   const plan = await wallet.plan(symbol, amount);
-  if (plan === undefined) { setStatus('send-plan', `Your ${symbol} notes can't make ${amount} exactly. Receive more, or pick an amount they make.`); return; }
+  if (plan === undefined) { setStatus('send-plan', `Your ${symbol} notes can't make ${amount} exactly. Deposit more, or pick an amount they make.`); return; }
   const count = [...plan.values()].reduce((a, b) => a + b, 0);
   const fees = count * feeOf(symbol);
   const parts = [...plan].map(([size, n]) => `${n} × ${size}`).join(' + ');
@@ -173,6 +174,7 @@ async function onReceive(): Promise<void> {
     el('receive-tag').textContent = String(current.tag);
     el('receive-result').hidden = false;
     el('buy-box').hidden = !(wallet.config.buy && poolBySymbol(symbol).moonpay);
+    el('faucet-box').hidden = !(symbol === 'XRP' && xrplDeployment.network.name === 'xrpl-testnet');
     setStatus('receive-status', `Ready. Payments to this address with tag ${current.tag} become your ${symbol} notes, usually within seconds of arriving.`);
     await renderTags();
   } catch (error) {
@@ -194,9 +196,26 @@ async function onBuy(): Promise<void> {
   }
 }
 
+async function onFaucet(): Promise<void> {
+  if (current === undefined) return;
+  const tag = current;
+  el<HTMLButtonElement>('faucet-button').disabled = true;
+  setStatus('receive-status', `Asking the testnet faucet to pay tag ${tag.tag}, through the mesh…`);
+  try {
+    const { xrp } = await wallet.faucet(tag);
+    setStatus('receive-status', `The faucet paid ${xrp} XRP to tag ${tag.tag}. Your notes appear on the Overview within seconds.`);
+    await refresh(true);
+    await renderTags();
+  } catch (error) {
+    setStatus('receive-status', `Faucet unavailable: ${(error as Error).message}`);
+  } finally {
+    el<HTMLButtonElement>('faucet-button').disabled = false;
+  }
+}
+
 async function renderTags(): Promise<void> {
   const tags = wallet.tags().slice(0, 10);
-  if (tags.length === 0) { el('tag-list').innerHTML = '<p class="empty">No receive tags yet.</p>'; return; }
+  if (tags.length === 0) { el('tag-list').innerHTML = '<p class="empty">No deposit tags yet.</p>'; return; }
   const rows = await Promise.all(tags.map(async (t) => {
     const row = document.createElement('div');
     row.className = 'intent';
@@ -268,7 +287,7 @@ async function onBackupImport(file: File): Promise<void> {
 
 // ── wiring ────────────────────────────────────────────────────────────────
 async function init(): Promise<void> {
-  el('network-label').textContent = xrplDeployment.network.displayName;
+  networkPicker(el<HTMLSelectElement>('network-switch'), 'xrpl');
   el('account-network').textContent = xrplDeployment.network.displayName;
   for (const v of VIEWS) el(`tab-${v}`).addEventListener('click', () => showView(v));
   for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => showView('home'));
@@ -303,6 +322,7 @@ async function init(): Promise<void> {
   el<HTMLFormElement>('send-form').addEventListener('submit', (e) => void onSend(e));
   el('receive-button').addEventListener('click', () => void onReceive());
   el('buy-button').addEventListener('click', () => void onBuy());
+  el('faucet-button').addEventListener('click', () => void onFaucet());
   el('copy-address').addEventListener('click', () => void navigator.clipboard.writeText(current?.pool ?? ''));
   el('copy-tag').addEventListener('click', () => void navigator.clipboard.writeText(String(current?.tag ?? '')));
   el('refresh').addEventListener('click', () => void refresh(true));

@@ -14,7 +14,7 @@
   <header class="topbar">
     <a class="brand" href="index.html" aria-label="Opaque home"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
     <div class="top-actions">
-      <span class="network" id="network-label">XRPL</span>
+      <select class="network" id="network-switch" aria-label="Network"></select>
       <button class="account" id="account-button" type="button"><span class="identicon"><i></i></span><span><b>Opaque on XRPL</b><small id="account-short">Starting…</small></span><strong>⋮</strong></button>
     </div>
   </header>
@@ -25,7 +25,7 @@
         <nav class="nav" aria-label="Wallet navigation">
           <button id="tab-home" aria-selected="true" type="button"><span class="nav-icon">⌂</span>Overview</button>
           <button id="tab-send" aria-selected="false" type="button"><span class="nav-icon">↗</span>Send</button>
-          <button id="tab-receive" aria-selected="false" type="button"><span class="nav-icon">↙</span>Receive</button>
+          <button id="tab-receive" aria-selected="false" type="button"><span class="nav-icon">↙</span>Deposit</button>
           <button id="tab-activity" aria-selected="false" type="button"><span class="nav-icon">◷</span>Activity</button>
           <button id="tab-apps" aria-selected="false" type="button"><span class="nav-icon">◫</span>Apps</button>
         </nav>
@@ -41,7 +41,7 @@
         </div>
         <div class="quick-actions">
           <button id="action-send" type="button"><i>↗</i><span>Send</span></button>
-          <button id="action-receive" type="button"><i>↙</i><span>Receive</span></button>
+          <button id="action-receive" type="button"><i>↙</i><span>Deposit</span></button>
         </div>
         <div class="dashboard">
           <section class="panel">
@@ -77,17 +77,22 @@
       </section>
 
       <section class="view narrow" id="view-receive" aria-labelledby="tab-receive" hidden>
-        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">Receive privately</p><h1>Receive</h1><p>A fresh tag on the pool's address, made for this one payment. Whoever pays it sees the pool and the tag, never you. What arrives becomes notes only this browser can spend.</p></div></div>
+        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">Deposit or receive privately</p><h1>Deposit</h1><p>A fresh tag on the pool's address. Pay it from any XRPL wallet or exchange, or give it to whoever is paying you: they see the pool and the tag, never you. What arrives becomes notes only this browser can spend.</p></div></div>
         <section class="panel send-form">
           <label class="field" for="receive-asset"><span>Asset</span><select id="receive-asset" class="network"></select></label>
           <label class="field" for="receive-expected"><span>Expected amount (optional)</span><input id="receive-expected" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="e.g. 250"></label>
-          <button class="primary" id="receive-button" type="button">New receive tag</button>
+          <button class="primary" id="receive-button" type="button">New deposit tag</button>
           <p class="status" id="receive-status" role="status"></p>
           <div id="receive-result" hidden>
             <div class="detail"><span>Pay to</span><code id="receive-address"></code></div>
             <div class="detail"><span>Destination tag</span><strong id="receive-tag"></strong></div>
             <div class="dialog-actions"><button class="secondary" id="copy-address" type="button">Copy address</button><button class="secondary" id="copy-tag" type="button">Copy tag</button></div>
             <p class="fine-print">The tag is required: the pool refuses payments without one. Any amount works; what doesn't fill a whole note waits on the tag for the next payment.</p>
+            <div id="faucet-box" hidden>
+              <p class="eyebrow">Testnet</p>
+              <button class="secondary" id="faucet-button" type="button">Deposit 95 test XRP from the faucet</button>
+              <p class="fine-print">XRPL's testnet faucet pays this tag. The request goes through the relays like everything else; the ledger shows a fresh faucet account paying the pool.</p>
+            </div>
             <div id="buy-box" hidden>
               <p class="eyebrow">Buy with card or bank</p>
               <label class="field" for="buy-amount"><span>Spend (USD)</span><input id="buy-amount" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="50"></label>
@@ -96,7 +101,7 @@
             </div>
           </div>
         </section>
-        <section class="panel activity"><div class="panel-head"><div><p class="eyebrow">Receive tags</p><h2>Made in this browser</h2></div><button id="refresh-tags" type="button">Refresh</button></div><div id="tag-list"></div></section>
+        <section class="panel activity"><div class="panel-head"><div><p class="eyebrow">Deposit tags</p><h2>Made in this browser</h2></div><button id="refresh-tags" type="button">Refresh</button></div><div id="tag-list"></div></section>
       </section>
 
       <section class="view" id="view-apps" aria-labelledby="tab-apps" hidden>

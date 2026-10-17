@@ -45,7 +45,8 @@ export class OpaqueAdapter {
   readonly #listeners = new Map<string, Set<(data: unknown) => void>>();
 
   constructor(options: OpaqueAdapterOptions = {}) {
-    this.#walletUrl = options.walletUrl ?? 'https://opaque.credit/xrpl-connect.html';
+    // ponytail: the hosted testnet wallet until an XRPL mainnet one exists; the popup refuses a site that asks for another network.
+    this.#walletUrl = options.walletUrl ?? 'https://opaque-xrpl.vercel.app/testnet/xrpl-connect.html';
     this.#origin = new URL(this.#walletUrl).origin;
     this.#timeoutMs = options.timeoutMs ?? 300_000;
     this.url = this.#origin;

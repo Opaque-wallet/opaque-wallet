@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "VITE_NETWORK=mainnet vite build && VITE_NETWORK=testnet vite build --outDir dist/testnet",
+    "deploy:xrpl": "rm -rf dist && VITE_NETWORK=testnet VITE_XRPL_STACK_URL=https://opaque-xrpl-testnet-production.up.railway.app/xrpl-stack.json vite build --outDir dist/testnet && cp vercel.xrpl.json dist/vercel.json && npx --yes vercel@64.5.0 deploy dist --prod --yes --project opaque-xrpl --scope swarnim-raj-s-projects",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
     "preview": "vite preview",
@@ -41,6 +42,9 @@
   "dependencies": {
     "@opaque/protocol-types": "file:../packages/protocol-types",
     "@opaque/zk": "file:../backend/zk",
+    "@walletconnect/sign-client": "2.25.0",
+    "@walletconnect/types": "2.25.0",
+    "@walletconnect/utils": "2.25.0",
     "gsap": "^3.15.0"
   }
 }

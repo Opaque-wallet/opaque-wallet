@@ -11,7 +11,7 @@
 // reports tesSUCCESS, and a failed ALLORNOTHING batch records none of its inner
 // transactions, so success is read from the inner Payment's own result.
 
-import { BatchFlags, GlobalFlags, type Batch, type SubmittableTransaction } from 'xrpl';
+import { BatchFlags, GlobalFlags, type Batch, type SignerListSet, type SubmittableTransaction } from 'xrpl';
 
 import { ProtocolFailure, type Nullifier } from '@opaque/protocol-types';
 
@@ -58,6 +58,15 @@ export function payoutBatch(p: Payout): Batch {
   };
 }
 
+/**
+ * The rotation alone, for when a payout's own did not apply: a Batch that was
+ * refused, expired, or validated with its inner transactions failed has still
+ * shown the public keys that signed it, and they must not stay listed.
+ */
+export const rotationOf = (pool: string, nextSigners: readonly string[], quorum: number): SignerListSet =>
+  // Flags explicit: autofill adds Flags 0 where there are none, and the proposal must match exactly.
+  ({ TransactionType: 'SignerListSet', Account: pool, Flags: 0, ...signerListOf(nextSigners, quorum) });
+
 // ── what an attester checks before it signs ───────────────────────────────
 
 const AUTOFILLED = ['Sequence', 'Fee', 'LastLedgerSequence', 'NetworkID', 'SigningPubKey', 'Signers'];
@@ -71,14 +80,18 @@ const canonical = (value: unknown): unknown => {
 const withoutAutofill = (tx: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(tx).filter(([k]) => !AUTOFILLED.includes(k)));
 
+type Proposal = Batch | SignerListSet;
+const innersOf = (t: Proposal): Batch['RawTransactions'] => (t.TransactionType === 'Batch' ? t.RawTransactions : []);
+
 /**
- * Refuses a proposed (autofilled) Batch that is anything but `expected` plus
- * the fields autofill adds, and bounds those: the pool's next sequence and the
- * ones after it, a fee cap, and a short validity window. Returns nothing; throws.
+ * Refuses a proposed (autofilled) payout Batch or rotation that is anything
+ * but `expected` plus the fields autofill adds, and bounds those: the pool's
+ * next sequence and the ones after it, a fee cap, and a short validity window.
+ * Returns nothing; throws.
  */
 export function checkProposal(input: {
-  readonly expected: Batch;
-  readonly proposed: Batch;
+  readonly expected: Proposal;
+  readonly proposed: Proposal;
   readonly poolSequence: number;
   readonly maxFeeDrops: bigint;
   readonly maxLastLedger: number;
@@ -89,15 +102,15 @@ export function checkProposal(input: {
   const bad = (why: string): never => { throw new ProtocolFailure('INVALID_INPUT', `refusing to sign: ${why}`); };
   // Networks 0..1024 (mainnet, testnet, devnet) carry no NetworkID; others must name theirs.
   const network = input.networkId > 1024 ? input.networkId : undefined;
-  const txs = [proposed as Record<string, unknown>, ...proposed.RawTransactions.map((r) => r.RawTransaction as Record<string, unknown>)];
+  const txs = [proposed as Record<string, unknown>, ...innersOf(proposed).map((r) => r.RawTransaction as Record<string, unknown>)];
   if (txs.some((t) => t['NetworkID'] !== network)) bad('the batch names another network');
-  const strip = (b: Batch) => JSON.stringify(canonical({
-    ...withoutAutofill(b as never),
-    RawTransactions: b.RawTransactions.map((r) => ({ RawTransaction: withoutAutofill(r.RawTransaction as never) })),
+  const strip = (t: Proposal) => JSON.stringify(canonical({
+    ...withoutAutofill(t as never),
+    ...(t.TransactionType === 'Batch' ? { RawTransactions: innersOf(t).map((r) => ({ RawTransaction: withoutAutofill(r.RawTransaction as never) })) } : {}),
   }));
   if (strip(proposed) !== strip(expected)) bad('the batch is not the payout that was verified');
   if (proposed.Sequence !== input.poolSequence) bad('the batch is not at the pool\'s next sequence');
-  proposed.RawTransactions.forEach((r, i) => {
+  innersOf(proposed).forEach((r, i) => {
     const t = r.RawTransaction as Record<string, unknown>;
     if (t['Sequence'] !== input.poolSequence + 1 + i) bad('inner sequences must follow the batch');
     if (t['Fee'] !== '0' || t['SigningPubKey'] !== '') bad('inner transactions carry no fee and no key');

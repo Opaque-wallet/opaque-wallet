@@ -358,9 +358,10 @@ export type WalletRpcOperation =
  *   TAG_STATUS       what a tag has received and carried
  *   NULLIFIER_SPENT  whether the pool holds a note's nullifier credential
  *   ONRAMP_URL       a signed checkout URL, built from structured fields only
+ *   FAUCET           testnet only: the network's faucet pays a registered XRP tag
  *   READ / SUBMIT    a per-site account's ledger reads and signed transactions
  */
-export type XrplOperation = 'REGISTER_TAG' | 'TAG_STATUS' | 'NULLIFIER_SPENT' | 'ONRAMP_URL' | 'READ' | 'SUBMIT';
+export type XrplOperation = 'REGISTER_TAG' | 'TAG_STATUS' | 'NULLIFIER_SPENT' | 'ONRAMP_URL' | 'FAUCET' | 'READ' | 'SUBMIT';
 
 export type MeshQuery =
   | { readonly kind: 'RING_SNAPSHOT'; readonly scope: PoolScope }

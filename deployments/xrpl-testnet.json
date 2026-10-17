@@ -11,6 +11,14 @@
     "count": 3,
     "quorum": 2
   },
+  "mesh": {
+    "$comment": "The hosted XRPL service's relay directory root, compiled into the wallet, like arc-testnet.json's. The service derives its weekly directories from XRPL_MESH_MASTER (a secret, never Arc's MESH_MASTER), starting at genesis.",
+    "genesis": 1792228986,
+    "trustRoot": {
+      "signerCommitment": "0xcb555a4fcfa2edd609c48b682381acf7883f65521a9d352f6b2369b762335c9d",
+      "minVersion": 0
+    }
+  },
   "pools": [
     {
       "symbol": "XRP",

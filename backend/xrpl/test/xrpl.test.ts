@@ -5,13 +5,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { Batch, Client } from 'xrpl';
+import type { Batch, Client, SignerListSet } from 'xrpl';
 
 import type { NoteCommitment, Nullifier } from '@opaque/protocol-types';
 
 import { buildRingSpend, createNoteSecret, deriveCommitment, verifierId } from '../../zk/index.ts';
 import { createAttester, attesterChain, type Attester, type XrplSpend } from '../attester.ts';
-import { checkProposal, payoutBatch, type Payout } from '../batch.ts';
+import { checkProposal, payoutBatch, rotationOf, signerListOf, type Payout } from '../batch.ts';
 import { keyChain } from '../keys.ts';
 import { createPoolSource, creditDeposits, incomingOf, type IncomingPayment } from '../pool.ts';
 import { amountOf, recipientFor, scopeOf, unitsDelivered, unitsOfDecimal, type XrplAsset } from '../protocol.ts';
@@ -166,6 +166,19 @@ test('an attester signs exactly the payout it verified, and nothing nearby', () 
   const withExpiry = { ...expired, RawTransactions: expired.RawTransactions.map((r, i) => (i === 0 ? { RawTransaction: { ...r.RawTransaction, Expiration: 1 } } : r)) } as Batch;
   assert.throws(() => check(filled(withExpiry)), /not the payout/, 'an Expiration would let the credential be deleted');
   assert.throws(() => payoutBatch({ ...PAYOUT, nullifiers: Array.from({ length: 7 }, (_, i) => c(i) as unknown as Nullifier) }), /1 to 6/);
+});
+
+test('a rotation alone is signed only as every key to its next one', () => {
+  const rotation = rotationOf(POOL, [ALICE, ISSUER], 2);
+  // As xrpl.js autofill leaves it: Flags 0 among what it adds (the first testnet run caught this).
+  const proposed = { ...rotation, Flags: 0, Sequence: 100, Fee: '40', LastLedgerSequence: 1010, SigningPubKey: '' } as SignerListSet;
+  const checkRotation = (p: Batch | SignerListSet) => checkProposal({ expected: rotation, proposed: p, poolSequence: 100, maxFeeDrops: 2000n, maxLastLedger: 1030, networkId: 1 });
+  checkRotation(proposed);
+  assert.throws(() => checkRotation({ ...proposed, ...signerListOf([ALICE, POOL], 2) }), /not the payout/, 'other keys');
+  assert.throws(() => checkRotation({ ...proposed, SignerQuorum: 1 }), /not the payout/, 'a lower quorum');
+  assert.throws(() => checkRotation(filled(payoutBatch(PAYOUT))), /not the payout/, 'a payout passed off as a rotation');
+  assert.throws(() => checkRotation({ ...proposed, Sequence: 99 }), /next sequence/);
+  assert.throws(() => checkRotation({ ...proposed, LastLedgerSequence: 5000 }), /window/);
 });
 
 test('key chains are deterministic, per pool, and found again from the ledger', () => {

@@ -14,16 +14,18 @@
 //      coordinator cannot rotate attesters out and its own keys in.
 //
 // Then it signs with whichever of its keys the ledger lists now. It keeps no
-// "used" state: if a Batch it signed never lands, the same key is still listed
-// and signs the retry, which spends only time, never a second key's secrecy.
+// "used" state. A Batch that showed its keys without rotating them (refused,
+// expired, or validated with its inner transactions failed) is followed by the
+// rotation alone, which `retire` signs: a key that has been seen is never left
+// on the list.
 
-import { Wallet, type Batch, type Client } from 'xrpl';
+import { Wallet, type Batch, type Client, type SignerListSet } from 'xrpl';
 
 import { ProtocolFailure, type Bytes32, type PrivateSpend, type PoolScope } from '@opaque/protocol-types';
 import { asPrivateSpend } from '@opaque/protocol-types/codecs.js';
 
 import { verifyRingSpend } from '../zk/index.ts';
-import { checkProposal, payoutBatch } from './batch.ts';
+import { checkProposal, payoutBatch, rotationOf } from './batch.ts';
 import { keyChain, type KeyChain } from './keys.ts';
 import type { PoolSource } from './pool.ts';
 import { accountOf, asDestination, recipientFor, xrplChainId, type XrplDestination } from './protocol.ts';
@@ -49,6 +51,8 @@ export interface Attester {
   /** Its address on the pool's signer list now, if any. */
   currentOn(pool: string, signers: readonly string[]): string | undefined;
   sign(request: SignRequest): Promise<string>;
+  /** Signs the rotation alone: every listed key to its owner's next one, and nothing else. */
+  retire(pool: string, proposed: SignerListSet): Promise<string>;
 }
 
 export interface SignerList { readonly quorum: number; readonly signers: readonly string[] }
@@ -108,6 +112,21 @@ export function createAttester(options: {
     return i;
   };
 
+  /** Checks `proposed` is `expected` at the pool's next sequence, then signs it with this attester's listed key. */
+  async function signAs(account: string, signers: readonly string[], expected: Batch | SignerListSet, proposed: Batch | SignerListSet): Promise<string> {
+    const mine = signers.find((s) => ownIndex(account, s) !== undefined) ?? refuse('INVALID_INPUT', 'not on the pool\'s signer list');
+    const [info, ledger] = await Promise.all([
+      client.request({ command: 'account_info', account, ledger_index: 'current' }),
+      client.getLedgerIndex(),
+    ]);
+    checkProposal({
+      expected, proposed, poolSequence: info.result.account_data.Sequence,
+      maxFeeDrops: options.maxFeeDrops ?? 2_000n, maxLastLedger: ledger + (options.ledgerWindow ?? 30), networkId: options.networkId,
+    });
+    const key = chains.get(account)!.keyAt(ownIndex(account, mine)!);
+    return new Wallet(key.publicKey, key.privateKey).sign(proposed, true).tx_blob;
+  }
+
   return {
     id: options.id,
     nextAfter(pool, address) {
@@ -145,7 +164,6 @@ export function createAttester(options: {
       }
 
       const list = await signerListOf(client, account);
-      const mine = list.signers.find((s) => ownIndex(account, s) !== undefined) ?? refuse('INVALID_INPUT', 'not on the pool\'s signer list');
       const gross = spends.reduce((n, s) => n + BigInt(s.scope.denomination), 0n);
       const fees = pool.spendFee * BigInt(spends.length);
       if (gross <= fees) refuse('INVALID_INPUT', 'the notes do not cover the fee');
@@ -153,16 +171,14 @@ export function createAttester(options: {
         pool: account, asset: pool.source.config.asset, nullifiers: spends.map((s) => s.nullifier),
         destination, units: gross - fees, nextSigners: nextSignersOf(account, list.signers, options.peers()), quorum: list.quorum,
       });
-      const [info, ledger] = await Promise.all([
-        client.request({ command: 'account_info', account, ledger_index: 'current' }),
-        client.getLedgerIndex(),
-      ]);
-      checkProposal({
-        expected, proposed: request.proposed, poolSequence: info.result.account_data.Sequence,
-        maxFeeDrops: options.maxFeeDrops ?? 2_000n, maxLastLedger: ledger + (options.ledgerWindow ?? 30), networkId: options.networkId,
-      });
-      const key = chains.get(account)!.keyAt(ownIndex(account, mine)!);
-      return new Wallet(key.publicKey, key.privateKey).sign(request.proposed, true).tx_blob;
+      return signAs(account, list.signers, expected, request.proposed);
+    },
+
+    async retire(pool, proposed) {
+      if (!options.pools.has(pool)) refuse('INVALID_INPUT', `does not serve pool ${pool}`);
+      // Safe to sign whenever asked: it can only move each listed key to its owner's next one.
+      const list = await signerListOf(client, pool);
+      return signAs(pool, list.signers, rotationOf(pool, nextSignersOf(pool, list.signers, options.peers()), list.quorum), proposed);
     },
   };
 }

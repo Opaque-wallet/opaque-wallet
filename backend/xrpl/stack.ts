@@ -10,6 +10,14 @@
 //
 //   MOONPAY_API_KEY, MOONPAY_SECRET_KEY   offer Buy (sandbox; MOONPAY_LIVE=1 for live)
 //   PORT, PUBLIC_URL                      one public port, as backend/stack.ts does
+//   XRPL_MESH_MASTER                      with PUBLIC_URL: the weekly relay directories
+//                                         the root in deployments/xrpl-testnet.json pins
+//   XRPL_ATTESTER_SEEDS                   first boot of a hosted node (xrpl/node.ts)
+//   WALLETCONNECT_PROJECT_ID              with PORT: offer WalletConnect, its relay
+//                                         and Verify reached through this service
+//
+// Hosted: Railway service opaque-xrpl-testnet; the wallet pages are on Vercel
+// (frontend: npm run deploy:xrpl). docs/xrpl.md, Hosted.
 //
 // ── What this is NOT ─────────────────────────────────────────────────────
 //
@@ -20,20 +28,24 @@
 // MESH_CONFIG), one host per attester, the CRE workflow.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createServer, type RequestListener } from 'node:http';
+import { createServer, type IncomingMessage, type RequestListener, type ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
+import type { Duplex } from 'node:stream';
+import { connect as connectTls } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 
 import type { RelaySnapshot, UnixSeconds } from '@opaque/protocol-types';
-import { toHex } from '@opaque/protocol-types/codecs.js';
+import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
-import { xrplDeployment } from '../../deployments/xrpl.ts';
+import { xrplDeployment, xrplMeshTrustRoot } from '../../deployments/xrpl.ts';
 import { evaluatePublicReadiness } from '../../graph/src/privacy-score.ts';
 import { issueCredential } from '../cre/credential.ts';
 import { createExecutorServer } from '../cre/executor-server.ts';
 import { generateIntentKeypair } from '../cre/seal-client.ts';
 import { createCreSimulator } from '../cre/simulator.ts';
-import { buildLocalMesh, serveLocalMesh } from '../mesh/local-mesh.ts';
+import type { DirectoryTrustRoot } from '../mesh/contracts.ts';
+import { chainTo, verify } from '../mesh/directory.ts';
+import { buildLocalMesh, meshRootAt, serveLocalMesh } from '../mesh/local-mesh.ts';
 import type { MeshMessageKind } from '../mesh/transport.ts';
 import { MOONPAY_LIVE, MOONPAY_SANDBOX } from '../onramp/moonpay.ts';
 import { startXrpl, XRPL_STATE, xrplAnswerer, xrplScopes } from './node.ts';
@@ -67,10 +79,25 @@ const credentialMac = Uint8Array.from(Buffer.from(readFileSync(macFile, 'utf8').
 const node = await startXrpl({ log });
 for (const pool of node.pools.values()) await pool.source.sync();
 
+// Hosted: every relay key and directory derives from XRPL_MESH_MASTER, week by
+// week from the genesis in deployments/xrpl-testnet.json, so the root compiled
+// into the built wallet verifies across restarts. Unset (a laptop): a fresh
+// random mesh each boot, whose root only a dev server's wallet takes.
+const MESH_MASTER = PUBLIC_URL === undefined ? undefined : process.env['XRPL_MESH_MASTER'];
 const mesh = buildLocalMesh({
   basePort: PORTS.relays,
   endpointFor: (_id, i, port) => (PUBLIC_URL === undefined ? `http://${LOOPBACK}:${port}/v1/relay` : `${PUBLIC_URL}/r${i + 1}/v1/relay`),
+  ...(MESH_MASTER === undefined ? {} : { master: fromHex(MESH_MASTER as `0x${string}`), genesis: BigInt(xrplDeployment.mesh?.genesis ?? 0) }),
 });
+const pinned = MESH_MASTER === undefined ? undefined : xrplMeshTrustRoot();
+if (pinned !== undefined && meshRootAt(fromHex(MESH_MASTER as `0x${string}`), pinned.minVersion).signerCommitment !== pinned.signerCommitment) {
+  throw new Error('XRPL_MESH_MASTER does not derive the trust root pinned in deployments/xrpl-testnet.json');
+}
+// The links a wallet needs, from the pinned root to the directory in force,
+// checked at boot: an expired directory or a broken chain stops here.
+const directoryChain = pinned === undefined ? mesh.chain : mesh.chain.filter((l) => l.directory.version > pinned.minVersion);
+const inForce = chainTo(directoryChain, (pinned ?? mesh.root) as DirectoryTrustRoot);
+verify(inForce.signed, inForce.root, nowS());
 const relaySnapshot = (): RelaySnapshot => ({
   nodes: mesh.signed.directory.entries.map((e) => ({
     id: e.id, endpoint: e.endpoint, kemPublicKey: e.kemPublicKey, keyEpoch: e.keyEpoch, operatorId: e.operatorId,
@@ -136,15 +163,57 @@ const credentialHandler: RequestListener = (req, res) => {
 const credentials = createServer(credentialHandler);
 await new Promise<void>((r) => credentials.listen(PORTS.credentials, LOOPBACK, r));
 
+// ── WalletConnect, through this service (frontend/src/lib/walletconnect.ts) ──
+// The wallet's relay socket is tunnelled byte for byte to Reown's relay, so the
+// page talks to Opaque's servers only and Reown sees this server, never the user.
+// Messages are end-to-end encrypted between the dapp and the wallet: the relay,
+// and this tunnel, carry topics and ciphertext. Verify's two reads (is the dapp
+// the site it claims?) go the same way. Needs the one public port (PORT).
+const WC_PROJECT = PORT === undefined ? undefined : process.env['WALLETCONNECT_PROJECT_ID'];
+const WC_RELAY = 'relay.walletconnect.org';
+const WC_VERIFY = 'https://verify.walletconnect.org';
+const SELF = PUBLIC_URL ?? `http://${LOOPBACK}:${PORT}`;
+
+function tunnelRelay(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+  const query = (req.url ?? '').slice('/v1/walletconnect'.length);
+  const key = req.headers['sec-websocket-key'];
+  if (typeof key !== 'string' || !/^(\?\S*)?$/.test(query)) { socket.destroy(); return; }
+  const upstream = connectTls({ host: WC_RELAY, port: 443, servername: WC_RELAY }, () => {
+    // Only what the handshake needs: none of the user's origin, cookies, agent or address.
+    upstream.write(`GET /${query} HTTP/1.1\r\nHost: ${WC_RELAY}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n\r\n`);
+    if (head.length > 0) upstream.write(head);
+    socket.pipe(upstream).pipe(socket);
+  });
+  const close = () => { socket.destroy(); upstream.destroy(); };
+  upstream.on('error', close).on('close', close);
+  socket.on('error', close).on('close', close);
+}
+
+/** GET /v1/wc-verify/attestation/<hash> and /v1/wc-verify/v3/public-key, and nothing else. */
+async function proxyVerify(url: string, res: ServerResponse): Promise<void> {
+  const rest = url.slice('/v1/wc-verify'.length);
+  if (!/^\/attestation\/[0-9a-f]{64}(\?v2Supported=true)?$|^\/v3\/public-key$/.test(rest)) { res.writeHead(404); res.end(); return; }
+  try {
+    const upstream = await fetch(`${WC_VERIFY}${rest}`, { signal: AbortSignal.timeout(10_000) });
+    res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+    res.end(Buffer.from(await upstream.arrayBuffer()));
+  } catch {
+    res.writeHead(502); res.end();
+  }
+}
+
 // ── what the wallet reads ────────────────────────────────────────────────
 const walletConfig = JSON.stringify({
   $comment: 'Written by backend/xrpl/stack.ts, every start.',
-  directoryChain: mesh.chain,
+  directoryChain,
   signedDirectory: mesh.signed,
   trustRoot: mesh.root,
   cre: { publicKey: intentKeys.publicKey, encryptionKeyId: KEY_ID, policyVersion: POLICY },
   credentialUrl: `${PUBLIC_URL ?? `http://${LOOPBACK}:${PORTS.credentials}`}/v1/credential`,
   buy: moonpayKey !== undefined && moonpaySecret !== undefined,
+  walletConnect: WC_PROJECT === undefined ? null : {
+    projectId: WC_PROJECT, relayUrl: `${SELF.replace(/^http/, 'ws')}/v1/walletconnect`, verifyUrl: `${SELF}/v1/wc-verify`,
+  },
   // The ring is the pool's own ledger history (LIVE). XRPL has no FORS account
   // to report (single-use keys instead), and the stand-in is not an enclave.
   capabilities: { pqWallet: 'MOCK', graph: 'LIVE', confidentialExecution: 'SIMULATED', policyScope: 'CRE_WORKFLOW_ONLY' },
@@ -152,6 +221,7 @@ const walletConfig = JSON.stringify({
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, walletConfig);
 
+// ── the one public port ─────────────────────────────────────────────────
 const router = PORT === undefined ? undefined : createServer((req, res) => {
   const url = req.url ?? '/';
   const hop = /^\/r(\d+)(\/.*)$/.exec(url);
@@ -159,6 +229,7 @@ const router = PORT === undefined ? undefined : createServer((req, res) => {
   if (hop && relay) { req.url = hop[2]; relay.handler(req, res); return; }
   if (url.startsWith('/v1/mesh/')) { exit.handler(req, res); return; }
   if (url === '/v1/credential') { credentialHandler(req, res); return; }
+  if (WC_PROJECT !== undefined && req.method === 'GET' && url.startsWith('/v1/wc-verify/')) { void proxyVerify(url, res); return; }
   if (url === '/xrpl-stack.json') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
     res.end(walletConfig);
@@ -166,7 +237,18 @@ const router = PORT === undefined ? undefined : createServer((req, res) => {
   }
   res.writeHead(404); res.end();
 });
+router?.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+  if (WC_PROJECT !== undefined && (req.url ?? '').startsWith('/v1/walletconnect')) tunnelRelay(req, socket, head);
+  else socket.destroy();
+});
 if (router) await new Promise<void>((r) => router.listen(Number(PORT), '0.0.0.0', r));
+
+// A week's directory generation is over: exit, and the next boot derives the
+// next one. Railway restarts a service that exits non-zero.
+if (mesh.generationEndsAt !== undefined) {
+  setTimeout(() => { log('  directory generation over: exiting so the next boot serves the next one'); process.exit(75); },
+    Math.max(Number(mesh.generationEndsAt - nowS()) * 1000, 0)).unref();
+}
 
 log(`opaque XRPL stack — ${xrplDeployment.network.displayName}`);
 for (const scope of xrplScopes()) {

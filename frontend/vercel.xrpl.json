@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    { "source": "/", "destination": "/testnet/xrpl.html", "permanent": false },
+    { "source": "/app.html", "destination": "https://www.opaque.credit/app.html", "permanent": false },
+    { "source": "/testnet/app.html", "destination": "https://www.opaque.credit/testnet/app.html", "permanent": false }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "content-security-policy", "value": "frame-ancestors 'none'" },
+        { "key": "x-frame-options", "value": "DENY" },
+        { "key": "referrer-policy", "value": "no-referrer" },
+        { "key": "x-content-type-options", "value": "nosniff" }
+      ]
+    }
+  ]
+}

@@ -44,6 +44,8 @@ export interface XrplDeployment {
     readonly explorer: string;
   };
   readonly attesters: { readonly count: number; readonly quorum: number };
+  /** The hosted service's relay directory root. Absent: no hosted service yet, so only a dev server's wallet runs. */
+  readonly mesh?: { readonly genesis: number; readonly trustRoot: { readonly signerCommitment: `0x${string}`; readonly minVersion: number } };
   readonly pools: readonly XrplPoolDeployment[];
 }
 
@@ -59,6 +61,12 @@ function validate(d: (typeof NETWORKS)[keyof typeof NETWORKS]): XrplDeployment {
   if (!/^wss:\/\//.test(d.network.wss)) bad('network.wss', 'must be a wss:// URL');
   const { count, quorum } = d.attesters;
   if (!Number.isSafeInteger(quorum) || quorum < 1 || quorum > count) bad('attesters', 'needs 1 <= quorum <= count');
+  const mesh = (d as { mesh?: XrplDeployment['mesh'] }).mesh;
+  if (mesh !== undefined) {
+    if (!Number.isSafeInteger(mesh.genesis) || mesh.genesis <= 0) bad('mesh.genesis', 'must be unix seconds');
+    if (!/^0x[0-9a-f]{64}$/.test(mesh.trustRoot.signerCommitment)) bad('mesh.trustRoot.signerCommitment', 'must be 32 lower-case hex bytes');
+    if (!Number.isSafeInteger(mesh.trustRoot.minVersion) || mesh.trustRoot.minVersion < 0) bad('mesh.trustRoot.minVersion', 'must be a version');
+  }
   (d.pools as readonly XrplPoolDeployment[]).forEach((p, i) => {
     if (!CLASSIC.test(p.account)) bad(`pools[${i}].account`, 'must be a classic address');
     if (p.asset.kind === 'IOU' && (!CLASSIC.test(p.asset.issuer) || !CURRENCY.test(p.asset.currency))) bad(`pools[${i}].asset`, 'needs a currency code and a classic issuer');
@@ -73,6 +81,12 @@ function validate(d: (typeof NETWORKS)[keyof typeof NETWORKS]): XrplDeployment {
 }
 
 export const xrplDeployment: XrplDeployment = validate(NETWORKS[selected as keyof typeof NETWORKS]);
+
+/** The relay directory root a built wallet pins: from this file, never from a server. */
+export function xrplMeshTrustRoot(): { readonly signerCommitment: `0x${string}`; readonly minVersion: bigint } {
+  const mesh = xrplDeployment.mesh ?? bad('mesh', 'is not set: this network has no hosted XRPL service yet');
+  return { signerCommitment: mesh.trustRoot.signerCommitment, minVersion: BigInt(mesh.trustRoot.minVersion) };
+}
 
 /** The pool for an asset, by its symbol. */
 export function xrplPool(symbol: string): XrplPoolDeployment {

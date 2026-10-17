@@ -10,7 +10,9 @@
 //   spent      the ledger holds the pool's credential for the nullifier.
 //
 // One Batch at a time per pool: each one consumes the pool's sequence and
-// rotates its signer list, so a second built in parallel would be refused.
+// rotates its signer list, so a second built in parallel would be refused. A
+// Batch that showed its signers' public keys without rotating them is followed
+// at once by the rotation alone (retireIfListed).
 
 import { decode, hashes, multisign, type Batch, type Client } from 'xrpl';
 
@@ -18,8 +20,8 @@ import { ProtocolFailure, type ApprovedRelease, type PrivateSpend, type TxHash }
 import { spendHash } from '@opaque/protocol-types/codecs.js';
 
 import type { SettlementEvidence } from '../cre/intent-store.ts';
-import { payoutBatch } from './batch.ts';
-import { nextSignersOf, signerListOf, type Attester, type XrplPool, type XrplSpend } from './attester.ts';
+import { payoutBatch, rotationOf } from './batch.ts';
+import { nextSignersOf, signerListOf, type Attester, type SignerList, type XrplPool, type XrplSpend } from './attester.ts';
 import { accountOf, asDestination } from './protocol.ts';
 
 export const toTxHash = (hash: string): TxHash => `0x${hash.toLowerCase()}` as TxHash;
@@ -79,34 +81,74 @@ export function createXrplSettlement(options: {
     // no one attester is always the one that sees every payout first.
     const listed = options.attesters.filter((a) => a.currentOn(account, list.signers) !== undefined).sort(() => Math.random() - 0.5);
     const blobs: string[] = [];
+    const signedBy: Attester[] = [];
     const refusals: string[] = [];
     for (const attester of listed) {
       if (blobs.length === list.quorum) break;
       try {
         blobs.push(await attester.sign({ spends, proposed }));
+        signedBy.push(attester);
       } catch (error) {
         if (error instanceof ProtocolFailure && FINAL.has(error.code)) throw error;
         refusals.push((error as Error).message);
       }
     }
+    // Short of a quorum, the signatures never leave this process: nothing is shown.
     if (blobs.length < list.quorum) {
       throw new ProtocolFailure('SETTLEMENT_REVERTED', `quorum not reached (${blobs.length}/${list.quorum}): ${refusals.join('; ')}`, true);
     }
     const signed = multisign(blobs);
     const hash = hashes.hashSignedTx(signed);
-    const submitted = await client.submit(signed);
-    const preliminary = submitted.result.engine_result;
-    // Thrown only when the ledger certainly never applied it. From here on the
-    // hash is returned whatever happens, and evidence() reads the outcome: a
-    // payout that landed must never be retried as if it had not.
-    if (/^te[mfl]/.test(preliminary)) {
-      throw new ProtocolFailure('SETTLEMENT_REVERTED', `payout refused before the ledger: ${preliminary}`, true);
+    try {
+      const submitted = await client.submit(signed);
+      const preliminary = submitted.result.engine_result;
+      // Thrown only when the ledger certainly never applied it. From here on the
+      // hash is returned whatever happens, and evidence() reads the outcome: a
+      // payout that landed must never be retried as if it had not.
+      if (/^te[mfl]/.test(preliminary)) {
+        throw new ProtocolFailure('SETTLEMENT_REVERTED', `payout refused before the ledger: ${preliminary}`, true);
+      }
+      options.log?.(`  xrpl payout ${hash} (${spends.length} note${spends.length === 1 ? '' : 's'}, preliminary ${preliminary})`);
+      // Hold this pool's turn until the ledger decides: the next payout needs
+      // the sequence and signer list this one leaves behind.
+      await untilFinal(hash, proposed.LastLedgerSequence ?? 0).catch(() => undefined);
+      return hash;
+    } finally {
+      // The signing keys' public keys are out now, whatever became of the Batch.
+      await retireIfListed(account, list, signedBy);
     }
-    options.log?.(`  xrpl payout ${hash} (${spends.length} note${spends.length === 1 ? '' : 's'}, preliminary ${preliminary})`);
-    // Hold this pool's turn until the ledger decides: the next payout needs
-    // the sequence and signer list this one leaves behind.
-    await untilFinal(hash, proposed.LastLedgerSequence ?? 0).catch(() => undefined);
-    return hash;
+  }
+
+  /**
+   * If `before` is still the pool's signer list, the payout's own rotation did
+   * not apply, and the keys that signed it stay listed with their public keys
+   * known: rotate them now, with the rotation alone. The keys already shown sign
+   * it, so the third stays unseen. Best effort: a failure here is logged, and
+   * the next payout's rotation retires them instead.
+   */
+  async function retireIfListed(account: string, before: SignerList, shown: readonly Attester[]): Promise<void> {
+    try {
+      const now = await signerListOf(client, account);
+      if (now.signers.join() !== before.signers.join()) return;
+      const rotation = rotationOf(account, nextSignersOf(account, now.signers, options.attesters), now.quorum);
+      const proposed = await client.autofill(rotation, now.quorum);
+      const order = [...shown, ...options.attesters.filter((a) => !shown.includes(a) && a.currentOn(account, now.signers) !== undefined)];
+      const blobs: string[] = [];
+      const refusals: string[] = [];
+      for (const attester of order) {
+        if (blobs.length === now.quorum) break;
+        try { blobs.push(await attester.retire(account, proposed)); } catch (error) { refusals.push((error as Error).message); }
+      }
+      if (blobs.length < now.quorum) throw new Error(`only ${blobs.length}/${now.quorum} signed the rotation: ${refusals.join('; ')}`);
+      const signed = multisign(blobs);
+      const hash = hashes.hashSignedTx(signed);
+      await client.submit(signed);
+      const final = await untilFinal(hash, proposed.LastLedgerSequence ?? 0);
+      const result = typeof final?.result.meta === 'object' ? final.result.meta.TransactionResult : 'not validated';
+      options.log?.(`  retired the keys a payout showed without rotating: ${hash} ${result}`);
+    } catch (error) {
+      options.log?.(`  could not retire the keys a payout showed: ${(error as Error).message}`);
+    }
   }
 
   /** The validated tx, or null once its LastLedgerSequence has passed without it. */

@@ -14,10 +14,16 @@
   <section id="idle">
     <p class="origin" id="idle-title">Starting…</p>
     <p class="status" id="idle-status" role="status">Verifying the relay directory and connecting through the mesh.</p>
+    <form id="wc-form" hidden>
+      <label class="field" for="wc-uri"><span>Or connect an app with WalletConnect: paste the link it shows (wc:…)</span><input id="wc-uri" type="text" autocomplete="off" spellcheck="false" placeholder="wc:…"></label>
+      <div class="dialog-actions"><button class="primary" id="wc-connect" type="submit">Connect</button></div>
+      <p class="status" id="wc-status" role="status">Keep this page open while you use the app: its requests arrive here.</p>
+    </form>
   </section>
   <section id="request" hidden>
     <p class="eyebrow">Request from</p>
     <p class="origin" id="request-origin"></p>
+    <p class="status" id="request-note" hidden></p>
     <h2 id="request-title"></h2>
     <p id="request-summary"></p>
     <div id="fund-box" hidden>

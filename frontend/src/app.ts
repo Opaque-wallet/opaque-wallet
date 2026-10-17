@@ -18,7 +18,8 @@ import { makeAmount, MAX_NOTES_PER_DEPOSIT } from './lib/protocol/index.js';
 import { paymentDeadline } from './lib/payment-deadline.js';
 import { runPaymentLanes } from './lib/payment-lanes.js';
 import { startWallet, type WalletRuntime } from './lib/runtime.js';
-import { deployment, NETWORK, networks } from '../../deployments/index.ts';
+import { deployment, NETWORK } from '../../deployments/index.ts';
+import { networkPicker } from './lib/network-picker.ts';
 import { scoped } from './lib/storage-name.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -859,13 +860,7 @@ async function init(): Promise<void> {
   // The account is a wallet itself: the header picks the network, never a
   // browser wallet. Each network is its own page (opaque.credit/ and
   // /testnet/, the same in the extension), with its own storage names.
-  const picker = el<HTMLSelectElement>('network-switch');
-  picker.replaceChildren(...networks.map((n) => new Option(n.displayName, n.id, false, n.id === NETWORK)));
-  picker.addEventListener('change', () => {
-    const target = networks.find((n) => n.id === picker.value);
-    const up = '../'.repeat(deployment.network.sitePath.split('/').filter(Boolean).length);
-    if (target !== undefined) location.href = `${up}${target.sitePath}app.html`;
-  });
+  networkPicker(el<HTMLSelectElement>('network-switch'), NETWORK);
   document.querySelectorAll<HTMLElement>('[data-back]').forEach((node) => node.addEventListener('click', () => showView('home')));
   renderRingSvg();
   renderActivity();

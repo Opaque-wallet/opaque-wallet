@@ -11,11 +11,14 @@
 //            AccountSet asfDisableMaster. The master key never moves funds again.
 //   use      signAndSubmit: Batch (INDEPENDENT) [dapp tx, SetRegularKey(next)],
 //            signed by the current regular key, so the key rotates even when
-//            the dapp's transaction fails.
+//            the dapp's transaction fails. A Batch that never applied has
+//            still shown the key, so a rotation on its own follows it.
 //            sign: the dapp's transaction as is, for dapps that submit it
-//            themselves, then a rotation at the next sequence.
+//            themselves, valid for 5 ledgers, then a rotation at the next
+//            sequence.
 //            signMessage: the disabled master key — it proves the account and
-//            cannot move funds.
+//            cannot move funds. Its public key is on the ledger from setup, so
+//            a quantum attacker could forge messages from it (never payments).
 //   close    AccountDelete to a pool under a fresh tag: the reserve and what is
 //            left come back as notes.
 //
@@ -59,6 +62,11 @@ const TF_SET_NO_RIPPLE = 0x0002_0000;
 const ASF_DISABLE_MASTER = 4;
 const LSF_DISABLE_MASTER = 0x0010_0000;
 const LEDGERS_VALID = 20;
+/**
+ * How long a dapp that submits for itself has to do it: about 20 seconds. Its
+ * key stays listed until then, with its public key in the dapp's hands.
+ */
+const SIGN_ONLY_LEDGERS = 5;
 
 /**
  * What a dapp may ask a per-site account to sign. Absent on purpose: anything
@@ -122,8 +130,8 @@ async function baseFee(ledger: Ledger): Promise<bigint> {
   return open > base ? (open < base * 10n ? open : base * 10n) : base;
 }
 
-const lastLedger = async (ledger: Ledger): Promise<number> =>
-  (await ledger.request<{ ledger_current_index: number }>('ledger_current')).ledger_current_index + LEDGERS_VALID;
+const lastLedger = async (ledger: Ledger, ledgers = LEDGERS_VALID): Promise<number> =>
+  (await ledger.request<{ ledger_current_index: number }>('ledger_current')).ledger_current_index + ledgers;
 
 /** Submits, then waits until the ledger decides. Returns the validated result, or throws. */
 export async function submitAndWait(ledger: Ledger, signed: { blob: string; hash: string }, lls: number): Promise<string> {
@@ -218,32 +226,42 @@ export async function signAndSubmit(ledger: Ledger, site: Site, raw: unknown): P
     Fee: String((await baseFee(ledger)) * 4n), LastLedgerSequence: lls,
     RawTransactions: [dapp, inner({ TransactionType: 'SetRegularKey', Account: site.address, RegularKey: next.address }, sequence + 2)],
   }, key);
-  await submitAndWait(ledger, signed, lls);
+  try {
+    await submitAndWait(ledger, signed, lls);
+  } catch (error) {
+    // Refused before the ledger, but a node has seen the key: retire it anyway.
+    await rotate(ledger, site).catch(() => undefined);
+    throw error;
+  }
   const hash = txHash(encode(dapp.RawTransaction as never));
   const result = await resultOf(ledger, hash, lls);
-  await syncIndex(ledger, site);
+  // The Batch's own rotation has normally moved the key; if it expired unapplied, this retires it.
+  await rotate(ledger, site).catch(() => undefined);
   return { hash, result, batch: signed.hash, tx_json: dapp.RawTransaction as Tx };
 }
 
 /**
- * The dapp's transaction signed as is, for the dapp to submit, and the
- * rotation that must follow it: pre-signed at the next sequence and sent now,
- * so the ledger applies it right after the dapp's (it waits for it). If the
- * dapp never submits, rotate() later sends a rotation at the unused sequence.
+ * The dapp's transaction signed as is, for the dapp to submit within
+ * SIGN_ONLY_LEDGERS, and the rotation that must follow it: pre-signed at the
+ * next sequence and sent now, so the ledger applies it right after the dapp's
+ * (it waits for it). If the dapp never submits, rotate() later sends a
+ * rotation at the unused sequence, as soon as the window has passed.
  */
 export async function signOnly(ledger: Ledger, site: Site, raw: unknown): Promise<{ readonly hash: string; readonly tx_blob: string; readonly tx_json: Tx; readonly lastLedger: number }> {
   if (site.index < 0) refuse('set the account up first');
   const tx = dappTx(site, raw);
   const key = regularKey(site, site.index);
   const sequence = await sequenceOf(ledger, site.address);
-  const lls = await lastLedger(ledger);
   const fee = String(await baseFee(ledger));
+  // Read last, so the dapp's window starts as late as it can.
+  const lls = await lastLedger(ledger, SIGN_ONLY_LEDGERS);
   const signed = signTx({ ...tx, Sequence: sequence, Fee: fee, LastLedgerSequence: lls }, key);
   const rotation = signTx({
     TransactionType: 'SetRegularKey', Account: site.address, RegularKey: regularKey(site, site.index + 1).address,
     Sequence: sequence + 1, Fee: fee, LastLedgerSequence: lls + LEDGERS_VALID,
   }, key);
-  await ledger.submit(rotation.blob).catch(() => undefined);
+  // Sent alongside, not awaited: every second spent here comes off the dapp's window.
+  void ledger.submit(rotation.blob).catch(() => undefined);
   return { hash: signed.hash, tx_blob: signed.blob, tx_json: signed.json, lastLedger: lls };
 }
 
@@ -297,7 +315,12 @@ export async function closeSite(ledger: Ledger, site: Site, to: { readonly pool:
     TransactionType: 'AccountDelete', Account: site.address, Destination: to.pool, DestinationTag: to.tag,
     Sequence: await sequenceOf(ledger, site.address), Fee: String(state.state.validated_ledger.reserve_inc), LastLedgerSequence: lls,
   }, regularKey(site, site.index));
-  const result = await submitAndWait(ledger, signed, lls);
-  if (result !== 'tesSUCCESS') throw new ProtocolFailure('SETTLEMENT_REVERTED', `AccountDelete: ${result}`);
+  // Not closed means still here, with its key shown: retire the key first.
+  const retire = () => rotate(ledger, site).catch(() => undefined);
+  const result = await submitAndWait(ledger, signed, lls).catch(async (error: unknown) => { await retire(); throw error; });
+  if (result !== 'tesSUCCESS') {
+    await retire();
+    throw new ProtocolFailure('SETTLEMENT_REVERTED', `AccountDelete: ${result}`);
+  }
   return signed.hash;
 }

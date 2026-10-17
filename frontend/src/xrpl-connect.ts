@@ -2,17 +2,26 @@
 // the popup a dapp opens. Each request is shown with the site that made it —
 // event.origin, which the browser sets — and nothing is signed until you
 // approve it here. The site's account, keys and notes stay on this origin.
+//
+// The same page takes WalletConnect sessions (lib/walletconnect.ts), for dapps
+// on other wallet SDKs: paste the link, and their requests join the same queue.
 
 import { xrplDeployment } from '../../deployments/xrpl.ts';
 import { startXrplWallet, type XrplWallet } from './lib/xrpl-runtime.ts';
+import { startWalletConnect } from './lib/walletconnect.ts';
 
 type Method = 'connect' | 'sign' | 'signAndSubmit' | 'signMessage';
+type Outcome = { result?: unknown; error?: string };
 interface Pending {
   readonly id: string;
   readonly method: Method;
   readonly params: Record<string, unknown>;
+  /** The key the site's account is kept under: its origin, or `walletconnect:<origin>` when unverified. */
   readonly origin: string;
-  readonly source: MessageEventSource;
+  /** What the card names as the requester, and a line under it. */
+  readonly label?: string;
+  readonly note?: string;
+  readonly reply: (outcome: Outcome) => void;
 }
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -25,6 +34,9 @@ const currency = (code: string) =>
 const amount = (a: unknown): string =>
   typeof a === 'string' ? `${Number(a) / 1e6} XRP`
     : typeof a === 'object' && a !== null ? `${(a as { value?: string }).value ?? '?'} ${currency(String((a as { currency?: string }).currency ?? '?'))}` : '?';
+const hostOf = (key: string): string => {
+  try { return new URL(key.replace(/^walletconnect:/, '')).host; } catch { return 'the app'; }
+};
 
 /** What the transaction does, in words: the JSON stays below for the details. */
 function describe(tx: Record<string, unknown>): string {
@@ -41,10 +53,6 @@ function describe(tx: Record<string, unknown>): string {
   }
 }
 
-function respond(p: Pending, outcome: { result?: unknown; error?: string }): void {
-  (p.source as WindowProxy).postMessage({ type: 'opaque:response', id: p.id, ...outcome }, p.origin);
-}
-
 /** Waits for Approve or Reject on the card on screen. */
 const decision = (): Promise<boolean> => new Promise((resolve) => {
   const approve = el<HTMLButtonElement>('approve');
@@ -59,7 +67,9 @@ async function handle(p: Pending): Promise<void> {
   const site = w.site(p.origin);
   el('idle').hidden = true;
   el('request').hidden = false;
-  el('request-origin').textContent = p.origin;
+  el('request-origin').textContent = p.label ?? p.origin;
+  el('request-note').hidden = p.note === undefined;
+  el('request-note').textContent = p.note ?? '';
   el('progress').hidden = true;
   el('fund-box').hidden = true;
   el('request-details').hidden = true;
@@ -69,7 +79,7 @@ async function handle(p: Pending): Promise<void> {
 
   if (p.method === 'connect') {
     const wanted = p.params['network'];
-    if (typeof wanted === 'string' && wanted !== w.network.id) { respond(p, { error: `Opaque is on ${w.network.id}, the site asked for ${wanted}` }); return; }
+    if (typeof wanted === 'string' && wanted !== w.network.id) { p.reply({ error: `Opaque is on ${w.network.id}, the site asked for ${wanted}` }); return; }
     if (site !== undefined) {
       el('request-title').textContent = 'Connect';
       el('request-summary').textContent = `Share this site's own account, ${site.address}. It has never been linked to you.`;
@@ -81,7 +91,7 @@ async function handle(p: Pending): Promise<void> {
     }
   } else if (p.method === 'signMessage') {
     el('request-title').textContent = 'Sign a message';
-    el('request-summary').textContent = 'Signed by this site account\'s original key, which can no longer move funds.';
+    el('request-summary').textContent = 'Signed by this site account\'s original key. It can no longer move funds, but a future quantum computer could forge messages from it.';
     el('request-details').hidden = false;
     el('request-details').textContent = String(p.params['message'] ?? `hex ${String(p.params['hex'])}`);
   } else {
@@ -92,20 +102,20 @@ async function handle(p: Pending): Promise<void> {
     el('request-details').textContent = JSON.stringify(tx, null, 2);
   }
 
-  if (!await decision()) { respond(p, { error: 'rejected in Opaque' }); return; }
+  if (!await decision()) { p.reply({ error: 'rejected in Opaque' }); return; }
   buttons(false);
   try {
     if (p.method === 'connect') {
       const account = site ?? await w.openSite(p.origin, Number(el<HTMLInputElement>('fund-amount').value), el<HTMLInputElement>('fund-tokens').checked, progress);
-      respond(p, { result: { address: account.address, network: w.network } });
+      p.reply({ result: { address: account.address, network: w.network } });
     } else {
       progress('Signing through the mesh…');
-      respond(p, { result: await w.siteRequest(p.origin, p.method, p.params) });
+      p.reply({ result: await w.siteRequest(p.origin, p.method, p.params) });
     }
-    progress(`Done. You can go back to ${new URL(p.origin).host}.`);
+    progress(`Done. You can go back to ${hostOf(p.origin)}.`);
   } catch (error) {
     progress((error as Error).message);
-    respond(p, { error: (error as Error).message });
+    p.reply({ error: (error as Error).message });
   }
 }
 
@@ -123,20 +133,69 @@ window.addEventListener('message', (event: MessageEvent) => {
   const data = event.data as { type?: string; id?: unknown; method?: unknown; params?: unknown };
   if (data?.type !== 'opaque:request' || event.source === null || typeof data.id !== 'string') return;
   if (!['connect', 'sign', 'signAndSubmit', 'signMessage'].includes(String(data.method))) return;
+  const source = event.source as WindowProxy;
+  const id = data.id;
   // Sandboxed frames and file:// pages are all origin "null": they would share one account.
   if (event.origin === 'null') {
-    (event.source as WindowProxy).postMessage({ type: 'opaque:response', id: data.id, error: 'Opaque needs a site with a real origin' }, '*');
+    source.postMessage({ type: 'opaque:response', id, error: 'Opaque needs a site with a real origin' }, '*');
     return;
   }
-  queue.push({ id: data.id, method: data.method as Method, params: (data.params ?? {}) as Record<string, unknown>, origin: event.origin, source: event.source });
+  const origin = event.origin;
+  queue.push({
+    id, method: data.method as Method, params: (data.params ?? {}) as Record<string, unknown>, origin,
+    reply: (outcome) => source.postMessage({ type: 'opaque:response', id, ...outcome }, origin),
+  });
   void drain();
 });
+
+// ── WalletConnect: a session's requests join the same queue ───────────────
+const WC_USED = 'opaque:xrpl-walletconnect:v1';
+const enqueue = (p: Omit<Pending, 'id' | 'reply'>): Promise<Outcome> =>
+  new Promise((resolve) => { queue.push({ ...p, id: `wc-${crypto.randomUUID()}`, reply: resolve }); void drain(); });
+const labelOf = (siteKey: string) => (siteKey.startsWith('walletconnect:') ? `${siteKey.slice('walletconnect:'.length)} (unverified)` : siteKey);
+
+function offerWalletConnect(w: XrplWallet): void {
+  const config = w.config.walletConnect;
+  if (config == null) return;
+  el('wc-form').hidden = false;
+  let started: ReturnType<typeof startWalletConnect> | undefined;
+  const start = () => started ??= startWalletConnect(config, `xrpl:${xrplDeployment.network.networkId}`, {
+    connect: async (p) => {
+      const o = await enqueue({
+        method: 'connect', params: {}, origin: p.siteKey, label: labelOf(p.siteKey),
+        note: p.verified ? `${p.name}, through WalletConnect.` : `${p.name}, through WalletConnect. Reown could not verify this app's address, so it gets an account of its own, apart from any site it claims to be.`,
+      });
+      return o.error === undefined ? (o.result as { address: string }).address : null;
+    },
+    request: async (siteKey, method, tx) => {
+      const o = await enqueue({ method, params: { transaction: tx }, origin: siteKey, label: labelOf(siteKey), note: 'Through WalletConnect.' });
+      if (o.error !== undefined) throw new Error(o.error);
+      const r = o.result as { hash: string; tx_json: Record<string, unknown> };
+      return { ...r.tx_json, hash: r.hash };
+    },
+    siteOf: (address) => w.sites().find((s) => s.address === address)?.origin,
+  });
+  // Sessions this browser holds come back with the page, and so do their requests.
+  try { if (localStorage.getItem(WC_USED) !== null) void start(); } catch { /* storage refused: pair again */ }
+  el<HTMLFormElement>('wc-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const uri = el<HTMLInputElement>('wc-uri').value.trim();
+    if (!uri.startsWith('wc:')) { el('wc-status').textContent = 'A WalletConnect link starts with wc:'; return; }
+    el('wc-status').textContent = 'Pairing through Opaque…';
+    void start().then((c) => c.pair(uri)).then(() => {
+      try { localStorage.setItem(WC_USED, '1'); } catch { /* the session still works while this page is open */ }
+      el<HTMLInputElement>('wc-uri').value = '';
+      el('wc-status').textContent = 'Paired. The app\'s request appears here; keep this page open while you use it.';
+    }, (error: Error) => { el('wc-status').textContent = `Could not pair: ${error.message}`; });
+  });
+}
 
 el('network').textContent = xrplDeployment.network.displayName;
 try {
   wallet = await startXrplWallet();
   el('idle-title').textContent = 'Ready';
   el('idle-status').textContent = 'Waiting for the site’s request.';
+  offerWalletConnect(wallet);
   // Nothing secret in it: a site learns only that the popup has loaded.
   window.opener?.postMessage({ type: 'opaque:ready' }, '*');
   void drain();

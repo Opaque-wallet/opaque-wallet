@@ -24,17 +24,17 @@ import { createGraphHealth } from '../../../backend/mesh/graph-health.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from '../../../backend/mesh/contracts.ts';
 import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
 import { accountOf, recipientFor, scopeOf, type XrplDestination } from '../../../backend/xrpl/protocol.ts';
-import { meshLedger, nullifierSpent, onrampUrl, registerTag, tagStatus, type XrplSend } from '../../../backend/xrpl/queries.ts';
+import { faucetDeposit, meshLedger, nullifierSpent, onrampUrl, registerTag, tagStatus, type XrplSend } from '../../../backend/xrpl/queries.ts';
 import { closeSite, newSite, resultOf, rotate, setupSite, signAndSubmit, signMessage, signOnly, syncIndex, type Site } from '../../../backend/xrpl/site.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient, type NoteVault } from '../../../packages/ring-client/src/index.ts';
-import { meshTrustRoot } from '../../../deployments/index.ts';
-import { xrplDeployment, type XrplPoolDeployment } from '../../../deployments/xrpl.ts';
+import { xrplDeployment, xrplMeshTrustRoot, type XrplPoolDeployment } from '../../../deployments/xrpl.ts';
 import { keyFrom } from './backup.ts';
 import { createWorkerProver } from './prover.ts';
 import { createPaymentFlow, makeAmount, type AdapterPorts } from './protocol/index.ts';
 import { localNoteStorage } from './note-storage.ts';
 import { runPaymentLanes } from './payment-lanes.ts';
+import type { WalletConnectConfig } from './walletconnect.ts';
 import { scoped } from './storage-name.ts';
 
 export interface XrplStackConfig {
@@ -45,6 +45,8 @@ export interface XrplStackConfig {
   readonly cre: { readonly publicKey: `0x${string}`; readonly encryptionKeyId: string; readonly policyVersion: string };
   readonly credentialUrl: string;
   readonly buy: boolean;
+  /** Set when the stack offers WalletConnect (lib/walletconnect.ts): its relay and Verify, through the stack. */
+  readonly walletConnect?: WalletConnectConfig | null;
 }
 
 const reviver = (_k: string, v: unknown) => (typeof v === 'string' && /^\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v);
@@ -125,6 +127,8 @@ export interface XrplWallet {
   tagStatus(t: ReceiveTag): Promise<{ readonly notes: number; readonly carried: bigint }>;
   /** A signed MoonPay checkout for the tag; the caller opens it in a new tab. */
   buyUrl(t: ReceiveTag, fiat: number): Promise<string>;
+  /** Testnet: the faucet pays this XRP tag, asked through the mesh. */
+  faucet(t: ReceiveTag): Promise<{ xrp: number; hash: string }>;
   /** Which notes `amount` would spend, or undefined when the notes held cannot make it exactly. */
   plan(symbol: string, amount: number): Promise<Map<number, number> | undefined>;
   send(input: {
@@ -160,7 +164,7 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
   // VERIFY FIRST: throws before any relay is contacted if the directory does
   // not chain to the root. Only a dev server's wallet takes the stack's root.
   const devRoot = import.meta.env.DEV ? cfg.trustRoot : undefined;
-  const { signed, root } = chainTo(cfg.directoryChain ?? [cfg.signedDirectory], devRoot ?? meshTrustRoot() as DirectoryTrustRoot);
+  const { signed, root } = chainTo(cfg.directoryChain ?? [cfg.signedDirectory], devRoot ?? xrplMeshTrustRoot() as DirectoryTrustRoot);
   const bootstrap = createMeshBootstrap({
     root, signed, pathPolicy: new MarkovPathPolicy(), health: relayHealth.health,
     client: { pollIntervalMs: 250, pollTimeoutMs: 120_000 },
@@ -291,6 +295,7 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
     tags: () => load<ReceiveTag[]>(TAGS_KEY, []),
     tagStatus: (t) => tagStatus(xrpl, t.pool, t.tag),
     buyUrl: (t, fiat) => onrampUrl(xrpl, t.pool, t.tag, fiat),
+    faucet: (t) => faucetDeposit(xrpl, t.pool, t.tag),
 
     async plan(symbol, amount) {
       const p = poolBySymbol(symbol);
@@ -425,22 +430,29 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
       const site = wallet.site(origin);
       if (site === undefined) throw new Error(`${origin} has no account`);
       await syncIndex(ledger, site);
-      // Tokens of a pool go back into it under a fresh tag; the empty line is then removed.
-      const lines = (await ledger.request<{ lines: { account: string; currency: string; balance: string }[] }>('account_lines', { account: site.address })).lines;
-      for (const line of lines) {
-        const pool = xrplDeployment.pools.find((p) => p.asset.kind === 'IOU' && p.asset.issuer === line.account && p.asset.currency === line.currency);
-        if (pool === undefined && Number(line.balance) !== 0) throw new Error(`move or sell the ${line.currency} first: no Opaque pool takes it`);
-        if (pool !== undefined && Number(line.balance) > 0) {
-          const t = await wallet.receive(pool.symbol, Number(line.balance));
-          onProgress?.(`${line.balance} ${pool.symbol} back into its pool, tag ${t.tag}`);
-          await signAndSubmit(ledger, site, { TransactionType: 'Payment', Account: site.address, Destination: pool.account, DestinationTag: t.tag, Amount: { currency: line.currency, issuer: line.account, value: line.balance } });
+      let hash: string;
+      try {
+        // Tokens of a pool go back into it under a fresh tag; the empty line is then removed.
+        const lines = (await ledger.request<{ lines: { account: string; currency: string; balance: string }[] }>('account_lines', { account: site.address })).lines;
+        for (const line of lines) {
+          const pool = xrplDeployment.pools.find((p) => p.asset.kind === 'IOU' && p.asset.issuer === line.account && p.asset.currency === line.currency);
+          if (pool === undefined && Number(line.balance) !== 0) throw new Error(`move or sell the ${line.currency} first: no Opaque pool takes it`);
+          if (pool !== undefined && Number(line.balance) > 0) {
+            const t = await wallet.receive(pool.symbol, Number(line.balance));
+            onProgress?.(`${line.balance} ${pool.symbol} back into its pool, tag ${t.tag}`);
+            await signAndSubmit(ledger, site, { TransactionType: 'Payment', Account: site.address, Destination: pool.account, DestinationTag: t.tag, Amount: { currency: line.currency, issuer: line.account, value: line.balance } });
+          }
+          await signAndSubmit(ledger, site, { TransactionType: 'TrustSet', Account: site.address, LimitAmount: { currency: line.currency, issuer: line.account, value: '0' } });
         }
-        await signAndSubmit(ledger, site, { TransactionType: 'TrustSet', Account: site.address, LimitAmount: { currency: line.currency, issuer: line.account, value: '0' } });
+        const info = await ledger.request<{ account_data: { Balance: string } }>('account_info', { account: site.address, ledger_index: 'validated' });
+        const t = await wallet.receive('XRP', Number(info.account_data.Balance) / UNIT);
+        onProgress?.(`closing into the XRP pool, tag ${t.tag}: the reserve and the rest become notes`);
+        hash = await closeSite(ledger, site, { pool: t.pool, tag: t.tag });
+      } catch (error) {
+        // Not closed: its key may have moved on the way (token payments, a retired key), so keep where it is.
+        saveSite(site);
+        throw error;
       }
-      const info = await ledger.request<{ account_data: { Balance: string } }>('account_info', { account: site.address, ledger_index: 'validated' });
-      const t = await wallet.receive('XRP', Number(info.account_data.Balance) / UNIT);
-      onProgress?.(`closing into the XRP pool, tag ${t.tag}: the reserve and the rest become notes`);
-      const hash = await closeSite(ledger, site, { pool: t.pool, tag: t.tag });
       const all = load<Record<string, Site>>(SITES_KEY, {});
       delete all[origin];
       save(SITES_KEY, all);

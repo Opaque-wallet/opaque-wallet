@@ -10,6 +10,9 @@
 //           notes and 0.3 carried: credited by delivered_amount, never Amount.
 //   none    a payment to an unregistered tag credits nothing.
 //   payout  a 1 RLUSD note pays a trust-line recipient privately.
+//   refused a payout the destination can't take fails before the ledger; one
+//           that gets past the dry run fails ON the ledger, and the attester
+//           keys it showed are retired at once by the rotation alone.
 //
 //   cd backend && npm run xrpl:e2e:receive
 
@@ -18,13 +21,17 @@ import { join } from 'node:path';
 
 import { BatchFlags, GlobalFlags, PaymentFlags, Wallet, type Batch } from 'xrpl';
 
+import type { ApprovedRelease } from '@opaque/protocol-types';
+
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 import { signQuery } from '../onramp/moonpay.ts';
 import { createNoteSecret, deriveCommitment, deriveNullifier } from '../zk/index.ts';
-import { startHarness } from './harness.ts';
+import { signerListOf } from './attester.ts';
+import { log, startHarness } from './harness.ts';
 import { XRPL_STATE } from './node.ts';
 import { invoiceIdOf, scopeOf } from './protocol.ts';
 import { onrampUrl, registerTag, tagStatus } from './queries.ts';
+import { createXrplSettlement, fromTxHash } from './settlement.ts';
 
 const UNIT = 1_000_000;
 const { networkId } = xrplDeployment.network;
@@ -121,6 +128,32 @@ try {
   const refused = await h.pay(one, second, { account: noLine.address, tag: null });
   check('a payout to an account without the trust line fails at once', refused.state === 'FAILED' && /cannot take/.test(refused.error?.publicMessage ?? ''), `${refused.state}: ${refused.error?.publicMessage ?? ''}`);
   check('and the note is still unspent', !await h.node.pools.get(rlusdPool.account)!.source.isSpent(deriveNullifier(second, one)), 'no credential on the ledger');
+
+  // ── a payout that fails ON the ledger ───────────────────────────────────
+  // The dry run normally stops this one. A client that lies about it lets the
+  // Batch through: its Payment fails on the ledger, so nothing in it applies,
+  // the rotation included, while the Batch shows its signers' public keys.
+  const lying = new Proxy(client, {
+    get(target, key) {
+      if (key === 'simulate') return async () => ({ result: { engine_result: 'tesSUCCESS' } });
+      const value = Reflect.get(target, key) as unknown;
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const blind = createXrplSettlement({ client: lying, pools: h.node.pools, attesters: h.node.attesters, log });
+  const listed = (await signerListOf(client, rlusdPool.account)).signers;
+  const release = { spend: await h.spend(one, second, { account: noLine.address, tag: null }) } as unknown as ApprovedRelease;
+  const failedHash = await blind.deliver(release);
+  const evidence = await blind.evidence(failedHash, release);
+  const outer = await client.request({ command: 'tx', transaction: fromTxHash(failedHash) });
+  const shown = ((outer.result as { tx_json?: { Signers?: { Signer: { Account: string } }[] } }).tx_json?.Signers ?? []).map((s) => s.Signer.Account);
+  check('a payout that fails on the ledger is a validated Batch that paid nothing',
+    outer.result.validated === true && !evidence.succeeded && shown.length === 2, `${fromTxHash(failedHash).slice(0, 12)}…, signed by ${shown.length} keys`);
+  const relisted = (await signerListOf(client, rlusdPool.account)).signers;
+  check('the keys it showed are retired at once', shown.every((s) => !relisted.includes(s)) && relisted.every((s) => !listed.includes(s)), `all ${listed.length} listed keys replaced`);
+  check('and that note is still unspent', !await h.node.pools.get(rlusdPool.account)!.source.isSpent(deriveNullifier(second, one)), 'no credential on the ledger');
+  const again = await h.pay(one, invoices[0]!, { account: recipient.address, tag: null });
+  check('the pool pays again under the new keys', again.state === 'SETTLED', `${again.state} ${again.txHash ?? ''}`);
 } finally {
   await h.finish('X2');
 }
