@@ -68,6 +68,11 @@ try {
   await page.fill('#send-amount', '1');
   await page.fill('#recipient', recipient.address);
   await page.click('#send-button');
+  await page.click('#send-reject');
+  await page.waitForFunction(() => (document.getElementById('send-status')?.textContent ?? '') !== '', null, { timeout: 10_000 }).catch(() => undefined);
+  check('Reject on the review sends nothing', (await page.textContent('#send-status')) === 'Rejected: nothing was sent.', String(await page.textContent('#send-status')));
+  await page.click('#send-button');
+  await page.click('#send-confirm');
   await page.waitForFunction(() => /^Sent:/.test(document.getElementById('send-status')?.textContent ?? ''), null, { timeout: 300_000 });
   await page.click('#tab-activity');
   await page.waitForFunction(() => document.querySelector('#sent-list .intent-state')?.textContent === 'settled', null, { timeout: 300_000, polling: 3_000 });

@@ -118,6 +118,15 @@
   <footer id="boot-error" role="alert" hidden></footer>
 </main>
 
+<dialog id="send-confirm-dialog">
+  <form method="dialog">
+    <div class="dialog-head"><div><p class="eyebrow">Review</p><h2>Confirm private transfer</h2></div></div>
+    <div id="send-confirm-rows"></div>
+    <p class="fine-print">Nothing leaves this browser until you confirm.</p>
+    <div class="dialog-actions"><button class="secondary" id="send-reject" value="reject">Reject</button><button class="primary" id="send-confirm" value="confirm">Confirm</button></div>
+  </form>
+</dialog>
+
 <dialog id="send-progress-dialog">
   <div class="dialog-head"><div><p class="eyebrow">Private transfer</p><h2>Sending privately</h2></div></div>
   <p class="send-progress-copy">Each note's proof is built in this browser and sent through three relays. Keep this window open until every note is on its way.</p>

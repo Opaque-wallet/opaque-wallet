@@ -117,6 +117,7 @@ try {
   await page.fill('#recipient', recipient.address);
   const t0 = Date.now();
   await page.click('#send-button');
+  await page.click('#send-confirm');
   await page.waitForFunction(() => /^Sent:/.test(document.getElementById('send-status')?.textContent ?? ''), null, { timeout: 300_000 });
   log(`  proof built in the page and sent through the mesh in ${Math.round((Date.now() - t0) / 1000)} s`);
   await page.click('#tab-activity');

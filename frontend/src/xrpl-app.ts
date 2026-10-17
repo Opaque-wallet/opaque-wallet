@@ -126,6 +126,21 @@ function syncPrivacyWait(): void {
   }
 }
 
+/** The review before anything leaves, as a wallet confirms a transaction. */
+async function confirmSend(rows: readonly (readonly [string, string])[]): Promise<boolean> {
+  const dialog = el<HTMLDialogElement>('send-confirm-dialog');
+  el('send-confirm-rows').replaceChildren(...rows.map(([label, value]) => {
+    const row = document.createElement('div');
+    row.className = 'detail';
+    row.append(Object.assign(document.createElement('span'), { textContent: label }), Object.assign(document.createElement('strong'), { textContent: value }));
+    return row;
+  }));
+  dialog.returnValue = '';
+  dialog.showModal();
+  await new Promise((resolve) => dialog.addEventListener('close', resolve, { once: true }));
+  return dialog.returnValue === 'confirm';
+}
+
 async function onSend(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const symbol = sendSymbol();
@@ -140,6 +155,20 @@ async function onSend(event: SubmitEvent): Promise<void> {
     const wait = el<HTMLInputElement>('wait-for-privacy').checked;
     deadline = paymentDeadline({ waitForPrivacy: wait, nowMs: Date.now(), ...(wait ? { selectedMs: new Date(el<HTMLInputElement>('privacy-deadline').value).getTime() } : {}) }) as UnixSeconds;
   } catch (error) { setStatus('send-status', (error as Error).message); return; }
+
+  const plan = await wallet.plan(symbol, amount);
+  if (plan === undefined) { setStatus('send-status', `Your ${symbol} notes can't make ${amount} exactly.`); return; }
+  const count = [...plan.values()].reduce((a, b) => a + b, 0);
+  const fees = count * feeOf(symbol);
+  const confirmed = await confirmSend([
+    ['Send', `${amount} ${symbol}`],
+    ['To', tag === null ? account : `${account} · tag ${tag}`],
+    ['Recipient receives', `${units(amount - fees)} ${symbol}`],
+    ['Fees', `${units(fees)} ${symbol} (${count} ${count === 1 ? 'note' : 'notes'} × ${units(feeOf(symbol))})`],
+    ['Notes spent', [...plan].map(([size, n]) => `${n} × ${size}`).join(' + ')],
+    ['Settles', el<HTMLInputElement>('wait-for-privacy').checked ? `once privacy is stronger, by ${new Date(Number(deadline) * 1000).toLocaleString()}` : 'now, usually within a minute'],
+  ]);
+  if (!confirmed) { setStatus('send-status', 'Rejected: nothing was sent.'); return; }
 
   const dialog = el<HTMLDialogElement>('send-progress-dialog');
   const progress = (line: string) => { el('send-progress-log').textContent = line; };
