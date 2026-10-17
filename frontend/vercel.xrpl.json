@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "redirects": [
-    { "source": "/", "destination": "/testnet/xrpl.html", "permanent": false },
     { "source": "/app.html", "destination": "https://www.opaque.credit/app.html", "permanent": false },
     { "source": "/testnet/app.html", "destination": "https://www.opaque.credit/testnet/app.html", "permanent": false }
   ],

@@ -65,7 +65,8 @@ A transaction that shows its keys without rotating them is followed at once by t
 | [frontend/src/lib/walletconnect.ts](../frontend/src/lib/walletconnect.ts) | WalletConnect sessions, for dapps on any wallet SDK; their requests use the popup's approval card. |
 | [backend/deploy/xrpl.Dockerfile](../backend/deploy/xrpl.Dockerfile) | The hosted service's image: the stack. |
 | [frontend/vercel.xrpl.json](../frontend/vercel.xrpl.json) | The Vercel site's redirects and headers (`npm run deploy:xrpl`). |
-| [demo/xrpl-dapp](../demo/xrpl-dapp) | An ordinary dapp on xrpl-connect, used by the X3 check. |
+| [demo/xrpl-dapp](../demo/xrpl-dapp) | An ordinary dapp on xrpl-connect, used by the X3 check and hosted at `opaque-xrpl-demo.vercel.app` (`npm run deploy`). |
+| [extension-xrpl/](../extension-xrpl) | The browser extension: dapps that support GemWallet or Crossmark open Opaque. |
 | [deployments/xrpl.ts](../deployments/xrpl.ts), `xrpl-*.json` | Compiled-in pools; the network is chosen at build or boot time, never by a server. |
 
 Changes to shared code, all additive:
@@ -90,18 +91,21 @@ Run everything from `backend/` unless noted. Every script uses `--use-system-ca`
 | `npm run xrpl:e2e:dapp [-- --close]` | X3 in Chrome: the demo dapp through xrpl-connect and the Opaque popup; `--close` also closes an account into notes (~20 min: the ledger keeps an account 256 ledgers). |
 | `npm run xrpl:e2e:mpt` | X4: an MPT pool, with deposits in the token's own scale and a private payout to a holder. |
 | `WALLETCONNECT_PROJECT_ID=… npm run xrpl:e2e:dapp -- --walletconnect` | X3 again, with the dapp on xrpl-connect's own WalletConnect adapter: its link pasted into Opaque, every socket policed. |
+| `npm run xrpl:e2e:extension [-- <wallet> <dapp>]` | The extension in Playwright's Chromium: the hosted demo dapp's stock GemWallet and Crossmark adapters reach Opaque's popup (build it first: `cd frontend && npm run ext:xrpl`). |
+| `npm run xrpl:e2e:accounts` | One wallet, an account per app: two origins get two accounts; the same origin by the popup, the extension and WalletConnect gets the same one; the ledger links neither to the other or to the user. |
 | `npm run xrpl:smoke:hosted [-- <wallet> <service>]` | The hosted wallet in Chrome: boot against the compiled-in root, receive by tag, a private payment; nothing outside the wallet's origin and the service's. |
 
 ## Hosted (testnet)
 
 The same split as Arc: the wallet on Vercel, the backend on Railway.
 
-- **Wallet: `https://opaque-xrpl.vercel.app`**, the Vercel project `opaque-xrpl`. `/` opens `/testnet/xrpl.html`. Dapps use `/testnet/xrpl-connect.html`, which the adapter defaults to. `/app.html` goes to the Arc wallet on opaque.credit. Deploy from `frontend/` with `npm run deploy:xrpl`: a static build, with `vercel.xrpl.json` as its `vercel.json`, pointed at the service's `xrpl-stack.json`.
+- **Site and wallet: `https://opaque-xrpl.vercel.app`**, the Vercel project `opaque-xrpl`. `/` is the one-page site ([frontend/site/](../frontend/site), plain JavaScript): a sticky scroll story played by the ring of eight on a canvas, with a still version for reduced motion. The wallet is `/testnet/xrpl.html`. Dapps use `/testnet/xrpl-connect.html`, which the adapter defaults to. `/app.html` goes to the Arc wallet on opaque.credit. Deploy from `frontend/` with `npm run deploy:xrpl`: a static build, with `vercel.xrpl.json` as its `vercel.json`, pointed at the service's `xrpl-stack.json`.
 - **Backend: `https://opaque-xrpl-testnet-production.up.railway.app`**, the Railway service `opaque-xrpl-testnet` in the project `opaque`, next to the Arc services and sharing nothing with them. It runs `backend/xrpl/stack.ts`: relays, exit, attesters, the CRE stand-in (the mocked TEE) and the credential authority. Vercel can't host it: it is one long-running process with sockets, a volume and in-memory intents.
 - **Mesh.** Its relay directories derive from `XRPL_MESH_MASTER` (its own secret, never Arc's), week by week from the genesis in `deployments/xrpl-testnet.json`, whose root the built wallet pins. The service exits at the end of each week and Railway restarts it into the next generation.
 - **Attesters.** `XRPL_ATTESTER_SEEDS` brings the seeds that own the pools' signer lists, on first boot only. After that, `backend/.stack` on the service's volume is the record: key positions, receive tags and the CRE stand-in's intent key. Losing that volume would lose registered tags, so it must stay.
 - **Deposit** (the Receive flow, renamed) makes a fresh tag. On testnet it also offers "Deposit 95 test XRP from the faucet": the `FAUCET` query, through the relays, has a fresh faucet account pay the tag, so a visitor needs no test XRP of their own.
 - Wallet pages are served with `frame-ancestors 'none'`, so the approval popup can't be framed and clicked through. The page talks to its own origin and the service only.
+- **Demo dapp: `https://opaque-xrpl-demo.vercel.app`**, the Vercel project `opaque-xrpl-demo`: the X3 dapp, trading against the testnet RLUSD AMM and minting its own NFT, with buttons for Opaque's adapter and for xrpl-connect's stock GemWallet and Crossmark adapters.
 - **Still one operator.** Six relays, three attesters and the CRE stand-in run in one process on one provider, and its credential authority issues to anyone. Testnet only.
 - **Two operators share the pools.** A laptop's `xrpl:*` e2e scripts use the same seeds as the hosted service. Both can pay out, and a race costs only a retry. A laptop that falls more than 64 rotations behind won't find its keys (the search window).
 
@@ -122,18 +126,26 @@ railway up --detach --service $S     # again after every change: it is not conne
 
 `backend/.stack/xrpl/mesh-master` is the only copy of that secret off Railway. Keep it, or the directories can't be re-derived.
 
+## The extension
+
+For dapps that support GemWallet or Crossmark: [extension-xrpl/](../extension-xrpl) answers both wallets' page protocols in each page and hands every request to Opaque's adapter, so the same popup approves it. It holds no key and asks for no permission. Testnet only, and it answers as both wallets, so it shouldn't run beside a real GemWallet or Crossmark. Install and limits: [extension-xrpl/README.md](../extension-xrpl/README.md).
+
 ## WalletConnect
 
-For dapps that don't load Opaque's adapter: any dapp on WalletConnect's XRPL methods, xrpl-connect's own WalletConnect adapter among them. The user opens Opaque's connect page, pastes the `wc:` link the dapp shows, and approves. Requests then appear on the same card as popup requests, while that page stays open.
+For dapps that don't load Opaque's adapter: any dapp on WalletConnect's XRPL methods, xrpl-connect's own WalletConnect adapter among them. The user opens Opaque's connect page (the wallet's **Apps** → **Connect an app**), scans the dapp's QR code with **Scan QR** or pastes its `wc:` link, and approves. Requests then appear on the same card as popup requests, while that page stays open. On by default on the hosted service (Reown project `ac0ee697…`).
 
-- **Relay.** The page's relay socket goes to `/v1/walletconnect` on the Opaque service, which tunnels it to Reown's relay byte for byte. The page talks to its own origin only, and Reown sees Opaque's server, never the user. Messages are end-to-end encrypted between the dapp and the page.
+- **Phone.** The wallet installs to a home screen (`xrpl.webmanifest`), so a phone can scan a desktop dapp's code. Notes live per browser: a phone holds its own, by deposit or from a backup. A request waits on the relay until the page is open again.
+- **Scan QR** decodes camera frames on the page itself (jsQR, loaded only then); nothing about them leaves the device.
+- **Other chains are refused first.** An app whose session wants another chain (an EVM app, or XRPL mainnet while Opaque is on testnet) is turned away before anything is asked or funded, and the page says which chains it wanted.
+
+- **Relay.** The page's relay socket goes to `/v1/walletconnect` on the Opaque service, which tunnels it to Reown's relay byte for byte. The page talks to its own origin only, and Reown sees Opaque's server, never the user. Messages are end-to-end encrypted between the dapp and the page. The client is still given Reown's relay URL, because the relay checks that its auth token names that URL as audience; only the socket is pointed at the tunnel.
 - **Verify.** Reown's check that the dapp is the site it claims goes through `/v1/wc-verify` the same way. A VALID dapp shares the account its origin has through the popup. Anything else gets an account of its own, and the card says the address is unverified. A known scam is refused.
 - **Methods.**
   - `xrpl_signTransaction`: `submit` (the default) is signAndSubmit, with the key rotating in the same Batch; `submit: false` is sign only. Opaque always fills Sequence, Fee and LastLedgerSequence itself.
   - `xrpl_signTransactionFor` is refused, because no site account is anyone's multisigner.
   - There is no message signing over WalletConnect.
 - **Telemetry** is off. The library (`@walletconnect/sign-client` 2.25.0, pinned) loads only when used.
-- **Turn it on:** set `WALLETCONNECT_PROJECT_ID` (a Reown project id, which is public) on the service and redeploy. Locally, set it with `PORT`.
+- **Turn it on elsewhere:** set `WALLETCONNECT_PROJECT_ID` (a Reown project id, which is public) on the service and redeploy. Locally, set it with `PORT`.
 
 ## Verified on testnet (17 October 2026)
 
@@ -147,6 +159,10 @@ For dapps that don't load Opaque's adapter: any dapp on WalletConnect's XRPL met
 | X3 dapp e2e | 11/11 |
 | X3 dapp e2e with `--close` | 17/17 (an app account holding LP tokens is refused; a second app's account is deleted into the XRP pool and comes back as 8 private XRP) |
 | MPT pool e2e | 4/4 (payout settled 16 s after release) |
+| One wallet, an account per app | 10/10 (two apps, two accounts, each funded by the pool in its own payout, 19 ledgers apart; app A by the extension and by WalletConnect got A's account again; neither history names the other; master keys off; the Apps tab lists exactly the two) |
+| X3 over WalletConnect | 10/10 (xrpl-connect's own WalletConnect adapter, its link pasted into Opaque, the relay through the stack's tunnel: connect, a DEX trade, an AMM deposit, an NFT the dapp submits; no message signing over WalletConnect) |
+| Scan QR, hosted | a WalletConnect code read from a (fake) camera in 1.2 s, the camera off again, pairing started |
+| Extension, hosted wallet and demo dapp | 11/11 (as GemWallet: connect, a DEX trade, an NFT minted and submitted by the dapp, signMessage; Reject reaches the dapp as a refusal; as Crossmark: connect without a popup and a trade; reconnect after a reload without a popup) |
 | Hosted, from outside (wallet on Vercel, service on Railway) | 6/6 (the built wallet verifies the hosted mesh against its compiled-in root; a deposit from the testnet faucet button, 95 XRP as 14 notes; a private payment settled 42 s after the click; no request or socket outside the wallet's origin and the service's) |
 | Unit tests | `test:xrpl` 16/16; backend 280/280 (including the settler's XRPL paths), protocol-types 16/16, ring-client 6/6, frontend 9/9, root 3/3; contracts `forge test` 97 passed, 1 skipped |
 
@@ -175,7 +191,7 @@ For dapps that don't load Opaque's adapter: any dapp on WalletConnect's XRPL met
 - **opaque.credit.** Its Vercel build comes from the original Opaque repo, so the XRPL wallet is its own Vercel project (`opaque-xrpl.vercel.app`) for now, and opaque.credit's picker lists XRPL as coming soon.
 - **Mainnet pools.** These need new keys that never signed on testnet, real attester operators (3-of-5), and XRP for reserves.
 - **MoonPay.** This needs a partner account (KYB). The RLUSD-on-XRPL currency code is still unconfirmed, so Buy is offered for XRP only. `walletAddressTag` is confirmed in MoonPay's docs.
-- **WalletConnect, live.** It is built, with the relay tunnelled through the service. A real pairing needs a Reown project id (`WALLETCONNECT_PROJECT_ID`), and so does its e2e (`xrpl:e2e:dapp -- --walletconnect`). Without one, the tunnel has been checked as far as Reown's handshake, and the Verify passthrough end to end.
+- **Store apps.** The wallet installs from the browser; an App Store or Play build (the same code wrapped, with push for incoming requests) needs developer accounts.
 - **XRPL EVM deployment.** It needs the deployer key at forge's hidden prompt. On testnet, EntryPoint v0.7 must be deployed first, or the accounts moved to v0.8.
 - **Cross-chain moves (NEAR Intents).** These are mainnet-only and move real money, so nothing here can test them.
 - **Refunds.** A payment to an unregistered tag, or an InvoiceID deposit of the wrong size, is held, not credited, and never auto-refunded yet. A tag that ever received a payment can never be registered, so such a payment cannot be credited later by mistake.

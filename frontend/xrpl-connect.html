@@ -5,18 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>opaque — connect</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="xrpl.webmanifest">
+  <link rel="apple-touch-icon" href="app-icon-192.png">
+  <meta name="theme-color" content="#070608">
   <link rel="stylesheet" href="app.css">
   <link rel="stylesheet" href="connect.css">
 </head>
 <body>
 <main class="connect">
   <header><img src="media/logo.png" alt="opaque" width="942" height="200"><span class="local" id="network">XRPL</span></header>
+  <a id="to-wallet" href="xrpl.html" hidden>← Wallet</a>
   <section id="idle">
     <p class="origin" id="idle-title">Starting…</p>
     <p class="status" id="idle-status" role="status">Verifying the relay directory and connecting through the mesh.</p>
     <form id="wc-form" hidden>
-      <label class="field" for="wc-uri"><span>Or connect an app with WalletConnect: paste the link it shows (wc:…)</span><input id="wc-uri" type="text" autocomplete="off" spellcheck="false" placeholder="wc:…"></label>
-      <div class="dialog-actions"><button class="primary" id="wc-connect" type="submit">Connect</button></div>
+      <label class="field" for="wc-uri"><span>Or connect an app with WalletConnect: scan its QR code, or paste the link it shows (wc:…)</span><input id="wc-uri" type="text" autocomplete="off" spellcheck="false" placeholder="wc:…"></label>
+      <video id="wc-camera" playsinline muted hidden></video>
+      <div class="dialog-actions"><button class="secondary" id="wc-scan" type="button">Scan QR</button><button class="primary" id="wc-connect" type="submit">Connect</button></div>
       <p class="status" id="wc-status" role="status">Keep this page open while you use the app: its requests arrive here.</p>
     </form>
   </section>

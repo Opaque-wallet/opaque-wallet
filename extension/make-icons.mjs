@@ -103,3 +103,8 @@ for (const size of [16, 32, 48, 128]) {
   writeFileSync(file, png(size, ring(size)));
   console.log(`icons/${size}.png`);
 }
+// The XRPL wallet's home-screen icons (frontend/public/xrpl.webmanifest).
+for (const size of [192, 512]) {
+  writeFileSync(join(HERE, '..', 'frontend', 'public', `app-icon-${size}.png`), png(size, ring(size)));
+  console.log(`frontend/public/app-icon-${size}.png`);
+}

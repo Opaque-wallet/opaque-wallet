@@ -5,7 +5,8 @@
   "type": "module",
   "description": "An ordinary XRPL dapp, on xrpl-connect, that uses Opaque through its adapter: the X3 exit check's DEX trade, AMM deposit and NFT purchase.",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "deploy": "VITE_WC_PROJECT=ac0ee6973644e277d619337f29593c61 vite build && npx --yes vercel@64.5.0 deploy dist --prod --yes --project opaque-xrpl-demo --scope swarnim-raj-s-projects"
   },
   "comment": [
     "A test fixture, kept out of frontend/ on purpose: xrpl-connect brings the",
@@ -13,6 +14,7 @@
     "it is the dapp's dependency, as it would be on any real dapp."
   ],
   "dependencies": {
+    "qrcode": "1.5.4",
     "xrpl": "5.3.0",
     "xrpl-connect": "1.0.0"
   },

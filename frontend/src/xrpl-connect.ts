@@ -75,7 +75,7 @@ async function handle(p: Pending): Promise<void> {
   el('request-details').hidden = true;
   const progress = (line: string) => { el('progress').hidden = false; el('progress').textContent = line; };
   const buttons = (on: boolean) => { el<HTMLButtonElement>('approve').disabled = !on; el<HTMLButtonElement>('reject').disabled = !on; };
-  buttons(true);
+  buttons(false);
 
   if (p.method === 'connect') {
     const wanted = p.params['network'];
@@ -102,8 +102,11 @@ async function handle(p: Pending): Promise<void> {
     el('request-details').textContent = JSON.stringify(tx, null, 2);
   }
 
-  if (!await decision()) { p.reply({ error: 'rejected in Opaque' }); return; }
+  buttons(true);
+  const approved = await decision();
+  // Settled either way: the card must never offer buttons for a request that is gone.
   buttons(false);
+  if (!approved) { progress('Rejected: nothing was signed.'); p.reply({ error: 'rejected in Opaque' }); return; }
   try {
     if (p.method === 'connect') {
       const account = site ?? await w.openSite(p.origin, Number(el<HTMLInputElement>('fund-amount').value), el<HTMLInputElement>('fund-tokens').checked, progress);
@@ -154,6 +157,37 @@ const enqueue = (p: Omit<Pending, 'id' | 'reply'>): Promise<Outcome> =>
   new Promise((resolve) => { queue.push({ ...p, id: `wc-${crypto.randomUUID()}`, reply: resolve }); void drain(); });
 const labelOf = (siteKey: string) => (siteKey.startsWith('walletconnect:') ? `${siteKey.slice('walletconnect:'.length)} (unverified)` : siteKey);
 
+/**
+ * A wc: link from the camera. Frames are decoded on this page and nothing
+ * about them leaves it. Runs until a WalletConnect code shows or `active` ends.
+ */
+async function scanLink(video: HTMLVideoElement, active: () => boolean): Promise<string> {
+  const [{ default: jsQR }, stream] = await Promise.all([import('jsqr'), navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })]);
+  video.srcObject = stream;
+  video.hidden = false;
+  try {
+    await video.play();
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true })!;
+    while (active()) {
+      await new Promise((r) => setTimeout(r, 150));
+      if (video.videoWidth === 0) continue;
+      // A 640-wide frame decodes fast enough on a phone and still reads a WalletConnect code.
+      const scale = Math.min(1, 640 / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const code = jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+      if (code?.data.startsWith('wc:') === true) return code.data;
+    }
+    throw new Error('stopped');
+  } finally {
+    for (const track of stream.getTracks()) track.stop();
+    video.hidden = true;
+    video.srcObject = null;
+  }
+}
+
 function offerWalletConnect(w: XrplWallet): void {
   const config = w.config.walletConnect;
   if (config == null) return;
@@ -174,9 +208,22 @@ function offerWalletConnect(w: XrplWallet): void {
       return { ...r.tx_json, hash: r.hash };
     },
     siteOf: (address) => w.sites().find((s) => s.address === address)?.origin,
+    refused: (reason) => { el('wc-status').textContent = reason; },
   });
   // Sessions this browser holds come back with the page, and so do their requests.
   try { if (localStorage.getItem(WC_USED) !== null) void start(); } catch { /* storage refused: pair again */ }
+  const scan = el<HTMLButtonElement>('wc-scan');
+  let scanning = false;
+  scan.addEventListener('click', () => {
+    if (scanning) { scanning = false; return; }
+    scanning = true;
+    scan.textContent = 'Stop camera';
+    el('wc-status').textContent = 'Point the camera at the app\'s WalletConnect QR code.';
+    void scanLink(el<HTMLVideoElement>('wc-camera'), () => scanning).then(
+      (uri) => { el<HTMLInputElement>('wc-uri').value = uri; el<HTMLFormElement>('wc-form').requestSubmit(); },
+      (error: Error) => { el('wc-status').textContent = scanning ? `Camera unavailable: ${error.message}` : 'Camera off.'; },
+    ).finally(() => { scanning = false; scan.textContent = 'Scan QR'; });
+  });
   el<HTMLFormElement>('wc-form').addEventListener('submit', (event) => {
     event.preventDefault();
     const uri = el<HTMLInputElement>('wc-uri').value.trim();
@@ -191,6 +238,8 @@ function offerWalletConnect(w: XrplWallet): void {
 }
 
 el('network').textContent = xrplDeployment.network.displayName;
+// Opened as a page of its own (the installed app), not as a dapp's popup: a way back.
+el('to-wallet').hidden = window.opener !== null;
 try {
   wallet = await startXrplWallet();
   el('idle-title').textContent = 'Ready';

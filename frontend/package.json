@@ -7,11 +7,12 @@
   "scripts": {
     "dev": "vite",
     "build": "VITE_NETWORK=mainnet vite build && VITE_NETWORK=testnet vite build --outDir dist/testnet",
-    "deploy:xrpl": "rm -rf dist && VITE_NETWORK=testnet VITE_XRPL_STACK_URL=https://opaque-xrpl-testnet-production.up.railway.app/xrpl-stack.json vite build --outDir dist/testnet && cp vercel.xrpl.json dist/vercel.json && npx --yes vercel@64.5.0 deploy dist --prod --yes --project opaque-xrpl --scope swarnim-raj-s-projects",
+    "deploy:xrpl": "rm -rf dist && VITE_NETWORK=testnet VITE_XRPL_STACK_URL=https://opaque-xrpl-testnet-production.up.railway.app/xrpl-stack.json vite build --outDir dist/testnet && vite build site --outDir ../dist && cp vercel.xrpl.json dist/vercel.json && rm -f dist/testnet/xrpl-stack.json && npx --yes vercel@64.5.0 deploy dist --prod --yes --project opaque-xrpl --scope swarnim-raj-s-projects",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
     "preview": "vite preview",
     "ext": "npm run build && node ../extension/build.mjs",
+    "ext:xrpl": "rm -rf ../extension-xrpl/dist && rolldown ../extension-xrpl/inject.ts -o ../extension-xrpl/dist/inject.js -f iife -p browser && cp ../extension-xrpl/manifest.json ../extension-xrpl/dist/ && cp -R ../extension/icons ../extension-xrpl/dist/icons",
     "api": "node --watch ../backend/server.js"
   },
   "comment": [
@@ -45,6 +46,7 @@
     "@walletconnect/sign-client": "2.25.0",
     "@walletconnect/types": "2.25.0",
     "@walletconnect/utils": "2.25.0",
-    "gsap": "^3.15.0"
+    "gsap": "^3.15.0",
+    "jsqr": "1.4.0"
   }
 }

@@ -9,17 +9,20 @@
 <body>
   <main>
     <h1>Demo XRPL dapp</h1>
-    <p>An ordinary dapp on xrpl-connect. It knows nothing about Opaque beyond the adapter.</p>
+    <p>An ordinary dapp on xrpl-connect, on XRPL testnet. It knows nothing about Opaque beyond the adapter. With the Opaque extension, its stock GemWallet and Crossmark buttons open Opaque too.</p>
     <p>Account: <code id="account">not connected</code></p>
     <div class="actions">
       <button id="connect" type="button">Connect with Opaque</button>
       <button id="connect-wc" type="button" hidden>Connect with WalletConnect</button>
+      <button id="connect-gem" type="button">Connect with GemWallet</button>
+      <button id="connect-crossmark" type="button">Connect with Crossmark</button>
       <button id="trade" type="button">Buy 1.5 RLUSD on the DEX</button>
       <button id="amm" type="button">Deposit 1 XRP into the AMM</button>
       <button id="nft" type="button">Buy the NFT (dapp submits)</button>
       <button id="message" type="button">Sign in with a message</button>
     </div>
     <p>WalletConnect link: <code id="wc-uri"></code></p>
+    <canvas id="wc-qr" width="0" height="0"></canvas>
     <pre id="log" aria-live="polite"></pre>
   </main>
   <script type="module" src="./src/main.ts"></script>

@@ -6,3 +6,5 @@ body{height:auto;min-height:100vh;overflow:auto}
 .connect pre{max-height:220px;overflow:auto;padding:12px;border:1px solid var(--line);background:#09080a;color:var(--muted);font:11px/1.6 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
 .connect .dialog-actions{margin-top:18px}
 .connect .field select{width:100%;min-height:50px;padding:0 14px;border:1px solid var(--line);border-radius:9px;color:var(--text);background:#0a090c}
+#wc-camera{width:100%;margin-top:12px;border:1px solid var(--line);border-radius:9px}
+#to-wallet{display:inline-block;margin:0 0 12px;color:var(--soft);font-size:12px;text-decoration:none}

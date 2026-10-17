@@ -22,7 +22,8 @@
 // The library is loaded only when this is used, and pinned (package.json):
 // the Verify redirect below sets two of its internals.
 
-import type { SessionTypes, SignClientTypes } from '@walletconnect/types';
+import type { ProposalTypes, SessionTypes, SignClientTypes } from '@walletconnect/types';
+import type { buildApprovedNamespaces } from '@walletconnect/utils';
 
 export interface WalletConnectConfig { readonly projectId: string; readonly relayUrl: string; readonly verifyUrl: string }
 
@@ -42,16 +43,51 @@ export interface WalletConnectHandlers {
   request(siteKey: string, method: 'sign' | 'signAndSubmit', tx: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** The site key of the account a session holds, if this browser has it. */
   siteOf(address: string): string | undefined;
+  /** An app turned away before anything was asked: it wants chains Opaque doesn't hold. */
+  refused(reason: string): void;
+}
+
+/** The session's namespaces for this account, or undefined when the app wants chains Opaque doesn't hold. */
+export function xrplNamespaces(build: typeof buildApprovedNamespaces, proposal: ProposalTypes.Struct, chainId: string, address: string): SessionTypes.Namespaces | undefined {
+  try {
+    const namespaces = build({
+      proposal,
+      supportedNamespaces: {
+        xrpl: { chains: [chainId], methods: ['xrpl_signTransaction', 'xrpl_signTransactionFor'], events: ['chainChanged', 'accountsChanged'], accounts: [`${chainId}:${address}`] },
+      },
+    });
+    return namespaces['xrpl'] === undefined ? undefined : namespaces;
+  } catch {
+    return undefined; // it requires chains Opaque doesn't hold
+  }
 }
 
 const originOf = (url: string): string => {
   try { return new URL(url).origin; } catch { return 'unknown'; }
 };
 
+const RELAY = 'wss://relay.walletconnect.org';
+
+/**
+ * The relay checks that its auth token names RELAY as audience, and the client
+ * signs the token for the URL it is given, so it is given RELAY. Its sockets
+ * are pointed at Opaque's tunnel here, before the library loads.
+ */
+function tunnelRelaySockets(tunnel: string): void {
+  const Native = window.WebSocket;
+  window.WebSocket = class extends Native {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      const u = String(url);
+      super(u.startsWith(RELAY) ? `${tunnel}${u.slice(RELAY.length).replace(/^\//, '')}` : u, protocols);
+    }
+  };
+}
+
 export async function startWalletConnect(config: WalletConnectConfig, chainId: string, handlers: WalletConnectHandlers): Promise<{ pair(uri: string): Promise<void> }> {
+  tunnelRelaySockets(config.relayUrl);
   const [{ SignClient }, { buildApprovedNamespaces, getSdkError }] = await Promise.all([import('@walletconnect/sign-client'), import('@walletconnect/utils')]);
   const client = await SignClient.init({
-    projectId: config.projectId, relayUrl: config.relayUrl, telemetryEnabled: false,
+    projectId: config.projectId, relayUrl: RELAY, telemetryEnabled: false,
     metadata: { name: 'Opaque', description: 'Private XRPL accounts, one per app', url: location.origin, icons: [] },
   });
   // Verify's two reads go to the service, which asks Reown (pinned version; the internals are its own).
@@ -63,17 +99,18 @@ export async function startWalletConnect(config: WalletConnectConfig, chainId: s
     const v = verifyContext.verified;
     const claimed = originOf(params.proposer.metadata.url);
     const verified = v.validation === 'VALID' && v.origin !== undefined && originOf(v.origin) === claimed;
+    // Before anything is asked or funded: an app on other chains can't use an XRPL account.
+    if (xrplNamespaces(buildApprovedNamespaces, params, chainId, 'rrrrrrrrrrrrrrrrrrrrrhoLvTp') === undefined) {
+      const wanted = [params.requiredNamespaces, params.optionalNamespaces ?? {}].flatMap((ns) => Object.entries(ns).flatMap(([key, n]) => n.chains ?? [key]));
+      handlers.refused(`${params.proposer.metadata.name} asks for ${[...new Set(wanted)].join(', ') || 'no chain'}. Opaque holds XRPL accounts (${chainId}) only, so it turned the app away; nothing was funded.`);
+      await client.reject({ id, reason: getSdkError('UNSUPPORTED_CHAINS') }).catch(() => undefined);
+      return;
+    }
     try {
       if (v.isScam === true) throw new Error('Reown lists this app as a scam');
       const address = await handlers.connect({ name: params.proposer.metadata.name, siteKey: verified ? claimed : `walletconnect:${claimed}`, claimed, verified });
       if (address === null) throw new Error('rejected in Opaque');
-      const namespaces: SessionTypes.Namespaces = buildApprovedNamespaces({
-        proposal: params,
-        supportedNamespaces: {
-          xrpl: { chains: [chainId], methods: ['xrpl_signTransaction', 'xrpl_signTransactionFor'], events: ['chainChanged', 'accountsChanged'], accounts: [`${chainId}:${address}`] },
-        },
-      });
-      await client.approve({ id, namespaces });
+      await client.approve({ id, namespaces: xrplNamespaces(buildApprovedNamespaces, params, chainId, address)! });
     } catch {
       await client.reject({ id, reason: getSdkError('USER_REJECTED') }).catch(() => undefined);
     }

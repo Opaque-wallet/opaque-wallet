@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>opaque — private XRP and RLUSD</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="xrpl.webmanifest">
+  <link rel="apple-touch-icon" href="app-icon-192.png">
+  <meta name="theme-color" content="#070608">
   <link rel="stylesheet" href="app.css">
   <link rel="stylesheet" href="xrpl.css">
 </head>
@@ -30,7 +33,7 @@
           <button id="tab-apps" aria-selected="false" type="button"><span class="nav-icon">◫</span>Apps</button>
         </nav>
       </div>
-      <div class="side-foot"><a href="index.html">Back to opaque ↗</a></div>
+      <div class="side-foot"><a href="/">Back to opaque ↗</a></div>
     </aside>
 
     <section class="workspace">
@@ -106,6 +109,7 @@
 
       <section class="view" id="view-apps" aria-labelledby="tab-apps" hidden>
         <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">Private access</p><h1>Apps</h1><p>Each XRPL app you connect through Opaque gets an account of its own, funded by a pool: the app sees an address that leads nowhere. Close one to turn what is left, reserve included, back into notes.</p></div></div>
+        <div class="dialog-actions"><a class="secondary" href="xrpl-connect.html">Connect an app (WalletConnect)</a><a class="secondary" href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Try the demo app ↗</a></div>
         <section class="panel activity"><div id="site-list"></div><p class="status" id="apps-status" role="status"></p></section>
       </section>
 
