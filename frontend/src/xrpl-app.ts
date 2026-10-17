@@ -169,19 +169,24 @@ async function onReceive(): Promise<void> {
   el<HTMLButtonElement>('receive-button').disabled = true;
   setStatus('receive-status', 'Making notes in this browser and registering a fresh tag through the mesh…');
   try {
-    current = await wallet.receive(symbol, Number.isFinite(expected) ? expected : 0);
-    el('receive-address').textContent = current.pool;
-    el('receive-tag').textContent = String(current.tag);
-    el('receive-result').hidden = false;
-    el('buy-box').hidden = !(wallet.config.buy && poolBySymbol(symbol).moonpay);
-    el('faucet-box').hidden = !(symbol === 'XRP' && xrplDeployment.network.name === 'xrpl-testnet');
-    setStatus('receive-status', `Ready. Payments to this address with tag ${current.tag} become your ${symbol} notes, usually within seconds of arriving.`);
+    showTag(await wallet.receive(symbol, Number.isFinite(expected) ? expected : 0));
     await renderTags();
   } catch (error) {
     setStatus('receive-status', `Could not make a tag: ${(error as Error).message}`);
   } finally {
     el<HTMLButtonElement>('receive-button').disabled = false;
   }
+}
+
+/** The pay-to panel for a tag: a fresh one, or one picked from the list. */
+function showTag(t: ReceiveTag): void {
+  current = t;
+  el('receive-address').textContent = t.pool;
+  el('receive-tag').textContent = String(t.tag);
+  el('receive-result').hidden = false;
+  el('buy-box').hidden = !(wallet.config.buy && poolBySymbol(t.symbol).moonpay);
+  el('faucet-box').hidden = !(t.symbol === 'XRP' && xrplDeployment.network.name === 'xrpl-testnet');
+  setStatus('receive-status', `Ready. Payments to this address with tag ${t.tag} become your ${t.symbol} notes, usually within seconds of arriving.`);
 }
 
 async function onBuy(): Promise<void> {
@@ -217,13 +222,16 @@ async function renderTags(): Promise<void> {
   const tags = wallet.tags().slice(0, 10);
   if (tags.length === 0) { el('tag-list').innerHTML = '<p class="empty">No deposit tags yet.</p>'; return; }
   const rows = await Promise.all(tags.map(async (t) => {
-    const row = document.createElement('div');
+    // A button: picking a tag shows its address again, and its faucet on testnet.
+    const row = document.createElement('button');
+    row.type = 'button';
     row.className = 'intent';
+    row.addEventListener('click', () => { showTag(t); el('receive-result').scrollIntoView({ block: 'nearest' }); });
     row.innerHTML = '<div class="intent-head"><span class="intent-amt"></span><span class="intent-state"></span></div><p class="intent-meta"></p>';
     row.querySelector('.intent-amt')!.textContent = `${t.symbol} · tag ${t.tag}`;
     try {
       const s = await wallet.tagStatus(t);
-      row.querySelector('.intent-state')!.textContent = s.notes === 0 ? 'waiting' : `${s.notes} notes`;
+      row.querySelector('.intent-state')!.textContent = s.notes === 0 ? 'waiting for a payment' : `${s.notes} notes`;
       if (s.notes > 0) row.querySelector('.intent-state')!.classList.add('settled');
       row.querySelector('.intent-meta')!.textContent = `${new Date(t.createdAt).toLocaleString()}${s.carried > 0n ? ` · ${units(Number(s.carried) / UNIT)} ${t.symbol} waiting to fill a note` : ''}`;
     } catch {
