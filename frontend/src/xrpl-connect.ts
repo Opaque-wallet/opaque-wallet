@@ -7,7 +7,8 @@
 // on other wallet SDKs: paste the link, and their requests join the same queue.
 
 import { xrplDeployment } from '../../deployments/xrpl.ts';
-import { startXrplWallet, type XrplWallet } from './lib/xrpl-runtime.ts';
+import { hasBrowserWallet, startXrplWallet, type XrplWallet } from './lib/xrpl-runtime.ts';
+import { accountLabel, activeAccount } from './lib/xrpl-keys.ts';
 import { startWalletConnect } from './lib/walletconnect.ts';
 
 type Method = 'connect' | 'sign' | 'signAndSubmit' | 'signMessage';
@@ -28,6 +29,8 @@ const el = <T extends HTMLElement = HTMLElement>(id: string): T => document.getE
 const queue: Pending[] = [];
 let wallet: XrplWallet | undefined;
 let busy = false;
+/** Why no request can be served here, when none can. */
+let unavailable: string | undefined;
 
 const currency = (code: string) =>
   /^[0-9A-F]{40}$/i.test(code) ? new TextDecoder().decode(Uint8Array.from(code.match(/../g)!.map((b) => parseInt(b, 16)))).replace(/\0/g, '') : code;
@@ -144,6 +147,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     return;
   }
   const origin = event.origin;
+  if (unavailable !== undefined) { source.postMessage({ type: 'opaque:response', id, error: unavailable }, origin); return; }
   queue.push({
     id, method: data.method as Method, params: (data.params ?? {}) as Record<string, unknown>, origin,
     reply: (outcome) => source.postMessage({ type: 'opaque:response', id, ...outcome }, origin),
@@ -240,15 +244,26 @@ function offerWalletConnect(w: XrplWallet): void {
 el('network').textContent = xrplDeployment.network.displayName;
 // Opened as a page of its own (the installed app), not as a dapp's popup: a way back.
 el('to-wallet').hidden = window.opener !== null;
-try {
-  wallet = await startXrplWallet();
-  el('idle-title').textContent = 'Ready';
-  el('idle-status').textContent = 'Waiting for the site’s request.';
-  offerWalletConnect(wallet);
-  // Nothing secret in it: a site learns only that the popup has loaded.
+// The account open in the wallet answers: each account has apps of its own.
+const account = activeAccount(hasBrowserWallet());
+if (account === null) {
+  unavailable = 'Opaque has no wallet yet: open it, then create or import one';
+  el('idle-title').textContent = 'No wallet yet';
+  el('idle-status').textContent = 'Open Opaque, then create a wallet or import your recovery phrase.';
+  el('to-wallet').hidden = false;
   window.opener?.postMessage({ type: 'opaque:ready' }, '*');
-  void drain();
-} catch (error) {
-  el('idle-title').textContent = 'Not connected';
-  el('idle-status').textContent = `The privacy backend is not reachable: ${(error as Error).message}`;
+} else {
+  try {
+    wallet = await startXrplWallet(undefined, account === 'browser' ? null : account);
+    el('idle-title').textContent = 'Ready';
+    el('idle-status').textContent = `Waiting for the site’s request. ${accountLabel(account)} answers it.`;
+    el('request-account').textContent = `With ${accountLabel(account)}`;
+    offerWalletConnect(wallet);
+    // Nothing secret in it: a site learns only that the popup has loaded.
+    window.opener?.postMessage({ type: 'opaque:ready' }, '*');
+    void drain();
+  } catch (error) {
+    el('idle-title').textContent = 'Not connected';
+    el('idle-status').textContent = `The privacy backend is not reachable: ${(error as Error).message}`;
+  }
 }

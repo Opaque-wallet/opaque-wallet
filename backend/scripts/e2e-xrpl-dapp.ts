@@ -35,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { BatchFlags, Client, GlobalFlags, NFTokenCreateOfferFlags, NFTokenMintFlags, Wallet, type Batch, type SubmittableTransaction } from 'xrpl';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet } from './xrpl-wallet-page.ts';
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 import { createNoteSecret, deriveCommitment } from '../zk/index.ts';
 import { startXrpl, XRPL_STATE } from '../xrpl/node.ts';
@@ -134,7 +135,7 @@ try {
   const wallet = await context.newPage();
   police(wallet);
   await wallet.goto(`${WALLET}/xrpl.html`);
-  await wallet.waitForFunction(() => document.getElementById('account-short')?.textContent === 'Notes in this browser', null, { timeout: 60_000 });
+  await openWallet(wallet);
   await wallet.click('#tab-receive');
   await wallet.fill('#receive-expected', '20');
   await wallet.click('#receive-button');

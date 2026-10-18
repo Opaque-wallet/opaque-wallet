@@ -1,20 +1,18 @@
 #!/usr/bin/env node
 // One wallet, an account per app, on XRPL TESTNET, from the outside.
 //
-//   cd frontend && npm run ext:xrpl
 //   cd backend && npm run xrpl:e2e:accounts
 //
 //   1. the wallet: 95 private XRP from the faucet
 //   2. app A (the hosted demo) and app B (the same demo on another origin)
 //      connect: two accounts, two addresses
-//   3. app A again, by the extension (as GemWallet) and by WalletConnect: A's
-//      account each time, never a third
+//   3. app A again, by WalletConnect: A's account, never a third
+//      (the browser extension is a wallet of its own: e2e-xrpl-extension.ts)
 //   4. the ledger: each account was funded by the pool in a payout of its own,
 //      neither ever touched the other, and both master keys are off
 //   5. the wallet's Apps tab lists A and B, and nothing else
 //
-// Runs Playwright's Chrome for Testing with extension-xrpl/dist loaded (branded
-// Chrome ignores --load-extension). Outside backend's typecheck, like the
+// Runs Playwright's Chrome for Testing. Outside backend's typecheck, like the
 // other browser scripts.
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -26,10 +24,10 @@ import { fileURLToPath } from 'node:url';
 import { Client } from 'xrpl';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet } from './xrpl-wallet-page.ts';
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const EXTENSION = join(ROOT, 'extension-xrpl', 'dist');
 const WALLET = 'https://opaque-xrpl.vercel.app';
 const APP_A = 'https://opaque-xrpl-demo.vercel.app';
 const APP_B = 'http://localhost:5298';
@@ -42,7 +40,6 @@ const check = (name: string, ok: boolean, detail: string) => {
   log(`${ok ? 'PASS' : 'FAIL'}  ${name}  (${detail})`);
 };
 
-if (!existsSync(join(EXTENSION, 'inject.js'))) throw new Error('extension-xrpl/dist is missing: cd frontend && npm run ext:xrpl');
 const cache = join(homedir(), 'Library', 'Caches', 'ms-playwright');
 const build = existsSync(cache) ? readdirSync(cache).filter((d) => /^chromium-\d+$/.test(d)).sort().pop() : undefined;
 const executablePath = process.env['CHROMIUM']
@@ -58,7 +55,6 @@ const appB: ChildProcess = await new Promise((resolve, reject) => {
 const profile = mkdtempSync(join(tmpdir(), 'opaque-accounts-'));
 const context = await chromium.launchPersistentContext(profile, {
   ...(executablePath ? { executablePath } : { channel: 'chromium' }), headless: true,
-  args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`],
 });
 const client = new Client(xrplDeployment.network.wss);
 try {
@@ -74,8 +70,8 @@ try {
   // ── 1. the wallet ─────────────────────────────────────────────────────────
   const wallet = await context.newPage();
   police(wallet);
-  await wallet.goto(`${WALLET}/`);
-  await wallet.waitForFunction(() => document.getElementById('account-short')?.textContent === 'Notes in this browser', null, { timeout: 90_000 });
+  await wallet.goto(`${WALLET}/testnet/xrpl.html`); // the site's home page is the one-pager
+  await openWallet(wallet);
   await wallet.click('#tab-receive');
   await wallet.click('#receive-button');
   await wallet.waitForFunction(() => (document.getElementById('receive-tag')?.textContent ?? '') !== '', null, { timeout: 120_000 });
@@ -122,9 +118,7 @@ try {
   const b = await viaPopup(dappB, 'connect', /Connect privately/);
   check('app A and app B each get an account of their own', /^r/.test(a) && /^r/.test(b) && a !== b, `A ${a}, B ${b}`);
 
-  // ── 3. app A by other roads ────────────────────────────────────────────────
-  const viaExtension = await viaPopup(dappA, 'connect-gem', /^Connect$/);
-  check('app A through the extension (as GemWallet): A\'s account again', viaExtension === a, viaExtension);
+  // ── 3. app A by another road ───────────────────────────────────────────────
   const hub = await context.newPage();
   police(hub);
   await hub.goto(`${WALLET}/testnet/xrpl-connect.html`);

@@ -56,3 +56,4 @@ frontend/public/xrpl-stack.json
 # hosted demo dapp and XRPL extension builds
 demo/xrpl-dapp/dist/
 extension-xrpl/dist/
+frontend/dist-ext/

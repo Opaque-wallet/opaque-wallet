@@ -14,6 +14,7 @@
 import { Client } from 'xrpl';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet } from './xrpl-wallet-page.ts';
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 
 const BASE = (process.argv[2] ?? 'https://opaque-xrpl.vercel.app').replace(/\/+$/, '');
@@ -41,8 +42,8 @@ try {
   page.on('request', (r: any) => { const u = r.url(); if (!isOurs(u) && !u.startsWith('blob:') && !u.startsWith('data:')) outside.push(u); });
   page.on('websocket', (ws: any) => { if (!isOurs(ws.url())) outside.push(ws.url()); });
 
-  await page.goto(`${BASE}/`);
-  await page.waitForFunction(() => document.getElementById('account-short')?.textContent === 'Notes in this browser', null, { timeout: 90_000 });
+  await page.goto(`${BASE}/testnet/xrpl.html`); // the site's home page is the one-pager
+  await openWallet(page);
   check('the hosted wallet boots: the directory chains to the root compiled into it', true, new URL(page.url()).pathname);
 
   await page.click('#tab-receive');

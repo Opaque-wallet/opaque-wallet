@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 // The Opaque extension (extension-xrpl/) on XRPL TESTNET, from the outside.
-// The hosted demo dapp's stock xrpl-connect GemWallet and Crossmark adapters,
-// with no Opaque code of their own, reach the hosted wallet's approval popup.
+// The extension is a wallet of its own: its side panel page holds the notes,
+// and the hosted demo dapp's stock xrpl-connect GemWallet and Crossmark
+// adapters, with no Opaque code of their own, reach its approval window.
 //
 //   cd frontend && npm run ext:xrpl
-//   cd backend && npm run xrpl:e2e:extension [-- https://<wallet> https://<dapp>]
+//   cd backend && npm run xrpl:e2e:extension [-- https://<dapp>]
 //
-//   1. the wallet: a faucet deposit, 95 private XRP
+//   1. the extension's wallet: a faucet deposit, 95 private XRP
 //   2. as GemWallet: connect (a fresh account, funded privately), a DEX trade
 //      (submitTransaction), an NFT minted and submitted by the dapp
 //      (signTransaction), signMessage
+//      in the extension's own approval window
 //   3. Reject in the popup reaches the dapp as a refusal
 //   4. as Crossmark, on the same page: connects without a popup, then a trade
 //   5. after a reload, GemWallet reconnects without a popup
@@ -25,11 +27,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet } from './xrpl-wallet-page.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const EXTENSION = join(ROOT, 'extension-xrpl', 'dist');
-const WALLET = (process.argv[2] ?? 'https://opaque-xrpl.vercel.app').replace(/\/+$/, '');
-const DAPP = (process.argv[3] ?? 'https://opaque-xrpl-demo.vercel.app').replace(/\/+$/, '');
+const DAPP = (process.argv[2] ?? 'https://opaque-xrpl-demo.vercel.app').replace(/\/+$/, '');
 const STACK = 'https://opaque-xrpl-testnet-production.up.railway.app';
 const log = (s: string) => process.stdout.write(`${s}\n`);
 let failures = 0;
@@ -49,8 +51,12 @@ const context = await chromium.launchPersistentContext(profile, {
   ...(executablePath ? { executablePath } : { channel: 'chromium' }), headless: true,
   args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`],
 });
+let WALLET = '';
 try {
-  const ours = [new URL(WALLET).origin, new URL(STACK).origin];
+  // The extension's address, from its service worker.
+  const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker', { timeout: 30_000 });
+  WALLET = `chrome-extension://${new URL(worker.url()).host}`; // URL.origin is "null" for this scheme
+  const ours = [WALLET, new URL(STACK).origin];
   const outside: string[] = [];
   const police = (p: any) => {
     const isOurs = (u: string) => ours.some((o) => u.startsWith(`${o}/`) || u.startsWith(`${o.replace(/^http/, 'ws')}/`));
@@ -61,8 +67,8 @@ try {
   // ── 1. the wallet ─────────────────────────────────────────────────────────
   const wallet = await context.newPage();
   police(wallet);
-  await wallet.goto(`${WALLET}/`);
-  await wallet.waitForFunction(() => document.getElementById('account-short')?.textContent === 'Notes in this browser', null, { timeout: 90_000 });
+  await wallet.goto(`${WALLET}/xrpl.html`);
+  await openWallet(wallet);
   await wallet.click('#tab-receive');
   await wallet.click('#receive-button');
   await wallet.waitForFunction(() => (document.getElementById('receive-tag')?.textContent ?? '') !== '', null, { timeout: 120_000 });
@@ -73,7 +79,7 @@ try {
     await wallet.click('#refresh');
     await new Promise((r) => setTimeout(r, 4_000));
   }
-  check('the wallet holds 95 private XRP', (await wallet.textContent('#balance-main')) === '95', String(await wallet.textContent('#note-count')));
+  check('the extension\'s wallet holds 95 private XRP', (await wallet.textContent('#balance-main')) === '95', String(await wallet.textContent('#note-count')));
 
   // ── the dapp, and the extension in it ─────────────────────────────────────
   const dapp = await context.newPage();
@@ -105,6 +111,7 @@ try {
   const connected = await click('connect-gem', { title: /Connect privately/, button: 'approve' });
   const site = /connected (r\w+)/.exec(connected)?.[1] ?? '';
   check('GemWallet connect opens Opaque: a fresh account, funded privately', site !== '', `${connected} in ${Math.round((Date.now() - t0) / 1000)} s`);
+  check('the approval window is the extension\'s own', String(popup?.url()).startsWith(`${WALLET}/xrpl-connect.html`), String(popup?.url()));
   const trade = await click('trade', { title: /Sign and submit/, button: 'approve' });
   check('a DEX trade through GemWallet\'s submitTransaction', /tesSUCCESS/.test(trade), trade);
   const nft = await click('nft', { title: /Sign \(the site submits it\)/, button: 'approve' });

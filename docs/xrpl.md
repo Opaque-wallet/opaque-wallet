@@ -66,7 +66,7 @@ A transaction that shows its keys without rotating them is followed at once by t
 | [backend/deploy/xrpl.Dockerfile](../backend/deploy/xrpl.Dockerfile) | The hosted service's image: the stack. |
 | [frontend/vercel.xrpl.json](../frontend/vercel.xrpl.json) | The Vercel site's redirects and headers (`npm run deploy:xrpl`). |
 | [demo/xrpl-dapp](../demo/xrpl-dapp) | An ordinary dapp on xrpl-connect, used by the X3 check and hosted at `opaque-xrpl-demo.vercel.app` (`npm run deploy`). |
-| [extension-xrpl/](../extension-xrpl) | The browser extension: dapps that support GemWallet or Crossmark open Opaque. |
+| [extension-xrpl/](../extension-xrpl) | The browser extension: a wallet in Chrome's side panel, and the wallet dapps that support GemWallet or Crossmark open. |
 | [deployments/xrpl.ts](../deployments/xrpl.ts), `xrpl-*.json` | Compiled-in pools; the network is chosen at build or boot time, never by a server. |
 
 Changes to shared code, all additive:
@@ -91,8 +91,8 @@ Run everything from `backend/` unless noted. Every script uses `--use-system-ca`
 | `npm run xrpl:e2e:dapp [-- --close]` | X3 in Chrome: the demo dapp through xrpl-connect and the Opaque popup; `--close` also closes an account into notes (~20 min: the ledger keeps an account 256 ledgers). |
 | `npm run xrpl:e2e:mpt` | X4: an MPT pool, with deposits in the token's own scale and a private payout to a holder. |
 | `WALLETCONNECT_PROJECT_ID=… npm run xrpl:e2e:dapp -- --walletconnect` | X3 again, with the dapp on xrpl-connect's own WalletConnect adapter: its link pasted into Opaque, every socket policed. |
-| `npm run xrpl:e2e:extension [-- <wallet> <dapp>]` | The extension in Playwright's Chromium: the hosted demo dapp's stock GemWallet and Crossmark adapters reach Opaque's popup (build it first: `cd frontend && npm run ext:xrpl`). |
-| `npm run xrpl:e2e:accounts` | One wallet, an account per app: two origins get two accounts; the same origin by the popup, the extension and WalletConnect gets the same one; the ledger links neither to the other or to the user. |
+| `npm run xrpl:e2e:extension [-- <dapp>]` | The extension in Playwright's Chromium: its own wallet funded from the faucet, and the hosted demo dapp's stock GemWallet and Crossmark adapters reach its approval window (build it first: `cd frontend && npm run ext:xrpl`). |
+| `npm run xrpl:e2e:accounts` | One wallet, an account per app: two origins get two accounts; the same origin by the popup and by WalletConnect gets the same one; the ledger links neither to the other or to the user. |
 | `npm run xrpl:smoke:hosted [-- <wallet> <service>]` | The hosted wallet in Chrome: boot against the compiled-in root, receive by tag, a private payment; nothing outside the wallet's origin and the service's. |
 
 ## Hosted (testnet)
@@ -126,9 +126,20 @@ railway up --detach --service $S     # again after every change: it is not conne
 
 `backend/.stack/xrpl/mesh-master` is the only copy of that secret off Railway. Keep it, or the directories can't be re-derived.
 
+## The recovery phrase and accounts
+
+A new wallet starts with a 12-word recovery phrase (BIP-39), shown hidden until revealed and confirmed by typing three of its words back. Each account of it, Account 1, 2, …, is a private wallet of its own: its notes, deposit tags, app accounts and history. There is no account address: what the ledger shows is the pool, so the account list shows each account's private balance instead. Code: [frontend/src/lib/xrpl-keys.ts](../frontend/src/lib/xrpl-keys.ts).
+
+- **Everything comes from the phrase.** Root = HMAC-SHA256("opaque/xrpl/v1", BIP-39 seed); account *n* = HMAC(root, "account/*n*"). Note *i* of a pool and size draws its secret from HMAC(account, "note/<network>/<pool>/<size>/*i*#block"), and an app's account from "site/<origin>". The known-answer test pins this: changing it would strand every phrase's notes.
+- **Importing finds them again.** The pools' logs list every enrolled commitment, so an imported account derives its numbers per pool and size until 250 in a row are absent, keeps the ones listed, and checks their nullifiers (spent or not). Account 1 then probes the next accounts (64 numbers each) and lists the used ones. About 10 s for an empty phrase. **Rescan the ledger** in the account menu repeats it.
+- **The same app finds the same account.** An app's account derives from phrase, account and origin: connected from a second browser, it is found on the ledger with its current single-use key (`syncIndex`) and is not funded again.
+- **One phrase in two places is safe.** Both may draw the same next note; the pool refuses a commitment registered twice, and the wallet keeps that note (it is its own) and draws fresh numbers.
+- **The browser wallet from before phrases** keeps its random notes as **Browser account**, backed up by file; it can set up a phrase, whose accounts sit beside it.
+- **Limits:** the phrase is stored in this origin's storage beside the notes, unencrypted, as the notes are; a password lock is next. Deposit tags and activity are this browser's records and do not come back with the phrase (the notes do). One phrase per browser.
+
 ## The extension
 
-For dapps that support GemWallet or Crossmark: [extension-xrpl/](../extension-xrpl) answers both wallets' page protocols in each page and hands every request to Opaque's adapter, so the same popup approves it. It holds no key and asks for no permission. Testnet only, and it answers as both wallets, so it shouldn't run beside a real GemWallet or Crossmark. Install and limits: [extension-xrpl/README.md](../extension-xrpl/README.md).
+[extension-xrpl/](../extension-xrpl) is a wallet of its own, as MetaMask is: the toolbar icon opens the wallet page in Chrome's side panel, and its notes and keys live in the extension (Backup and Restore move them to and from the hosted wallet). For dapps that support GemWallet or Crossmark it answers both wallets' page protocols in each page and hands every request to Opaque's adapter, which opens the extension's own approval window; the page scripts hold no key. Testnet only, and it answers as both wallets, so it shouldn't run beside a real GemWallet or Crossmark. Download: https://opaque-xrpl.vercel.app/testnet/opaque-xrpl-extension.zip. Install and limits: [extension-xrpl/README.md](../extension-xrpl/README.md).
 
 ## WalletConnect
 
@@ -159,10 +170,12 @@ For dapps that don't load Opaque's adapter: any dapp on WalletConnect's XRPL met
 | X3 dapp e2e | 11/11 |
 | X3 dapp e2e with `--close` | 17/17 (an app account holding LP tokens is refused; a second app's account is deleted into the XRP pool and comes back as 8 private XRP) |
 | MPT pool e2e | 4/4 (payout settled 16 s after release) |
-| One wallet, an account per app | 10/10 (two apps, two accounts, each funded by the pool in its own payout, 19 ledgers apart; app A by the extension and by WalletConnect got A's account again; neither history names the other; master keys off; the Apps tab lists exactly the two) |
+| One wallet, an account per app | 10/10 (two apps, two accounts, each funded by the pool in its own payout, 19 ledgers apart; app A by the extension (then the hosted wallet's) and by WalletConnect got A's account again; neither history names the other; master keys off; the Apps tab lists exactly the two) |
 | X3 over WalletConnect | 10/10 (xrpl-connect's own WalletConnect adapter, its link pasted into Opaque, the relay through the stack's tunnel: connect, a DEX trade, an AMM deposit, an NFT the dapp submits; no message signing over WalletConnect) |
 | Scan QR, hosted | a WalletConnect code read from a (fake) camera in 1.2 s, the camera off again, pairing started |
-| Extension, hosted wallet and demo dapp | 11/11 (as GemWallet: connect, a DEX trade, an NFT minted and submitted by the dapp, signMessage; Reject reaches the dapp as a refusal; as Crossmark: connect without a popup and a trade; reconnect after a reload without a popup) |
+| Extension, its own wallet and the demo dapp (18 October) | 12/12 (the extension's wallet funded from the faucet, 95 XRP as 14 notes; as GemWallet: connect in the extension's own approval window, a DEX trade, an NFT minted and submitted by the dapp, signMessage; Reject reaches the dapp as a refusal; as Crossmark: connect without a popup and a trade; reconnect after a reload without a popup; no request outside the extension and the service) |
+| Recovery phrase, two browsers (18 October) | 9/9 (a new wallet, its phrase confirmed; 95 XRP from the faucet; the demo app connected and funded, 85 XRP left; Account 2 a wallet of its own, empty; a second browser imports the phrase and finds all 14 notes, 85 XRP, in 49 s; the same app gets the same address there, and nothing is paid to fund it again) |
+| Hosted, redesigned wallet (18 October) | 7/7 (a wallet made through onboarding, at /testnet/xrpl.html; a faucet deposit, 95 XRP as 14 notes; Reject on the review sends nothing; a private payment settled 42 s after the click; no request outside the wallet's origin and the service) |
 | Hosted, from outside (wallet on Vercel, service on Railway) | 6/6 (the built wallet verifies the hosted mesh against its compiled-in root; a deposit from the testnet faucet button, 95 XRP as 14 notes; a private payment settled 42 s after the click; no request or socket outside the wallet's origin and the service's) |
 | Unit tests | `test:xrpl` 16/16; backend 280/280 (including the settler's XRPL paths), protocol-types 16/16, ring-client 6/6, frontend 9/9, root 3/3; contracts `forge test` 97 passed, 1 skipped |
 

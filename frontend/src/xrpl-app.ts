@@ -7,7 +7,8 @@ import { isAccount } from '../../backend/xrpl/protocol.ts';
 import { xrplDeployment } from '../../deployments/xrpl.ts';
 import { networkPicker } from './lib/network-picker.ts';
 import { paymentDeadline } from './lib/payment-deadline.ts';
-import { poolBySymbol, startXrplWallet, symbolOf, UNIT, type ReceiveTag, type Sent, type XrplWallet } from './lib/xrpl-runtime.ts';
+import { hasBrowserWallet, poolBySymbol, startXrplWallet, symbolOf, UNIT, type ReceiveTag, type Sent, type XrplWallet } from './lib/xrpl-runtime.ts';
+import { accountKeys, accountLabel, activeAccount, isPhrase, newPhrase, normalizePhrase, savePhrase, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const found = document.getElementById(id);
@@ -21,6 +22,18 @@ const explorerTx = (hash: string) => `${xrplDeployment.network.explorer}/transac
 
 let wallet: XrplWallet;
 let current: ReceiveTag | undefined;
+/** The account open now: one of the phrase's, the browser wallet, or none before onboarding. */
+let account: AccountKeys | 'browser' | null = null;
+const idOf = (a: AccountKeys | 'browser') => (a === 'browser' ? 'browser' : a.id);
+
+/** The ring of eight with one note larger: which one tells the accounts apart (none, the browser wallet). */
+function markOf(index: number): string {
+  const dots = Array.from({ length: 8 }, (_, i) => {
+    const a = (i * Math.PI) / 4 - Math.PI / 2, lead = i === index % 8;
+    return `<circle cx="${(20 + 13 * Math.cos(a)).toFixed(2)}" cy="${(20 + 13 * Math.sin(a)).toFixed(2)}" r="${lead ? 4.8 : 3.4}"${lead || index < 0 ? '' : ' opacity=".6"'}/>`;
+  }).join('');
+  return `<svg viewBox="0 0 40 40" aria-hidden="true"><g fill="#070608">${dots}</g></svg>`;
+}
 
 // ── views ─────────────────────────────────────────────────────────────────
 type View = 'home' | 'send' | 'receive' | 'activity' | 'apps';
@@ -30,9 +43,35 @@ function showView(name: View): void {
     el(`view-${v}`).hidden = v !== name;
     el(`tab-${v}`).setAttribute('aria-selected', String(v === name));
   }
+  window.scrollTo(0, 0);
   if (name === 'activity') void renderActivity(true);
   if (name === 'receive') void renderTags();
   if (name === 'apps') renderSites();
+}
+
+// Home's two tabs: the notes, and how they stay private.
+const HOME_TABS = [['hometab-notes', 'home-notes'], ['hometab-privacy', 'home-privacy']] as const;
+function showHomeTab(tab: string): void {
+  for (const [t, panel] of HOME_TABS) {
+    el(t).setAttribute('aria-selected', String(t === tab));
+    el(panel).hidden = t !== tab;
+  }
+}
+
+// On testnet, a card points an empty wallet at the faucet until it is dismissed.
+const PROMO_DISMISSED = 'opaque-xrpl:faucet-card-dismissed';
+let promoWanted = false;
+function setupPromo(): void {
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(PROMO_DISMISSED) === '1'; } catch { /* storage blocked: show it */ }
+  promoWanted = !dismissed && xrplDeployment.network.name === 'xrpl-testnet';
+  el('promo').hidden = !promoWanted;
+  el('promo-go').addEventListener('click', () => showView('receive'));
+  el('promo-close').addEventListener('click', () => {
+    promoWanted = false;
+    el('promo').hidden = true;
+    try { localStorage.setItem(PROMO_DISMISSED, '1'); } catch { /* it comes back next time */ }
+  });
 }
 
 // ── apps: per-site accounts ───────────────────────────────────────────────
@@ -85,6 +124,8 @@ async function renderBalances(notes?: readonly NoteSummary[]): Promise<void> {
     if (p.symbol === 'XRP') {
       el('balance-main').textContent = units(total);
       el('note-count').textContent = `${held.length} private ${held.length === 1 ? 'note' : 'notes'} in this browser`;
+      if (account !== null) saveWalletState({ balances: { ...walletState().balances, [idOf(account)]: total } });
+      el('promo').hidden = !promoWanted || held.length > 0;
     }
   }
   el('assets').replaceChildren(...rows);
@@ -302,6 +343,158 @@ async function renderActivity(poll = false): Promise<void> {
   }));
 }
 
+// ── accounts: the phrase's, and the browser wallet from before phrases ─────
+function renderAccounts(): void {
+  const phrase = storedPhrase();
+  const { count, balances } = walletState();
+  const row = (key: AccountKeys | 'browser'): HTMLElement => {
+    const open = account !== null && idOf(account) === idOf(key);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `account-row${key === 'browser' ? ' browser' : ''}`;
+    b.setAttribute('aria-current', String(open));
+    b.innerHTML = `<span class="mark">${markOf(key === 'browser' ? -1 : key.index)}</span><span><b></b><small></small></span><span class="balance-cell"></span>`;
+    b.querySelector('b')!.textContent = accountLabel(key);
+    b.querySelector('small')!.textContent = key === 'browser' ? 'This browser only, backed up by file' : open ? 'Open now' : 'From your recovery phrase';
+    const balance = balances[idOf(key)];
+    b.querySelector('.balance-cell')!.textContent = balance === undefined ? '' : `${units(balance)} XRP`;
+    // Each account is a wallet of its own: opening one starts it afresh.
+    b.addEventListener('click', () => { if (!open) { saveWalletState({ active: key === 'browser' ? 'browser' : key.index }); location.reload(); } });
+    return b;
+  };
+  const rows: HTMLElement[] = [];
+  if (phrase !== null) for (let n = 0; n < count; n++) rows.push(row(accountKeys(phrase, n)));
+  if (hasBrowserWallet()) rows.push(row('browser'));
+  el('account-list').replaceChildren(...rows);
+  el('account-add').hidden = phrase === null;
+  el('phrase-box').hidden = phrase === null;
+  el('phrase-setup-box').hidden = phrase !== null;
+  el('account-rescan').hidden = account === 'browser';
+}
+
+/** The first time an imported phrase's account opens: its notes from the ledger, and (for Account 1) its other accounts. */
+async function recoverIfImported(keys: AccountKeys): Promise<void> {
+  const state = walletState();
+  if (!state.imported || state.scanned[keys.id]) return;
+  const progress = (line: string) => setStatus('home-status', line);
+  const kept = await wallet.recover(progress);
+  let count = state.count;
+  if (keys.index === 0) {
+    for (let n = 1; n < 20; n++) {
+      progress(`Looking for Account ${n + 1} of this phrase…`);
+      if (await wallet.probe(accountKeys(storedPhrase()!, n)) === 0) break;
+      count = n + 1;
+    }
+  }
+  saveWalletState({ count: Math.max(count, walletState().count), scanned: { ...walletState().scanned, [keys.id]: true } });
+  const others = count - 1;
+  progress(`Found ${kept} ${kept === 1 ? 'note' : 'notes'} of ${accountLabel(keys)} on the ledger${others > 0 ? `, and ${others} more ${others === 1 ? 'account' : 'accounts'} of this phrase` : ''}.`);
+}
+
+// ── onboarding: a new wallet, or one brought from elsewhere ───────────────
+let draft = '';
+/** Opened from inside a browser wallet: going back returns to it. */
+let fromWallet = false;
+const obStep = (id: string) => { for (const step of document.querySelectorAll<HTMLElement>('.ob-step')) step.hidden = step.id !== id; window.scrollTo(0, 0); };
+
+function openOnboarding(step: 'ob-welcome' | 'ob-show', inWallet = false): void {
+  fromWallet = inWallet;
+  document.body.classList.add('onboarding');
+  for (const v of VIEWS) el(`view-${v}`).hidden = true;
+  el('onboard').hidden = false;
+  if (step === 'ob-show') startDraft(); else obStep(step);
+}
+
+function startDraft(): void {
+  draft = newPhrase();
+  el('ob-words').replaceChildren(...draft.split(' ').map((w) => Object.assign(document.createElement('li'), { textContent: w })));
+  el('ob-words').classList.add('is-hidden');
+  el('ob-reveal').hidden = false;
+  Object.assign(el<HTMLInputElement>('ob-saved'), { checked: false, disabled: true });
+  el<HTMLButtonElement>('ob-next').disabled = true;
+  obStep('ob-show');
+}
+
+function setupOnboarding(): void {
+  el('ob-create').addEventListener('click', startDraft);
+  el('ob-import').addEventListener('click', () => obStep('ob-restore'));
+  for (const b of document.querySelectorAll<HTMLElement>('[data-ob]')) {
+    b.addEventListener('click', () => (fromWallet && b.dataset['ob'] === 'ob-welcome' ? location.reload() : obStep(b.dataset['ob']!)));
+  }
+  el('ob-reveal').addEventListener('click', () => {
+    el('ob-words').classList.remove('is-hidden');
+    el('ob-reveal').hidden = true;
+    el<HTMLInputElement>('ob-saved').disabled = false;
+  });
+  el('ob-saved').addEventListener('change', () => { el<HTMLButtonElement>('ob-next').disabled = !el<HTMLInputElement>('ob-saved').checked; });
+  el('ob-next').addEventListener('click', () => {
+    // Three of the twelve places, picked at random, asked in order.
+    const places = [...crypto.getRandomValues(new Uint32Array(12))].map((r, i) => [r, i] as const)
+      .sort((a, b) => a[0] - b[0]).slice(0, 3).map(([, i]) => i).sort((a, b) => a - b);
+    el('ob-quiz').replaceChildren(...places.map((i) => {
+      const label = document.createElement('label');
+      label.className = 'field';
+      label.htmlFor = `ob-q-${i}`;
+      label.innerHTML = `<span>Word ${i + 1}</span><input id="ob-q-${i}" data-pos="${i}" class="mono" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">`;
+      return label;
+    }));
+    setStatus('ob-confirm-status', '');
+    obStep('ob-confirm');
+  });
+  el('ob-finish').addEventListener('click', () => {
+    const words = draft.split(' ');
+    for (const input of el('ob-quiz').querySelectorAll<HTMLInputElement>('input')) {
+      const place = Number(input.dataset['pos']);
+      if (normalizePhrase(input.value) !== words[place]) {
+        setStatus('ob-confirm-status', `That isn't word ${place + 1}. Check what you wrote down.`);
+        input.focus();
+        return;
+      }
+    }
+    // A browser wallet with notes stays open; the phrase's Account 1 waits in the account list.
+    savePhrase(draft, false, hasBrowserWallet() ? 'browser' : 0);
+    location.reload();
+  });
+  el('ob-restore-go').addEventListener('click', () => {
+    const phrase = el<HTMLTextAreaElement>('ob-phrase').value;
+    if (!isPhrase(phrase)) { setStatus('ob-restore-status', 'Those aren\'t the 12 words of a recovery phrase: check the spelling and the order.'); return; }
+    savePhrase(phrase, true, 0);
+    location.reload();
+  });
+}
+
+function setupAccounts(): void {
+  el('account-button').addEventListener('click', () => { renderAccounts(); el<HTMLDialogElement>('account-dialog').showModal(); });
+  el('account-add').addEventListener('click', () => {
+    const { count } = walletState();
+    saveWalletState({ count: count + 1, active: count });
+    location.reload();
+  });
+  el('phrase-show').addEventListener('click', () => {
+    const list = el('phrase-words');
+    const showing = list.hidden;
+    list.replaceChildren(...(showing ? (storedPhrase() ?? '').split(' ').map((w) => Object.assign(document.createElement('li'), { textContent: w })) : []));
+    list.hidden = !showing;
+    el('phrase-show').textContent = showing ? 'Hide recovery phrase' : 'Show recovery phrase';
+  });
+  el('account-rescan').addEventListener('click', () => void (async () => {
+    const button = el<HTMLButtonElement>('account-rescan');
+    button.disabled = true;
+    try {
+      const kept = await wallet.recover((line) => setStatus('phrase-status', line));
+      setStatus('phrase-status', kept === 0 ? 'Nothing new on the ledger.' : `Found ${kept} more ${kept === 1 ? 'note' : 'notes'}.`);
+      await renderBalances();
+    } catch (error) {
+      setStatus('phrase-status', `Could not rescan: ${(error as Error).message}`);
+    } finally {
+      button.disabled = false;
+    }
+  })());
+  const setUp = () => { el<HTMLDialogElement>('account-dialog').close(); openOnboarding('ob-show', true); };
+  el('phrase-setup').addEventListener('click', setUp);
+  el('phrase-card-go').addEventListener('click', setUp);
+}
+
 // ── backup ────────────────────────────────────────────────────────────────
 async function onBackupExport(): Promise<void> {
   try {
@@ -330,7 +523,10 @@ async function init(): Promise<void> {
   for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => showView('home'));
   el('action-send').addEventListener('click', () => showView('send'));
   el('action-receive').addEventListener('click', () => showView('receive'));
-  el('account-button').addEventListener('click', () => el<HTMLDialogElement>('account-dialog').showModal());
+  el('action-apps').addEventListener('click', () => showView('apps'));
+  el('action-activity').addEventListener('click', () => showView('activity'));
+  for (const [tab] of HOME_TABS) el(tab).addEventListener('click', () => showHomeTab(tab));
+  setupPromo();
   el('backup-export').addEventListener('click', () => void onBackupExport());
   el('backup-import').addEventListener('click', () => el('backup-file').click());
   el<HTMLInputElement>('backup-file').addEventListener('change', (e) => {
@@ -338,8 +534,17 @@ async function init(): Promise<void> {
     if (file) void onBackupImport(file);
   });
 
+  setupOnboarding();
+  setupAccounts();
+  account = activeAccount(hasBrowserWallet());
+  // Nothing to open yet: a new wallet, or one brought from elsewhere.
+  if (account === null) { openOnboarding('ob-welcome'); return; }
+  el('account-name').textContent = accountLabel(account);
+  document.querySelector('.acct .mark')!.innerHTML = markOf(account === 'browser' ? -1 : account.index);
+  el('phrase-card').hidden = !(account === 'browser' && storedPhrase() === null);
+
   try {
-    wallet = await startXrplWallet();
+    wallet = await startXrplWallet(undefined, account === 'browser' ? null : account);
   } catch (error) {
     const footer = el('boot-error');
     footer.textContent = `The privacy backend is not reachable: ${(error as Error).message}`;
@@ -368,6 +573,10 @@ async function init(): Promise<void> {
   await renderBalances();
   await refresh();
   void renderPlan();
+  if (account !== 'browser') {
+    await recoverIfImported(account).catch((error: Error) => setStatus('home-status', `Could not look for your notes: ${error.message}. Rescan from the account menu.`));
+    await renderBalances();
+  }
   // The polls double as cover traffic for the reads that matter.
   setInterval(() => void refresh(), 20_000);
   setInterval(() => void renderActivity(true), 15_000);

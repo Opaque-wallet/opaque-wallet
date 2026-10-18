@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from 'xrpl';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet } from './xrpl-wallet-page.ts';
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -76,7 +77,7 @@ try {
   page.on('pageerror', (e: Error) => log(`  page error: ${e.message}`));
 
   await page.goto(APP);
-  await page.waitForFunction(() => document.getElementById('account-short')?.textContent === 'Notes in this browser', null, { timeout: 60_000 });
+  await openWallet(page);
   log('  wallet started: relay directory verified, mesh up');
 
   // ── 1. receive ───────────────────────────────────────────────────────────

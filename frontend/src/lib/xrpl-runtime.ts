@@ -12,11 +12,16 @@
 //   buying       a MoonPay checkout URL signed at the exit, opened in a NEW tab:
 //                this page never contacts MoonPay.
 //   pools        compiled in (deployments/xrpl-*.json), never named by a server.
+//   secrets      an account of a recovery phrase draws every note and every app
+//                account from the phrase (lib/xrpl-keys.ts), so importing the
+//                phrase elsewhere finds them again; the browser wallet from
+//                before phrases keeps random ones, backed up by file.
 //
 // The page talks to its own origin and Opaque's stack, and nothing else.
 
 import type { CredentialHandle, Hex, IdempotencyKey, IntentRef, IntentStatus, NoteSummary, PaymentRequest, PoolScope, PrivacyScore, RelaySnapshot, RingSnapshot, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
+import { createNoteSecret, deriveCommitment } from '@opaque/zk';
 
 import { createMeshBootstrap } from '../../../backend/mesh/bootstrap.ts';
 import { chainTo } from '../../../backend/mesh/directory.ts';
@@ -36,6 +41,7 @@ import { localNoteStorage } from './note-storage.ts';
 import { runPaymentLanes } from './payment-lanes.ts';
 import type { WalletConnectConfig } from './walletconnect.ts';
 import { scoped } from './storage-name.ts';
+import { stream, type AccountKeys } from './xrpl-keys.ts';
 
 export interface XrplStackConfig {
   readonly directoryChain?: readonly SignedDirectory[];
@@ -52,11 +58,28 @@ export interface XrplStackConfig {
 const reviver = (_k: string, v: unknown) => (typeof v === 'string' && /^\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v);
 const replacer = (_k: string, v: unknown) => (typeof v === 'bigint' ? `${v}n` : v);
 const UNIT = 1_000_000;
-const NOTES_KEY = scoped('opaque:xrpl-notes:v1');
-const TAGS_KEY = scoped('opaque:xrpl-tags:v1');
-const ACTIVITY_KEY = scoped('opaque:xrpl-activity:v1');
-/** Per-site accounts' keys: secrets, like the notes, and backed up with them. */
-const SITES_KEY = scoped('opaque:xrpl-sites:v1');
+/**
+ * Where an account keeps its records. The browser wallet keeps the names it
+ * always had; each phrase account has its own, under its public id. Sites hold
+ * per-site accounts' keys: secrets, like the notes, and backed up with them.
+ */
+const storageOf = (account: AccountKeys | null) => {
+  const name = (part: string) => scoped(account === null ? `opaque:xrpl-${part}:v1` : `opaque:xrpl:${account.id}:${part}:v1`);
+  return { notes: name('notes'), tags: name('tags'), activity: name('activity'), sites: name('sites'), counters: name('note-counters') };
+};
+/** Whether the browser wallet from before recovery phrases holds anything. */
+export const hasBrowserWallet = (): boolean => {
+  const { notes, sites } = storageOf(null);
+  return [notes, sites].some((key) => Object.keys(load<Record<string, unknown>>(key, {})).length > 0);
+};
+/**
+ * How far past the last note found a scan keeps deriving, per pool and size.
+ * A deposit tag makes up to 46 notes of one size, and most of the smaller ones
+ * are never filled, so a run of unfilled numbers can be long.
+ */
+const SCAN_GAP = 250;
+/** A used account has a note among the first numbers of some size; an unused one is told by this much. */
+const PROBE_GAP = 64;
 /** At most this many notes travel at once: each is a 1.1 MiB proof upload. */
 const LANES = 2;
 /** What a payment that chose to wait asks of the pool's privacy score. */
@@ -155,10 +178,17 @@ export interface XrplWallet {
   closeSite(origin: string, onProgress?: (line: string) => void): Promise<string>;
   /** Waits until every note of a payment has an outcome. */
   settled(sent: Sent, timeoutMs?: number): Promise<Sent>;
+
+  // ── recovery (phrase accounts only) ──
+  /** Finds this account's notes in the pools' logs and keeps them: what an imported phrase holds. */
+  recover(onProgress?: (line: string) => void): Promise<number>;
+  /** Whether another account of the phrase has notes in the pools' logs (1) or not (0), keeping none. */
+  probe(account: AccountKeys): Promise<number>;
 }
 
-export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWallet> {
+export async function startXrplWallet(config?: XrplStackConfig, account: AccountKeys | null = null): Promise<XrplWallet> {
   const cfg = config ?? (await loadXrplStack());
+  const K = storageOf(account);
 
   const relayHealth = createGraphHealth({ fetchSnapshot: async () => (await query<RelaySnapshot>({ kind: 'RELAY_SNAPSHOT' })).value });
   // VERIFY FIRST: throws before any relay is contacted if the directory does
@@ -177,7 +207,7 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
   const xrpl: XrplSend = async (operation, encodedRequest) => (await query<Hex>({ kind: 'XRPL', operation, encodedRequest })).value;
   // A per-site account's reads and transactions, through the mesh like everything else.
   const ledger = meshLedger(xrpl);
-  const saveSite = (site: Site) => save(SITES_KEY, { ...load<Record<string, Site>>(SITES_KEY, {}), [site.origin]: site });
+  const saveSite = (site: Site) => save(K.sites, { ...load<Record<string, Site>>(K.sites, {}), [site.origin]: site });
   /** Per site, the rotation a sign-only use still owes. */
   const rotations = new Map<string, Promise<void>>();
 
@@ -193,8 +223,14 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
     return fresh;
   };
 
+  // A phrase account's note is drawn from the phrase: number i of each pool and size.
+  let drawing: ((n: number) => Uint8Array) | undefined;
   const vault: NoteVault = createNoteVault({
-    storage: localNoteStorage(NOTES_KEY),
+    storage: localNoteStorage(K.notes),
+    ...(account === null ? {} : { randomBytes: (n: number) => {
+      if (drawing === undefined) throw new Error('a phrase account\'s note needs its number');
+      return drawing(n);
+    } }),
     chain: {
       async observeCommitment(scope, commitment) {
         const found = (await ring(scope)).candidates.find((c) => c.commitment === commitment);
@@ -204,6 +240,48 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
     },
   });
   const ringClient = createRingClient(vault, createWorkerProver());
+
+  const counterOf = (scope: PoolScope) => `${accountOf(scope.pool)}/${scope.denomination}`;
+  const drawFor = (keys: AccountKeys, scope: PoolScope, i: number) => stream(keys.key, `note/${xrplDeployment.network.name}/${accountOf(scope.pool)}/${scope.denomination}/${i}`);
+  /** Note i of a scope, kept in the vault (which computes the same commitment from the same secret). */
+  async function keepNote(scope: PoolScope, i: number): Promise<NoteSummary> {
+    drawing = drawFor(account!, scope, i);
+    try { return await vault.create(scope); } finally { drawing = undefined; }
+  }
+  /** A fresh note: random in the browser wallet, the next number of the phrase otherwise. */
+  async function newNote(scope: PoolScope): Promise<NoteSummary> {
+    if (account === null) return vault.create(scope);
+    const counters = load<Record<string, number>>(K.counters, {});
+    const i = counters[counterOf(scope)] ?? 0;
+    // The number is spent before the note exists, so it is never drawn twice here.
+    save(K.counters, { ...counters, [counterOf(scope)]: i + 1 });
+    return keepNote(scope, i);
+  }
+  // A scan reads every pool size's log: all at once through the mesh, kept for a minute.
+  let logs: { at: number; sets: Promise<Map<string, Set<string>>> } | undefined;
+  const logsOf = (): Promise<Map<string, Set<string>>> => {
+    if (logs === undefined || Date.now() - logs.at > 60_000) {
+      const sets = Promise.all(scopes().map(async ({ scope }) => [counterOf(scope), new Set((await ring(scope)).candidates.map((c) => c.commitment as string))] as const))
+        .then((entries) => new Map(entries));
+      sets.catch(() => { logs = undefined; });
+      logs = { at: Date.now(), sets };
+    }
+    return logs.sets;
+  };
+  /** Which numbers of a scope the pool's log holds, deriving until `gap` in a row are absent. */
+  async function scan(keys: AccountKeys, scope: PoolScope, from: number, gap = SCAN_GAP): Promise<number[]> {
+    const listed = (await logsOf()).get(counterOf(scope)) ?? new Set<string>();
+    const found: number[] = [];
+    // An empty log holds nobody's notes.
+    if (listed.size === 0) return found;
+    for (let i = 0, last = from - 1; i <= last + gap; i++) {
+      if (listed.has(deriveCommitment(createNoteSecret(drawFor(keys, scope, i)), scope))) { found.push(i); last = Math.max(last, i); }
+      // About 4 ms a note: let the page breathe.
+      if (i % 25 === 24) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    return found;
+  }
+  const scopes = () => xrplDeployment.pools.flatMap((p) => p.sizes.map((size) => ({ p, scope: scopeFor(p, size) })));
   const seal = createIntentSealer({
     crePublicKey: cfg.cre.publicKey, encryptionKeyId: cfg.cre.encryptionKeyId,
     resolveCredential: async (handle) => {
@@ -273,26 +351,34 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
       // Enough of each smaller size for any remainder (9), and of the largest
       // for what is expected plus one; 64 at most per registration.
       const counts = new Map(sizes.map((s, i) => [s, i === 0 ? Math.min(64 - 9 * (sizes.length - 1), Math.ceil(expected * UNIT / s) + 1) : 9]));
-      const commitments: Record<string, NoteSummary['commitment'][]> = {};
-      for (const [size, n] of counts) {
-        commitments[String(size)] = [];
-        // Persisted before the tag is shown to anyone: a payment to it must find its notes here.
-        for (let i = 0; i < n; i++) commitments[String(size)]!.push((await vault.create(scopeFor(p, size))).commitment);
-      }
+      const mint = async () => {
+        const commitments: Record<string, NoteSummary['commitment'][]> = {};
+        for (const [size, n] of counts) {
+          commitments[String(size)] = [];
+          // Persisted before the tag is shown to anyone: a payment to it must find its notes here.
+          for (let i = 0; i < n; i++) commitments[String(size)]!.push((await newNote(scopeFor(p, size))).commitment);
+        }
+        return commitments;
+      };
+      let commitments = await mint();
       for (let attempt = 0; ; attempt++) {
         const tag = freshTag();
         try {
           await registerTag(xrpl, p.account, tag, commitments);
           const record: ReceiveTag = { symbol, pool: p.account, tag, createdAt: Date.now() };
-          save(TAGS_KEY, [record, ...load<ReceiveTag[]>(TAGS_KEY, [])]);
+          save(K.tags, [record, ...load<ReceiveTag[]>(K.tags, [])]);
           return record;
         } catch (error) {
+          const message = (error as Error).message;
           // A random 32-bit tag already in use is rare; another draw settles it.
-          if (attempt >= 2 || !/already in use/.test((error as Error).message)) throw error;
+          // A note already registered was drawn by this phrase somewhere else:
+          // it stays here (it is this wallet's), and the next numbers are fresh.
+          if (attempt >= 3 || !/already in use|registered (twice|to another tag)/.test(message)) throw error;
+          if (/registered/.test(message)) commitments = await mint();
         }
       }
     },
-    tags: () => load<ReceiveTag[]>(TAGS_KEY, []),
+    tags: () => load<ReceiveTag[]>(K.tags, []),
     tagStatus: (t) => tagStatus(xrpl, t.pool, t.tag),
     buyUrl: (t, fiat) => onrampUrl(xrpl, t.pool, t.tag, fiat),
     faucet: (t) => faucetDeposit(xrpl, t.pool, t.tag),
@@ -318,8 +404,8 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
         id, symbol, amount, destination, createdAt: Date.now(),
         notes: picked.map((n, i) => ({ noteId: n.id, size: n.scope.denomination / UNIT, reservation: `xrpl:${id}:${i}`, state: 'PROVING' })),
       };
-      save(ACTIVITY_KEY, [sent, ...load<Sent[]>(ACTIVITY_KEY, [])]);
-      const store = () => save(ACTIVITY_KEY, load<Sent[]>(ACTIVITY_KEY, []).map((s) => (s.id === id ? sent : s)));
+      save(K.activity, [sent, ...load<Sent[]>(K.activity, [])]);
+      const store = () => save(K.activity, load<Sent[]>(K.activity, []).map((s) => (s.id === id ? sent : s)));
       await runPaymentLanes(picked, LANES, async (note, i) => {
         const entry = sent.notes[i]!;
         onProgress?.(`note ${i + 1}/${picked.length} (${entry.size} ${symbol}): proving in this browser…`);
@@ -338,9 +424,9 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
       });
       return sent;
     },
-    activity: () => load<Sent[]>(ACTIVITY_KEY, []),
+    activity: () => load<Sent[]>(K.activity, []),
     async pollActivity() {
-      const all = load<Sent[]>(ACTIVITY_KEY, []);
+      const all = load<Sent[]>(K.activity, []);
       for (const sent of all) {
         for (const entry of sent.notes) {
           if (entry.handle === undefined || entry.state === 'SETTLED' || entry.state === 'FAILED') continue;
@@ -357,7 +443,7 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
           if (status.state === 'SETTLED') await vault.reconcile(entry.noteId as never).catch(() => undefined);
         }
       }
-      save(ACTIVITY_KEY, all);
+      save(K.activity, all);
       return all;
     },
     ring,
@@ -368,17 +454,24 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
       name: xrplDeployment.network.displayName,
       wss: xrplDeployment.network.wss,
     },
-    sites: () => Object.values(load<Record<string, Site>>(SITES_KEY, {})),
-    site: (origin) => load<Record<string, Site>>(SITES_KEY, {})[origin],
+    sites: () => Object.values(load<Record<string, Site>>(K.sites, {})),
+    site: (origin) => load<Record<string, Site>>(K.sites, {})[origin],
 
     async openSite(origin, xrp, holdTokens, onProgress) {
       const unfinished = wallet.site(origin);
       if (unfinished !== undefined && unfinished.index >= 0) throw new Error(`${origin} already has an account`);
       // Keys first: whatever lands on this address must find its keys here. A
       // site whose funding or setup was interrupted picks up where it stopped.
-      const site = unfinished ?? newSite(origin);
+      // A phrase account's app account is drawn from the phrase: the same app finds the same address anywhere.
+      const site = unfinished ?? (account === null ? newSite(origin) : newSite(origin, stream(account.key, `site/${origin}`)));
       saveSite(site);
       const exists = await ledger.request('account_info', { account: site.address, ledger_index: 'validated' }).then(() => true, () => false);
+      // Already made and set up from this phrase elsewhere: find its current key, and that is all.
+      if (exists && await syncIndex(ledger, site)) {
+        onProgress?.(`${site.address} is this wallet's already: its key found on the ledger`);
+        saveSite(site);
+        return site;
+      }
       if (!exists) {
         const plan = await wallet.plan('XRP', xrp);
         if (plan === undefined) throw new Error(`your XRP notes cannot make ${xrp} exactly`);
@@ -453,9 +546,9 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
         saveSite(site);
         throw error;
       }
-      const all = load<Record<string, Site>>(SITES_KEY, {});
+      const all = load<Record<string, Site>>(K.sites, {});
       delete all[origin];
-      save(SITES_KEY, all);
+      save(K.sites, all);
       return hash;
     },
 
@@ -468,8 +561,35 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
       }
     },
 
+    async recover(onProgress) {
+      if (account === null) return 0;
+      const have = new Set((await vault.list()).map((n) => n.commitment));
+      let kept = 0;
+      const counters = load<Record<string, number>>(K.counters, {});
+      for (const { p, scope } of scopes()) {
+        onProgress?.(`Looking for your ${p.symbol} ${scope.denomination / UNIT} notes on the ledger…`);
+        const from = counters[counterOf(scope)] ?? 0;
+        const found = await scan(account, scope, from);
+        for (const i of found) {
+          const commitment = deriveCommitment(createNoteSecret(drawFor(account, scope, i)), scope);
+          if (!have.has(commitment)) { await keepNote(scope, i); kept++; }
+        }
+        // New notes start past everything found, and past what this browser already drew.
+        counters[counterOf(scope)] = Math.max(from, (found.at(-1) ?? -1) + 1);
+        save(K.counters, counters);
+      }
+      onProgress?.('Checking which of them are still yours to spend…');
+      await refresh(true);
+      return kept;
+    },
+    async probe(other) {
+      // Whether an account was ever used: its first notes of a size are among its first numbers.
+      for (const { scope } of scopes()) if ((await scan(other, scope, 0, PROBE_GAP)).length > 0) return 1;
+      return 0;
+    },
+
     async exportBackup(passphrase) {
-      const contents = JSON.stringify({ version: 1, network: xrplDeployment.network.name, notes: localStorage.getItem(NOTES_KEY) ?? '{}', tags: wallet.tags(), sites: load<Record<string, Site>>(SITES_KEY, {}) });
+      const contents = JSON.stringify({ version: 1, network: xrplDeployment.network.name, notes: localStorage.getItem(K.notes) ?? '{}', tags: wallet.tags(), sites: load<Record<string, Site>>(K.sites, {}) });
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await keyFrom(passphrase, salt), new TextEncoder().encode(contents)));
@@ -488,14 +608,14 @@ export async function startXrplWallet(config?: XrplStackConfig): Promise<XrplWal
       }
       if (inner.network !== xrplDeployment.network.name) throw new Error(`this backup is for ${inner.network}`);
       // Notes this browser lacks are added; the ones it has keep their state.
-      const here = JSON.parse(localStorage.getItem(NOTES_KEY) ?? '{}') as Record<string, unknown>;
+      const here = JSON.parse(localStorage.getItem(K.notes) ?? '{}') as Record<string, unknown>;
       let added = 0;
       for (const [id, note] of Object.entries(JSON.parse(inner.notes) as Record<string, unknown>)) if (!(id in here)) { here[id] = note; added++; }
-      localStorage.setItem(NOTES_KEY, JSON.stringify(here));
+      localStorage.setItem(K.notes, JSON.stringify(here));
       const tags = wallet.tags();
-      save(TAGS_KEY, [...tags, ...inner.tags.filter((t) => !tags.some((x) => x.pool === t.pool && x.tag === t.tag))]);
+      save(K.tags, [...tags, ...inner.tags.filter((t) => !tags.some((x) => x.pool === t.pool && x.tag === t.tag))]);
       // Sites this browser lacks; a site it has keeps its own (newer) key position.
-      save(SITES_KEY, { ...(inner.sites ?? {}), ...load<Record<string, Site>>(SITES_KEY, {}) });
+      save(K.sites, { ...(inner.sites ?? {}), ...load<Record<string, Site>>(K.sites, {}) });
       return added;
     },
   };

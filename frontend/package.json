@@ -12,7 +12,7 @@
     "test": "node --test 'src/**/*.test.ts'",
     "preview": "vite preview",
     "ext": "npm run build && node ../extension/build.mjs",
-    "ext:xrpl": "rm -rf ../extension-xrpl/dist && rolldown ../extension-xrpl/inject.ts -o ../extension-xrpl/dist/inject.js -f iife -p browser && cp ../extension-xrpl/manifest.json ../extension-xrpl/dist/ && cp -R ../extension/icons ../extension-xrpl/dist/icons",
+    "ext:xrpl": "rm -rf dist-ext && VITE_NETWORK=testnet VITE_XRPL_STACK_URL=https://opaque-xrpl-testnet-production.up.railway.app/xrpl-stack.json vite build --outDir dist-ext && node ../extension-xrpl/build.mjs",
     "api": "node --watch ../backend/server.js"
   },
   "comment": [
@@ -41,8 +41,10 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
+    "@noble/hashes": "1.7.0",
     "@opaque/protocol-types": "file:../packages/protocol-types",
     "@opaque/zk": "file:../backend/zk",
+    "@scure/bip39": "1.6.0",
     "@walletconnect/sign-client": "2.25.0",
     "@walletconnect/types": "2.25.0",
     "@walletconnect/utils": "2.25.0",
