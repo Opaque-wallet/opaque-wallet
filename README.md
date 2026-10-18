@@ -235,6 +235,6 @@ For all implementation and deployment instructions, start at [docs/README.md](do
 
 <div align="center">
 
-Built for Arc Microgrants 2026 · [Architecture docs](docs/README.md) · [Partner docs](partner-docs/README.md) · [MIT License](LICENSE)
+Built for Arc Microgrants 2026 · [Architecture docs](docs/README.md) · [Partner docs](partner-docs/README.md) · [Proprietary: all rights reserved](LICENSE)
 
 </div>

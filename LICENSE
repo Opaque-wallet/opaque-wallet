@@ -1,21 +1,43 @@
-MIT License
+Opaque: Proprietary License
 
-Copyright (c) 2026 Opaque-wallet
+Copyright (c) 2026 Swarnim Raj. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This repository and everything in it, including its source code, smart
+contracts, proofs and circuits, documentation, designs, graphics and text,
+and any compiled, packaged or deployed form of them (together, the
+"Software"), is the proprietary property of Swarnim Raj (the "Owner").
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+No license is granted. Without the Owner's prior written permission, no one
+may:
+
+  1. copy, reproduce or store the Software, in whole or in part;
+  2. modify, translate or adapt it, or create works derived from it;
+  3. distribute, publish, sublicense, sell, rent, lend or otherwise make it
+     available to anyone;
+  4. deploy, host or run it, or offer it, or anything built from it, as a
+     product or service;
+  5. reverse engineer, decompile or disassemble any compiled, packaged or
+     deployed form of it, except where the law permits this despite this
+     term;
+  6. use it, or any part of it, to build or train a competing product,
+     service or model; or
+  7. remove or change this notice or any copyright notice in the Software.
+
+Having access to the Software, or being able to see it, grants no right to
+do any of the above.
+
+Any permission from the Owner is valid only if it is in writing and signed by
+the Owner, and only for what it names. Any use beyond it infringes the
+Owner's rights.
+
+Third-party components keep their own licenses. Libraries, fonts and other
+materials by others that the Software includes or depends on (among them the
+packages installed by npm, contracts/lib/forge-std, and the Poppins and
+Quicksand fonts under the SIL Open Font License 1.1) are licensed by their
+authors on their own terms, which this notice does not change.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+OWNER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT
+OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.

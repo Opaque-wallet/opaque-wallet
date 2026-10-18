@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.26;
 
 /// @title RelayDirectory (§8.2) — relay liveness and aggregate health, on chain
