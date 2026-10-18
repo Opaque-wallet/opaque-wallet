@@ -1,10 +1,12 @@
 # Extension: The Wallet in the Side Panel
 
-> **Chrome Manifest V3, version 0.5.0. Chrome, Brave and Edge. Arc mainnet and testnet.**
+> **Chrome Manifest V3, version 0.6.0. Chrome, Brave and Edge. Arc mainnet, Arc testnet and XRPL testnet.**
 
-The Opaque wallet in the browser's side panel. It is not a second codebase: the panel shows `frontend/app.html`, the same page served at opaque.credit, from the same Vite build. It opens on Arc mainnet; the header's network picker switches to the testnet page (`testnet/app.html`, as at opaque.credit/testnet). Each network keeps its own account and notes, and wallets made by 0.4.x (always testnet) appear under Arc Testnet. The side panel stays open while a deposit or payment runs, where a popup would close on the first click outside it.
+**One Opaque extension for every chain.** The side panel shows the same wallet pages served at opaque.credit, from the same Vite build: `app.html` (Arc mainnet), `testnet/app.html` (Arc testnet) and `testnet/xrpl.html` (XRPL testnet). The header's network picker moves between them, and the panel reopens on the network used last. Each network keeps its own keys and notes. A new chain is a new page in `PAGES` (build.mjs) and an entry in the picker (`frontend/src/lib/network-picker.ts`), never a second extension. The side panel stays open while a deposit or payment runs, where a popup would close on the first click outside it.
 
-It needs no other wallet. You fund your Opaque account by sending USDC to its address from anywhere (a wallet, an exchange, the faucet), and the first deposit deploys the account and deposits in one operation its post-quantum key signs. After that, deposits, payments and withdrawals need no popup at all.
+On Arc it needs no other wallet: you fund your Opaque account by sending USDC to its address from anywhere, and the first deposit deploys the account and deposits in one operation its post-quantum key signs. On XRPL it holds notes from a 12-word recovery phrase, and XRPL sites reach it as described under [XRPL dapps](#xrpl-dapps).
+
+**From 0.5.x (Arc only):** unzip 0.6.0 into the same folder and reload; the Arc wallets stay. **From the separate "Opaque for XRPL" extension (0.4.x):** that one is retired. It loaded from another folder, so its wallet is not in this one: import its recovery phrase here, then remove it.
 
 ## Install from the Zip
 
@@ -39,8 +41,10 @@ That builds the page against the hosted backend (`VITE_STACK_URL`, by default th
 
 ```
 extension/
-├── manifest.json       # Manifest V3; the sidePanel permission only
+├── manifest.json       # Manifest V3; sidePanel, and the two content scripts below
 ├── background.js       # Opens the side panel on the toolbar click, or a tab where there is none
+├── bridge.js           # Content script: tells inject.js the approval window's address
+├── inject.ts           # Content script (world MAIN): answers XRPL sites as GemWallet and Crossmark
 ├── build.mjs           # Assembles dist/ from frontend/dist, with the checks below
 ├── make-icons.mjs      # Draws the icons
 ├── icons/              # 16, 32, 48 and 128 px
@@ -50,14 +54,35 @@ extension/
 ## What the Build Checks
 
 - **The Manifest V3 CSP.** Inline `<script>` and inline handlers such as `onclick=` are banned, and the symptom of breaking the rule is a silently blank panel. `build.mjs` scans the built HTML and refuses to assemble `dist/` if it finds either.
-- **Only what the page loads.** It copies `app.html`, then follows names from the HTML into the JS and CSS: the proof worker, viem's lazy chunks, the fonts. The landing page's photography stays out, and the extension is about 290 KB zipped.
-- **A backend.** A build without `VITE_STACK_URL` would look for `stack.json` inside the extension and never start, so the build refuses it.
+- **Only what the pages load.** It copies each wallet page, then follows names from the HTML into the JS and CSS: the proof worker, viem's lazy chunks, the fonts. Nothing else from the site's build goes in.
+- **A backend.** A page built without its stack URL would look for `stack.json` or `xrpl-stack.json` inside the extension and never start, so the build refuses it. `npm run ext` builds the same pages as the site (`build:site`), which name them.
 - **No remote fonts.** A wallet that fetched fonts from a CDN on every open would tell that CDN each time someone reached for a private payment. The build strips the import and then fails if any reference survives.
-- **Two rewrites.** It removes Vite's `crossorigin`, which turns same-origin loads into CORS requests on a `chrome-extension://` origin, and points the wordmark's link at opaque.credit.
+- **Three rewrites.** It removes Vite's `crossorigin`, which turns same-origin loads into CORS requests on a `chrome-extension://` origin, points the links home at opaque.credit, and drops the home-screen app manifest.
 
 ## Permissions
 
-`sidePanel` only. No host permissions and no content scripts: the wallet injects no provider into pages and reads no site.
+`sidePanel`, and two content scripts on https pages (and localhost) for XRPL sites. They read nothing from the page and hold no key: they answer a site's wallet requests by opening Opaque's own approval window, and they store a connected site's address in that site's storage so a reload reconnects without a popup. The Arc wallet injects no provider.
+
+## XRPL dapps
+
+Sites that support **GemWallet** or **Crossmark** find Opaque without changing a line. In each page, [inject.ts](inject.ts) (`world: "MAIN"`) sets `window.gemWallet` and `window.xrpl.isCrossmark`, answers both wallets' page messages, and passes each request to Opaque's adapter ([frontend/src/lib/opaque-adapter.ts](../frontend/src/lib/opaque-adapter.ts)). The adapter opens the extension's approval window, `testnet/xrpl-connect.html`, whose address [bridge.js](bridge.js) reads from the browser (a page script can't). The window takes the requesting site from `event.origin`, which the browser sets, so a page can't pose as another. Each site gets an account of its own, funded privately from your notes.
+
+| GemWallet (`@gemwallet/api` 3) | Crossmark (`@crossmarkio/sdk`) | Opaque |
+|---|---|---|
+| `getAddress`, `getPublicKey` | `signIn` (a `SignIn` sign) | connect: the site's own account |
+| `getNetwork` | `network` | XRPL Testnet, no popup |
+| `submitTransaction`, `sendPayment` | `signAndSubmit` | Sign and submit |
+| `signTransaction` | `sign` | Sign (the site submits it) |
+| `signMessage` | none | Sign a message |
+
+A site that has connected once gets its address back without a popup after a reload. Signatures always ask. Limits:
+
+- **Testnet only** on XRPL.
+- **It answers as both wallets.** Next to a real GemWallet or Crossmark, both would answer the same request. Use one or the other.
+- **No public key at connect.** A site account's stable key is its original one, which Opaque shows only once a message is signed.
+- GemWallet's other helpers (`setTrustline`, `createOffer`, NFT helpers) are refused with a pointer to `submitTransaction`, which takes any transaction.
+
+Tested by `cd backend && npm run xrpl:e2e:extension`: Playwright's Chromium with the extension loaded, its XRPL wallet funded from the faucet, a dapp using the stock GemWallet and Crossmark adapters, and both Arc pages booting in the same extension.
 
 ## Publish on the Chrome Web Store
 

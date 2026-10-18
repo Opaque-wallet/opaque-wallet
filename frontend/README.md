@@ -1,14 +1,15 @@
-# Frontend: Landing Page and Wallet
+# Frontend: Home Page and Wallets
 
 > **Vite and vanilla TypeScript. Deployed on Vercel at [opaque.credit](https://www.opaque.credit).**
 
-Two pages from one build. The landing page explains the protocol. The wallet is the product: it holds a post-quantum account key and private notes in this browser, builds ring proofs in a Web Worker, seals payments to the Chainlink CRE enclave and talks to Arc only through the relay mesh. The same `app.html` ships as the Chrome extension's side panel.
+The home page (`site/`, Opaque on XRPL) and the wallets. The Arc wallet is the product on Arc: it holds a post-quantum account key and private notes in this browser, builds ring proofs in a Web Worker, seals payments to the Chainlink CRE enclave and talks to Arc only through the relay mesh. The same `app.html` ships as the Chrome extension's side panel.
 
 ## Pages
 
 | File | URL | Purpose |
 |---|---|---|
-| `index.html` | [opaque.credit](https://www.opaque.credit) | Landing page: the problem, how it works, the threat model, the extension download |
+| `site/index.html` | [opaque.credit](https://www.opaque.credit) | The home page: Opaque on XRPL (plain JS, `npm run build:site`) |
+| `xrpl.html` | [opaque.credit/testnet/xrpl.html](https://www.opaque.credit/testnet/xrpl.html) | The XRPL wallet ([docs/xrpl.md](../docs/xrpl.md)) |
 | `app.html` | [opaque.credit/app.html](https://www.opaque.credit/app.html) | The wallet: deposit, send, privacy view, activity, backup |
 | `public/privacy.html` | [opaque.credit/privacy.html](https://www.opaque.credit/privacy.html) | The extension's privacy policy |
 | `public/opaque-extension.zip` | [opaque.credit/opaque-extension.zip](https://www.opaque.credit/opaque-extension.zip) | The extension for Developer-mode install, written by `extension/build.mjs` |
@@ -32,12 +33,10 @@ Nothing in the wallet is simulated. [`src/lib/runtime.ts`](src/lib/runtime.ts) b
 
 ```
 frontend/
-├── index.html                  # Landing page
 ├── app.html                    # Wallet, and the extension's side panel
-├── landing.css, app.css        # Page styles
+├── app.css                     # Page styles
 ├── styles.css, fonts.css       # Design tokens, and fonts served from this origin
 ├── src/
-│   ├── landing.ts              # Scroll-driven intro and reveals (GSAP)
 │   ├── app.ts                  # The wallet UI, every handler via addEventListener
 │   └── lib/
 │       ├── runtime.ts          #   Composition root: mesh, sealer, pools, account
@@ -49,8 +48,8 @@ frontend/
 │       ├── payment-deadline.ts #   "Wait for stronger privacy" deadlines
 │       └── protocol/           #   Amount splitting into notes
 ├── public/                     # privacy.html, the extension zip, stack.json in dev
-├── media/, fonts/              # Landing page imagery and type
-├── vite.config.ts              # Two entries: index.html and app.html
+├── media/, fonts/              # The logo and type
+├── vite.config.ts              # Entries: app.html, xrpl.html, xrpl-connect.html
 └── vercel.json                 # Installs the sibling packages the wallet imports
 ```
 

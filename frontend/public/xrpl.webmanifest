@@ -2,7 +2,7 @@
   "name": "Opaque on XRPL",
   "short_name": "Opaque",
   "description": "Private XRPL accounts, one per app.",
-  "start_url": "xrpl.html",
+  "start_url": "xrpl",
   "scope": "./",
   "display": "standalone",
   "background_color": "#070608",

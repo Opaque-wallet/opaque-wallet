@@ -25,35 +25,38 @@
 <header class="nav" id="nav">
   <div class="nav__bar">
     <a class="brand" href="#top" aria-label="opaque, back to top"><img src="./logo.png" alt="opaque" width="942" height="200"></a>
-    <div class="switch" role="group" aria-label="Network">
-      <span class="switch__on" aria-current="page">XRPL</span>
-      <a href="https://www.opaque.credit">Arc</a>
-    </div>
     <nav class="menu" aria-label="Main">
       <button class="menu__trigger" type="button" aria-expanded="false" aria-controls="menu-product">Product <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button class="menu__trigger" type="button" aria-expanded="false" aria-controls="menu-resources">Resources <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </nav>
-    <a class="btn btn--primary btn--small nav__cta" href="/testnet/xrpl.html">Open wallet</a>
+    <button class="bell" type="button" popovertarget="updates" aria-label="Updates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 1.8H4.4z"/><path d="M10 21h4"/></svg><span class="bell__dot"></span></button>
+    <div class="updates" id="updates" popover>
+      <p class="updates__label">Updates</p>
+      <a class="updates__item" href="/testnet/xrpl">
+        <span class="updates__mark" data-dots="#070608"></span>
+        <span><time datetime="2026-10-18">18 Oct 2026</time><b>Opaque is now on XRPL testnet</b><small>You can now enjoy Opaque on XRPL testnet: hold and send XRP, RLUSD and USDC privately, right in your browser.</small><em>Open the wallet →</em></span>
+      </a>
+    </div>
+    <a class="btn btn--primary btn--small nav__cta" href="/testnet/xrpl">Open wallet</a>
     <button class="menu__toggle" type="button" aria-expanded="false" aria-controls="menu-sheet" aria-label="Menu"><span></span><span></span></button>
     <div class="menu__sheet" id="menu-sheet">
       <div class="menu__panel" id="menu-product" role="region" aria-label="Product">
         <p class="menu__heading">Product</p>
         <div class="menu__cols">
         <div class="menu__col"><p class="menu__label">Use Opaque</p>
-          <a class="menu__link" href="/testnet/xrpl.html"><strong>Private wallet</strong><span>Deposit, hold and send XRP, RLUSD and USDC</span></a>
+          <a class="menu__link" href="/testnet/xrpl"><strong>Private wallet</strong><span>Deposit, hold and send XRP, RLUSD and USDC</span></a>
           <a class="menu__link" href="#story"><strong>How a payment hides</strong><span>One of eight notes, three relays, a fresh address</span></a>
           <a class="menu__link" href="#connect"><strong>An account per app</strong><span>Apps see an address that leads nowhere</span></a>
           <a class="menu__link" href="#keys"><strong>Single-use keys</strong><span>Every key signs once, then retires</span></a>
         </div>
         <div class="menu__col"><p class="menu__label">Get Opaque</p>
-          <a class="menu__link" href="/testnet/xrpl.html"><strong>Web wallet</strong><span>Runs in your browser, nothing to install</span></a>
-          <a class="menu__link" href="/testnet/xrpl.html"><strong>On your phone</strong><span>Add it to your home screen</span></a>
-          <a class="menu__link" href="/testnet/xrpl-connect.html"><strong>Connect to an app</strong><span>Scan a WalletConnect QR code</span></a>
-          <a class="menu__link" href="/testnet/opaque-xrpl-extension.zip" download><strong>Browser extension</strong><span>A wallet in Chrome's side panel</span></a>
+          <a class="menu__link" href="/testnet/xrpl"><strong>Web wallet</strong><span>Runs in your browser, nothing to install</span></a>
+          <a class="menu__link" href="/testnet/xrpl"><strong>On your phone</strong><span>Add it to your home screen</span></a>
+          <a class="menu__link" href="/testnet/xrpl-connect"><strong>Connect to an app</strong><span>Scan a WalletConnect QR code</span></a>
+          <a class="menu__link" href="/opaque-extension.zip" download><strong>Browser extension</strong><span>A wallet in Chrome's side panel</span></a>
         </div>
         <div class="menu__popular"><p class="menu__label">Popular</p>
-          <a class="menu__card" href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer"><strong>Try the demo app ↗</strong><span>Trade, mint an NFT and sign in, privately</span></a>
-          <a class="menu__card menu__card--dark" href="/testnet/xrpl.html"><strong>Get test XRP →</strong><span>95 XRP from the faucet, straight into notes</span></a>
+          <a class="menu__card menu__card--dark" href="/testnet/xrpl"><strong>Get test XRP →</strong><span>95 XRP from the faucet, straight into notes</span></a>
         </div>
         </div>
       </div>
@@ -63,7 +66,7 @@
         <div class="menu__col"><p class="menu__label">Learn</p>
           <a class="menu__link" href="#story"><strong>How it works</strong><span>Follow one payment from deposit to app</span></a>
           <a class="menu__link" href="#keys"><strong>Quantum timing</strong><span>Why an old key is worth seconds, not years</span></a>
-          <a class="menu__link" href="/testnet/privacy.html"><strong>Privacy</strong><span>What Opaque keeps, and what it never sees</span></a>
+          <a class="menu__link" href="/testnet/privacy"><strong>Privacy</strong><span>What Opaque keeps, and what it never sees</span></a>
         </div>
         <div class="menu__col"><p class="menu__label">XRP Ledger</p>
           <a class="menu__link" href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer"><strong>Testnet explorer ↗</strong><span>Look up any pool or app account</span></a>
@@ -71,7 +74,7 @@
           <a class="menu__link" href="https://xrpl.org" target="_blank" rel="noopener noreferrer"><strong>XRPL.org ↗</strong><span>The ledger Opaque runs on</span></a>
         </div>
         <div class="menu__popular"><p class="menu__label">Also from Opaque</p>
-          <a class="menu__card" href="https://www.opaque.credit"><strong>Opaque on Arc ↗</strong><span>Private USDC payments on Arc mainnet</span></a>
+          <a class="menu__card" href="/app"><strong>Opaque on Arc</strong><span>Private USDC payments on Arc mainnet</span></a>
         </div>
         </div>
       </div>
@@ -84,7 +87,6 @@
     <canvas class="hero__ledger" aria-hidden="true"></canvas>
     <canvas class="hero__ring" aria-hidden="true"></canvas>
     <div class="hero__copy">
-      <p class="pill rise" style="--d: 0"><span class="pill__dot"></span>Live on XRPL testnet</p>
       <h1 class="display hero__title" id="hero-title">
         <span class="line"><span class="word rise" style="--d: 1">Your</span></span>
         <span class="line"><span class="word rise" style="--d: 2">money,</span></span>
@@ -92,8 +94,7 @@
       </h1>
       <p class="lede rise" style="--d: 5">Private payments on the XRP Ledger. Your money moves through a shared pool, so the ledger never links what you pay to who you are.</p>
       <div class="actions rise" style="--d: 6">
-        <a class="btn btn--primary" href="/testnet/xrpl.html">Open the wallet</a>
-        <a class="btn btn--ghost" href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Try the demo app ↗</a>
+        <a class="btn btn--primary" href="/testnet/xrpl">Open the wallet</a>
       </div>
     </div>
     <a class="cue rise" style="--d: 8" href="#story">Scroll to follow one payment</a>
@@ -145,7 +146,7 @@
           <div class="screen screen--home">
             <div class="screen__status"><b>9:41</b><span class="screen__bars"><i></i><i></i><i></i><i></i></span></div>
             <div class="screen__body">
-              <div class="screen__account"><span class="screen__avatar"></span><span><b>Opaque on XRPL</b><small>Private · testnet</small></span><em>⋮</em></div>
+              <div class="screen__account"><span class="screen__mark" data-dots="#070608"></span><span><b>Account 1 ⌄</b><small>Notes in this browser</small></span><em>☰</em></div>
               <p class="screen__eyebrow">Private balance</p>
               <p class="screen__balance">284.00 <small>XRP</small></p>
               <p class="screen__hint">Hidden on the ledger · 22 notes</p>
@@ -226,7 +227,7 @@
         <div class="card__icon" data-ring="extension"></div>
         <h3>Browser extension</h3>
         <p>A wallet in Chrome's side panel. Apps that support GemWallet or Crossmark open Opaque instead, with no change on their side.</p>
-        <p><a class="card__link" href="/testnet/opaque-xrpl-extension.zip" download>Download for Chrome ↓</a> Unzip it, then Load unpacked in chrome://extensions.</p>
+        <p><a class="card__link" href="/opaque-extension.zip" download>Download for Chrome ↓</a> Unzip it, then Load unpacked in chrome://extensions.</p>
       </article>
     </div>
   </section>
@@ -252,7 +253,7 @@
     <div class="proof__grid">
       <article class="proof__card proof__card--pattern" data-reveal style="--d: 0">
         <h3>Runs in your browser. Nothing to install.</h3>
-        <a class="round" href="/testnet/xrpl.html" aria-label="Open the web wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <a class="round" href="/testnet/xrpl" aria-label="Open the web wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
       </article>
       <article class="proof__card proof__card--orange" data-reveal style="--d: 1">
         <h3>On the web, on your phone, or as an extension.</h3>
@@ -306,8 +307,7 @@
       <div class="final__copy" data-reveal>
         <h2 class="display final__title" id="final-title">Go<br> private.</h2>
         <div class="actions">
-          <a class="btn btn--primary" href="/testnet/xrpl.html">Open the wallet</a>
-          <a class="btn btn--ghost" href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Try the demo app ↗</a>
+          <a class="btn btn--primary" href="/testnet/xrpl">Open the wallet</a>
         </div>
         <p class="fine">Testnet today. Test XRP has no value.</p>
       </div>
@@ -318,8 +318,8 @@
     <article class="duo__card duo__card--orange" data-reveal>
       <span class="duo__art" data-dots="#070608"></span>
       <h2 class="display">Try it on testnet.</h2>
-      <p>Take 95 test XRP from the faucet, send some privately, then connect the demo app. Test XRP has no value, so nothing is at stake.</p>
-      <a class="btn btn--dark" href="/testnet/xrpl.html">Get test XRP</a>
+      <p>Take 95 test XRP from the faucet and send some privately. Test XRP has no value, so nothing is at stake.</p>
+      <a class="btn btn--dark" href="/testnet/xrpl">Get test XRP</a>
     </article>
     <article class="duo__card duo__card--dark" data-reveal style="--d: 1">
       <span class="duo__art" data-dots="#ff7a18"></span>
@@ -335,16 +335,16 @@
     <a class="footer__brand" href="#top" aria-label="opaque, back to top"><img src="./logo.png" alt="opaque" width="942" height="200"></a>
     <nav class="footer__cols" aria-label="Footer">
       <div><p class="footer__h">Wallet</p>
-        <a href="/testnet/xrpl.html">Open the wallet</a>
+        <a href="/testnet/xrpl">Open the wallet</a>
         <a href="#story">How a payment hides</a>
         <a href="#connect">An account per app</a>
         <a href="#keys">Single-use keys</a>
       </div>
       <div><p class="footer__h">Get Opaque</p>
-        <a href="/testnet/xrpl.html">Web wallet</a>
-        <a href="/testnet/xrpl.html">On your phone</a>
-        <a href="/testnet/xrpl-connect.html">WalletConnect <span class="badge">New</span></a>
-        <a href="/testnet/opaque-xrpl-extension.zip" download>Browser extension <span class="badge">New</span></a>
+        <a href="/testnet/xrpl">Web wallet</a>
+        <a href="/testnet/xrpl">On your phone</a>
+        <a href="/testnet/xrpl-connect">WalletConnect <span class="badge">New</span></a>
+        <a href="/opaque-extension.zip" download>Browser extension <span class="badge">New</span></a>
       </div>
       <div><p class="footer__h">XRP Ledger</p>
         <a href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer">Testnet explorer ↗</a>
@@ -352,9 +352,8 @@
         <a href="https://xrpl.org" target="_blank" rel="noopener noreferrer">XRPL.org ↗</a>
       </div>
       <div><p class="footer__h">Opaque</p>
-        <a href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Demo app ↗</a>
-        <a href="https://www.opaque.credit">Opaque on Arc ↗</a>
-        <a href="/testnet/privacy.html">Privacy</a>
+        <a href="/app">Opaque on Arc</a>
+        <a href="/testnet/privacy">Privacy</a>
       </div>
     </nav>
   </div>

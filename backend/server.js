@@ -48,7 +48,7 @@ function send(res, status, body, type = 'application/json') {
 }
 
 async function serveStatic(res, urlPath) {
-  const rel = urlPath === '/' ? 'index.html' : decodeURIComponent(urlPath).replace(/^\/+/, '');
+  const rel = urlPath === '/' ? 'app.html' : decodeURIComponent(urlPath).replace(/^\/+/, '');
   const file = resolve(FRONTEND, rel);
   // Trust boundary: never serve outside frontend/, whatever the URL claims.
   if (file !== FRONTEND && !file.startsWith(FRONTEND + sep)) return send(res, 403, { error: 'forbidden' });

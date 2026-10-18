@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { accountKeys, isPhrase, newPhrase, normalizePhrase, stream } from './xrpl-keys.ts';
+import { accountFromKeyText, accountKeys, accountKeyText, isAccountKeyText, isPhrase, newPhrase, normalizePhrase, stream } from './xrpl-keys.ts';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
@@ -31,4 +31,18 @@ test('each account and label draws its own bytes, the same however they are read
   assert.equal(hex(new Uint8Array([...parts(16), ...parts(64)])), hex(whole));
   assert.notEqual(hex(stream(key, 'site/https://b.example')(32)), hex(whole.slice(0, 32)));
   assert.notEqual(hex(stream(accountKeys(PHRASE, 1).key, 'site/https://a.example')(32)), hex(whole.slice(0, 32)));
+});
+
+test('an account key carries one account, and a typo in it is caught', () => {
+  const account = accountKeys(PHRASE, 2);
+  const text = accountKeyText(account);
+  assert.match(text, /^opq1[0-9a-f]{72}$/);
+  assert.ok(isAccountKeyText(` ${text.toUpperCase()} `));
+  const back = accountFromKeyText(text.toUpperCase(), 0);
+  assert.equal(back.id, account.id);
+  assert.equal(hex(back.key), hex(account.key));
+  assert.equal(back.imported, 0);
+  const typo = `${text.slice(0, 20)}${text[20] === 'a' ? 'b' : 'a'}${text.slice(21)}`;
+  assert.throws(() => accountFromKeyText(typo, 0), /typo/);
+  assert.throws(() => accountFromKeyText(hex(account.key), 0), /opq1/);
 });

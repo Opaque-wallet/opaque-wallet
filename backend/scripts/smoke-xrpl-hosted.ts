@@ -17,7 +17,7 @@ import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index
 import { openWallet } from './xrpl-wallet-page.ts';
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 
-const BASE = (process.argv[2] ?? 'https://opaque-xrpl.vercel.app').replace(/\/+$/, '');
+const BASE = (process.argv[2] ?? 'https://www.opaque.credit').replace(/\/+$/, '');
 const STACK = (process.argv[3] ?? 'https://opaque-xrpl-testnet-production.up.railway.app').replace(/\/+$/, '');
 const log = (s: string) => process.stdout.write(`${s}\n`);
 let failures = 0;

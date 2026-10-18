@@ -12,14 +12,21 @@ export type WalletPage = (typeof networks)[number]['id'] | 'xrpl';
 const dirOf = (sitePath: string): string =>
   sitePath === deployment.network.sitePath ? '' : `${'../'.repeat(deployment.network.sitePath.split('/').filter(Boolean).length)}${sitePath}`;
 
-// Listed, not offered yet. The XRPL page still works when opened directly
-// (testnet/xrpl.html, and every xrpl:e2e script); the picker just doesn't lead there.
-const COMING = [{ id: 'xrpl', name: 'XRPL Testnet' }, { id: 'xrpl-mainnet', name: 'XRPL Mainnet' }];
+// Listed, not offered yet.
+const COMING = [{ id: 'xrpl-mainnet', name: 'XRPL Mainnet' }];
+// The XRPL wallet is built with testnet, so it sits beside testnet's app.html.
+const XRPL_HREF = `${dirOf(networks.find((n) => n.id === 'testnet')!.sitePath)}xrpl.html`;
+type SidePanel = { setOptions(options: { path: string }): Promise<void> };
 
 export function networkPicker(select: HTMLSelectElement, current: WalletPage): void {
-  const arc = networks.map((n) => ({ id: n.id as string, name: n.displayName, href: `${dirOf(n.sitePath)}app.html` }));
+  // In the extension, the side panel reopens on the network used last.
+  (globalThis as { chrome?: { sidePanel?: SidePanel } }).chrome?.sidePanel?.setOptions({ path: location.pathname.slice(1) }).catch(() => undefined);
+  const pages = [
+    ...networks.map((n) => ({ id: n.id as string, name: n.displayName, href: `${dirOf(n.sitePath)}app.html` })),
+    { id: 'xrpl', name: 'XRPL Testnet', href: XRPL_HREF },
+  ];
   select.replaceChildren(
-    ...arc.map((p) => new Option(p.name, p.id, false, p.id === current)),
+    ...pages.map((p) => new Option(p.name, p.id, false, p.id === current)),
     ...COMING.map((p) => {
       const here = p.id === current;
       const option = new Option(here ? p.name : `${p.name} (coming soon)`, p.id, false, here);
@@ -28,7 +35,7 @@ export function networkPicker(select: HTMLSelectElement, current: WalletPage): v
     }),
   );
   select.addEventListener('change', () => {
-    const page = arc.find((p) => p.id === select.value);
+    const page = pages.find((p) => p.id === select.value);
     if (page !== undefined && page.id !== current) location.href = page.href;
   });
 }

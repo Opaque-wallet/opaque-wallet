@@ -89,6 +89,13 @@
   <footer id="boot-error" role="alert" hidden></footer>
 </main>
 
+<dialog id="mainnet-warning" class="mainnet-warning" aria-labelledby="mainnet-warning-title">
+  <div class="dialog-head"><div><p class="eyebrow">Arc mainnet</p><h2 id="mainnet-warning-title">Please don't deposit here yet</h2></div></div>
+  <p>Opaque on Arc mainnet uses real USDC, and its contracts haven't been audited yet. Until they are, we don't recommend depositing. Testnet works the same way, with test funds that have no value.</p>
+  <div class="dialog-actions"><a class="primary" href="testnet/app.html">Try Arc testnet</a><a class="secondary" href="testnet/xrpl.html">Try XRPL testnet</a></div>
+  <form method="dialog"><button class="continue" id="mainnet-continue" type="submit">I understand, continue on mainnet</button></form>
+</dialog>
+
 <dialog id="send-progress-dialog">
   <div class="dialog-head"><div><p class="eyebrow">Private transfer</p><h2>Sending privately</h2></div></div>
   <p class="send-progress-copy">Your transfer is moving through the privacy flow. Keep this window open until submission completes.</p>

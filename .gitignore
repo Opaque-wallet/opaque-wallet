@@ -53,7 +53,5 @@ frontend/public/xrpl-stack.json
 # Vercel CLI link
 .vercel
 
-# hosted demo dapp and XRPL extension builds
+# hosted demo dapp build
 demo/xrpl-dapp/dist/
-extension-xrpl/dist/
-frontend/dist-ext/

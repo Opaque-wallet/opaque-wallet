@@ -861,6 +861,8 @@ async function init(): Promise<void> {
   // browser wallet. Each network is its own page (opaque.credit/ and
   // /testnet/, the same in the extension), with its own storage names.
   networkPicker(el<HTMLSelectElement>('network-switch'), NETWORK);
+  // Real USDC on unaudited contracts: every visit to mainnet starts with this warning.
+  if (NETWORK === 'mainnet') el<HTMLDialogElement>('mainnet-warning').showModal();
   document.querySelectorAll<HTMLElement>('[data-back]').forEach((node) => node.addEventListener('click', () => showView('home')));
   renderRingSvg();
   renderActivity();

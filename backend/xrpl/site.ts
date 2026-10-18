@@ -116,13 +116,13 @@ export function signTx(tx: Tx, key: KeyPair): { readonly blob: string; readonly 
 
 // ── the ledger's side ────────────────────────────────────────────────────
 
-async function sequenceOf(ledger: Ledger, account: string): Promise<number> {
+export async function sequenceOf(ledger: Ledger, account: string): Promise<number> {
   const info = await ledger.request<{ account_data: { Sequence: number } }>('account_info', { account, ledger_index: 'current' });
   return info.account_data.Sequence;
 }
 
 /** Drops per transaction, from the open ledger; a Batch pays 2 plus one per inner. */
-async function baseFee(ledger: Ledger): Promise<bigint> {
+export async function baseFee(ledger: Ledger): Promise<bigint> {
   const fee = await ledger.request<{ drops: { base_fee: string; open_ledger_fee: string } }>('fee');
   const base = BigInt(fee.drops.base_fee);
   const open = BigInt(fee.drops.open_ledger_fee);
@@ -130,7 +130,7 @@ async function baseFee(ledger: Ledger): Promise<bigint> {
   return open > base ? (open < base * 10n ? open : base * 10n) : base;
 }
 
-const lastLedger = async (ledger: Ledger, ledgers = LEDGERS_VALID): Promise<number> =>
+export const lastLedger = async (ledger: Ledger, ledgers = LEDGERS_VALID): Promise<number> =>
   (await ledger.request<{ ledger_current_index: number }>('ledger_current')).ledger_current_index + ledgers;
 
 /** Submits, then waits until the ledger decides. Returns the validated result, or throws. */

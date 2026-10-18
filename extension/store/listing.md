@@ -7,9 +7,10 @@ then fill in each tab of the item in the developer dashboard with the text below
 
 **Description**
 
-> Opaque is a wallet for private USDC payments on Arc, in your browser's side
-> panel. It runs on Arc mainnet (real USDC) and Arc testnet (no value); a
-> picker in the header switches between them, and each keeps its own account.
+> Opaque is one private wallet for every chain it runs on, in your browser's
+> side panel: Arc mainnet (real USDC), Arc testnet and XRPL testnet (no value).
+> A picker in the header switches between them, and each keeps its own account.
+> XRPL sites that support GemWallet or Crossmark can connect to it.
 >
 > Deposit USDC and it becomes notes of 1, 2, 5, 10, 20, 50 or 100 USDC. Each
 > note sits in a pool with others of its size. When you pay, the wallet proves
@@ -33,7 +34,6 @@ then fill in each tab of the item in the developer dashboard with the text below
 > payments are opened only inside a Chainlink CRE enclave. Use small amounts on
 > mainnet, or try it first on testnet.
 >
-> Open source: https://github.com/minrawsjar/Opaque
 
 **Category:** Privacy & Security (or Tools, if that is not offered)
 
@@ -56,20 +56,28 @@ then fill in each tab of the item in the developer dashboard with the text below
 
 **Homepage URL:** https://www.opaque.credit
 
-**Support URL:** https://github.com/minrawsjar/Opaque/issues
+**Support URL:** https://x.com/Opaquecredit
 
 ## Privacy practices
 
 **Single purpose**
 
-> A wallet for private USDC payments on Arc (mainnet and testnet), opened in
-> the browser's side panel.
+> A private payments wallet (Arc and XRPL), opened in the browser's side
+> panel, that websites can ask to connect and sign.
 
 **Permission justification: sidePanel**
 
 > Opens the wallet in the browser's side panel when the toolbar icon is
-> clicked. It is the extension's only permission. It has no host permissions
-> and no content scripts, and it does not read or change any website.
+> clicked.
+
+**Permission justification: host permissions (content scripts)**
+
+> XRPL websites look for a wallet by the page APIs GemWallet and Crossmark
+> define. Two content scripts answer those requests on https pages, so a site
+> can ask Opaque to connect or sign. They read no page content and hold no
+> key: each request opens Opaque's own approval window, where the user
+> approves or rejects it. The only thing they write is the connected address,
+> in that site's own storage, so a reload reconnects without asking again.
 
 **Remote code:** No, I am not using remote code.
 
@@ -113,6 +121,10 @@ Then certify all three:
 > 4. Open Send, enter any Arc address and 1 USDC, and press Review private
 >    transfer. It settles in under a minute. Activity links the settlement on
 >    testnet.arcscan.app.
+>
+> XRPL testnet, no funds needed: pick XRPL Testnet in the header, create a
+> wallet, and press "Get 95 test XRP". Then Send any amount to an XRPL testnet
+> address.
 
 ## Distribution
 

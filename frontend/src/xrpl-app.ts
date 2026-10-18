@@ -8,7 +8,8 @@ import { xrplDeployment } from '../../deployments/xrpl.ts';
 import { networkPicker } from './lib/network-picker.ts';
 import { paymentDeadline } from './lib/payment-deadline.ts';
 import { hasBrowserWallet, poolBySymbol, startXrplWallet, symbolOf, UNIT, type ReceiveTag, type Sent, type XrplWallet } from './lib/xrpl-runtime.ts';
-import { accountKeys, accountLabel, activeAccount, isPhrase, newPhrase, normalizePhrase, savePhrase, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
+import { accountKeys, accountKeyText, accountLabel, activeAccount, importAccountKey, importedAccounts, isAccountKeyText, isPhrase, newPhrase, normalizePhrase, savePhrase, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
+import type { SweepPlan } from '../../backend/xrpl/sweep.ts';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const found = document.getElementById(id);
@@ -351,35 +352,46 @@ function renderAccounts(): void {
     const open = account !== null && idOf(account) === idOf(key);
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = `account-row${key === 'browser' ? ' browser' : ''}`;
+    b.className = `account-row${key === 'browser' ? ' browser' : key.imported !== undefined ? ' imported' : ''}`;
     b.setAttribute('aria-current', String(open));
     b.innerHTML = `<span class="mark">${markOf(key === 'browser' ? -1 : key.index)}</span><span><b></b><small></small></span><span class="balance-cell"></span>`;
     b.querySelector('b')!.textContent = accountLabel(key);
-    b.querySelector('small')!.textContent = key === 'browser' ? 'This browser only, backed up by file' : open ? 'Open now' : 'From your recovery phrase';
+    b.querySelector('small')!.textContent = key === 'browser' ? 'This browser only, backed up by file' : open ? 'Open now' : key.imported !== undefined ? 'Brought in by its key' : 'From your recovery phrase';
     const balance = balances[idOf(key)];
     b.querySelector('.balance-cell')!.textContent = balance === undefined ? '' : `${units(balance)} XRP`;
     // Each account is a wallet of its own: opening one starts it afresh.
-    b.addEventListener('click', () => { if (!open) { saveWalletState({ active: key === 'browser' ? 'browser' : key.index }); location.reload(); } });
+    b.addEventListener('click', () => {
+      if (open) return;
+      saveWalletState({ active: key === 'browser' ? 'browser' : key.imported !== undefined ? `imported:${key.imported}` : key.index });
+      location.reload();
+    });
     return b;
   };
   const rows: HTMLElement[] = [];
   if (phrase !== null) for (let n = 0; n < count; n++) rows.push(row(accountKeys(phrase, n)));
+  const imported = importedAccounts();
+  if (imported.length > 0) rows.push(Object.assign(document.createElement('p'), { className: 'eyebrow list-label', textContent: 'Imported accounts' }), ...imported.map(row));
   if (hasBrowserWallet()) rows.push(row('browser'));
   el('account-list').replaceChildren(...rows);
   el('account-add').hidden = phrase === null;
   el('phrase-box').hidden = phrase === null;
   el('phrase-setup-box').hidden = phrase !== null;
   el('account-rescan').hidden = account === 'browser';
+  el('key-box').hidden = account === null || account === 'browser';
+  el('key-text').hidden = true;
+  el('key-copy').hidden = true;
+  el('key-show').textContent = 'Show account key';
 }
 
 /** The first time an imported phrase's account opens: its notes from the ledger, and (for Account 1) its other accounts. */
 async function recoverIfImported(keys: AccountKeys): Promise<void> {
   const state = walletState();
-  if (!state.imported || state.scanned[keys.id]) return;
+  // A phrase brought from elsewhere, or one account brought in by its key.
+  if (!(state.imported || keys.imported !== undefined) || state.scanned[keys.id]) return;
   const progress = (line: string) => setStatus('home-status', line);
   const kept = await wallet.recover(progress);
   let count = state.count;
-  if (keys.index === 0) {
+  if (keys.index === 0 && keys.imported === undefined) {
     for (let n = 1; n < 20; n++) {
       progress(`Looking for Account ${n + 1} of this phrase…`);
       if (await wallet.probe(accountKeys(storedPhrase()!, n)) === 0) break;
@@ -456,15 +468,23 @@ function setupOnboarding(): void {
     location.reload();
   });
   el('ob-restore-go').addEventListener('click', () => {
-    const phrase = el<HTMLTextAreaElement>('ob-phrase').value;
-    if (!isPhrase(phrase)) { setStatus('ob-restore-status', 'Those aren\'t the 12 words of a recovery phrase: check the spelling and the order.'); return; }
-    savePhrase(phrase, true, 0);
+    const text = el<HTMLTextAreaElement>('ob-phrase').value;
+    if (isAccountKeyText(text)) {
+      try { importAccountKey(text); } catch (error) { setStatus('ob-restore-status', `Not imported: ${(error as Error).message}.`); return; }
+      location.reload();
+      return;
+    }
+    if (!isPhrase(text)) { setStatus('ob-restore-status', 'That is neither the 12 words of a recovery phrase nor an account key (opq1…): check the spelling and the order.'); return; }
+    if (storedPhrase() !== null) { setStatus('ob-restore-status', 'This wallet has a recovery phrase already. To bring in one account of another wallet, use that account\'s key (opq1…).'); return; }
+    savePhrase(text, true, 0);
     location.reload();
   });
 }
 
 function setupAccounts(): void {
-  el('account-button').addEventListener('click', () => { renderAccounts(); el<HTMLDialogElement>('account-dialog').showModal(); });
+  const openAccounts = () => { renderAccounts(); el<HTMLDialogElement>('account-dialog').showModal(); };
+  el('account-button').addEventListener('click', openAccounts);
+  el('menu-button').addEventListener('click', openAccounts);
   el('account-add').addEventListener('click', () => {
     const { count } = walletState();
     saveWalletState({ count: count + 1, active: count });
@@ -490,9 +510,69 @@ function setupAccounts(): void {
       button.disabled = false;
     }
   })());
+  el('account-import').addEventListener('click', () => {
+    el<HTMLDialogElement>('account-dialog').close();
+    openOnboarding('ob-welcome', true);
+    obStep('ob-restore');
+  });
+  el('key-show').addEventListener('click', () => {
+    if (account === null || account === 'browser') return;
+    const showing = el('key-text').hidden;
+    el('key-text').textContent = showing ? accountKeyText(account) : '';
+    el('key-text').hidden = !showing;
+    el('key-copy').hidden = !showing;
+    el('key-show').textContent = showing ? 'Hide account key' : 'Show account key';
+  });
+  el('key-copy').addEventListener('click', () => void navigator.clipboard.writeText(el('key-text').textContent ?? ''));
   const setUp = () => { el<HTMLDialogElement>('account-dialog').close(); openOnboarding('ob-show', true); };
   el('phrase-setup').addEventListener('click', setUp);
   el('phrase-card-go').addEventListener('click', setUp);
+}
+
+// ── an ordinary XRPL wallet, swept in ─────────────────────────────────────
+let sweepPlanned: SweepPlan | undefined;
+function setupSweep(): void {
+  const dialog = el<HTMLDialogElement>('sweep-dialog');
+  const secret = el<HTMLInputElement>('sweep-secret');
+  // The secret leaves the page's fields whenever the sheet closes.
+  const reset = () => { secret.value = ''; sweepPlanned = undefined; el('sweep-plan').hidden = true; setStatus('sweep-status', ''); };
+  el('sweep-open').addEventListener('click', () => { reset(); dialog.showModal(); secret.focus(); });
+  dialog.addEventListener('close', reset);
+  secret.addEventListener('input', () => { sweepPlanned = undefined; el('sweep-plan').hidden = true; });
+  el('sweep-check').addEventListener('click', () => void (async () => {
+    setStatus('sweep-status', 'Reading the wallet through the relays…');
+    try {
+      const plan = await wallet.sweepPlan(secret.value);
+      const xrp = Number(plan.xrp) / UNIT;
+      el('sweep-address').textContent = plan.address;
+      el('sweep-moves').textContent = [...(xrp > 0 ? [`${units(xrp)} XRP`] : []), ...plan.tokens.map((t) => `${t.value} ${t.symbol}`)].join(' + ') || 'nothing';
+      el('sweep-stays').textContent = [plan.deletes ? 'nothing: the account is closed' : `${units(Number(plan.kept) / UNIT)} XRP as its reserve`, ...plan.left].join(' · ');
+      el('sweep-into').textContent = account === null ? 'this account' : accountLabel(account);
+      el('sweep-go').hidden = xrp <= 0 && plan.tokens.length === 0;
+      el('sweep-plan').hidden = false;
+      sweepPlanned = plan;
+      setStatus('sweep-status', '');
+    } catch (error) {
+      setStatus('sweep-status', (error as Error).message);
+    }
+  })());
+  el('sweep-go').addEventListener('click', () => void (async () => {
+    if (sweepPlanned === undefined) return;
+    const go = el<HTMLButtonElement>('sweep-go');
+    go.disabled = true;
+    try {
+      const hashes = await wallet.sweep(secret.value, sweepPlanned, (line) => setStatus('sweep-status', line));
+      secret.value = '';
+      el('sweep-plan').hidden = true;
+      setStatus('sweep-status', `Swept in ${hashes.length} ${hashes.length === 1 ? 'transaction' : 'transactions'}. The notes appear on Home within seconds.`);
+      await refresh(true);
+      await renderTags();
+    } catch (error) {
+      setStatus('sweep-status', `Not swept: ${(error as Error).message}`);
+    } finally {
+      go.disabled = false;
+    }
+  })());
 }
 
 // ── backup ────────────────────────────────────────────────────────────────
@@ -541,6 +621,7 @@ async function init(): Promise<void> {
   if (account === null) { openOnboarding('ob-welcome'); return; }
   el('account-name').textContent = accountLabel(account);
   document.querySelector('.acct .mark')!.innerHTML = markOf(account === 'browser' ? -1 : account.index);
+  if (account !== 'browser' && account.imported !== undefined) document.querySelector('.acct .mark')!.classList.add('imported');
   el('phrase-card').hidden = !(account === 'browser' && storedPhrase() === null);
 
   try {
@@ -569,6 +650,7 @@ async function init(): Promise<void> {
   el('copy-tag').addEventListener('click', () => void navigator.clipboard.writeText(String(current?.tag ?? '')));
   el('refresh').addEventListener('click', () => void refresh(true));
   el('refresh-tags').addEventListener('click', () => void renderTags());
+  setupSweep();
 
   await renderBalances();
   await refresh();

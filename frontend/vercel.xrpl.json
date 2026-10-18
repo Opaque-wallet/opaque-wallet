@@ -1,8 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
   "redirects": [
-    { "source": "/app.html", "destination": "https://www.opaque.credit/app.html", "permanent": false },
-    { "source": "/testnet/app.html", "destination": "https://www.opaque.credit/testnet/app.html", "permanent": false }
+    { "source": "/arc", "destination": "/", "permanent": false },
+    { "source": "/testnet", "destination": "/", "permanent": false },
+    { "source": "/testnet/", "destination": "/", "permanent": false },
+    { "source": "/xrpl", "destination": "/testnet/xrpl", "permanent": false },
+    { "source": "/testnet/opaque-xrpl-extension.zip", "destination": "/opaque-extension.zip", "permanent": false }
   ],
   "headers": [
     {

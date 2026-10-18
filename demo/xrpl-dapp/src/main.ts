@@ -1,7 +1,7 @@
 // The dapp's side: xrpl-connect's WalletManager, with Opaque as one adapter.
 // Nothing here is Opaque-specific beyond `new OpaqueAdapter(...)`. Beside it,
 // xrpl-connect's own GemWallet and Crossmark adapters, untouched: with the
-// Opaque extension (extension-xrpl/) they reach Opaque too. With ?wc=, its
+// Opaque extension (extension/) they reach Opaque too. With ?wc=, its
 // WalletConnect adapter: a dapp that has never heard of Opaque, which a user
 // connects by pasting its link into Opaque.
 //

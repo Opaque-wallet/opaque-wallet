@@ -11,13 +11,13 @@
   <link rel="stylesheet" href="wallet.css">
 </head>
 <body>
-<a class="corner" href="/" aria-label="About opaque"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
+<a class="page-logo" href="/" aria-label="About opaque"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
 <main class="app">
   <header class="bar">
     <button class="acct" id="account-button" type="button" aria-label="Account, backup and network"><span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><g fill="#070608"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg></span><span><b id="account-name">Opaque on XRPL</b><small id="account-short">Starting…</small></span></button>
     <div class="bar-right">
       <select class="net" id="network-switch" aria-label="Network"></select>
-      <span class="pill net-label">XRPL Testnet</span>
+      <button class="icon-btn" id="menu-button" type="button" title="Accounts and settings" aria-label="Accounts and settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <a class="icon-btn expand" href="xrpl.html" target="_blank" rel="noopener" title="Open in a tab" aria-label="Open in a tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></a>
     </div>
   </header>
@@ -46,8 +46,8 @@
     </div>
     <div class="ob-step" id="ob-restore" hidden>
       <div class="screen-head"><button class="back" data-ob="ob-welcome" type="button" aria-label="Back">←</button><h1>Import a wallet</h1><span></span></div>
-      <p class="lede">The 12-word recovery phrase of any Opaque wallet: from the extension, the website or your phone. Your notes are found again on the ledger.</p>
-      <label class="field" for="ob-phrase"><span>Recovery phrase</span><textarea id="ob-phrase" class="mono" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="twelve words, separated by spaces"></textarea></label>
+      <p class="lede">The 12-word recovery phrase of an Opaque wallet, or one account's key (opq1…), from the extension, the website or your phone. Your notes are found again on the ledger.</p>
+      <label class="field" for="ob-phrase"><span>Recovery phrase or account key</span><textarea id="ob-phrase" class="mono" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="twelve words, separated by spaces"></textarea></label>
       <button class="primary" id="ob-restore-go" type="button">Import</button>
       <p class="status" id="ob-restore-status" role="status"></p>
     </div>
@@ -138,6 +138,10 @@
         </div>
       </div>
     </div>
+    <div class="sweep-card">
+      <span><b>Have XRP in another wallet?</b><small>Sweep it in with that wallet's secret: its XRP and RLUSD become private notes here.</small></span>
+      <button class="secondary" id="sweep-open" type="button">Sweep</button>
+    </div>
     <p class="section-label">Deposit tags in this browser <button class="link" id="refresh-tags" type="button">Refresh</button></p>
     <div class="card" id="tag-list"></div>
   </section>
@@ -145,7 +149,7 @@
   <section class="view" id="view-apps" aria-labelledby="tab-apps" hidden>
     <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Apps</h1><span></span></div>
     <p class="lede">Each XRPL app you connect gets an account of its own, funded by a pool: it sees an address that leads nowhere. Close one to turn what is left, reserve included, back into notes.</p>
-    <div class="dialog-actions"><a class="primary" href="xrpl-connect.html">Connect with WalletConnect</a><a class="secondary" href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Try the demo app ↗</a></div>
+    <div class="dialog-actions"><a class="primary" href="xrpl-connect.html">Connect with WalletConnect</a></div>
     <p class="section-label">Connected apps</p>
     <div class="card"><div id="site-list"></div></div>
     <p class="status" id="apps-status" role="status"></p>
@@ -183,16 +187,37 @@
   <p class="send-progress-log" id="send-progress-log" role="status" aria-live="polite"></p>
 </dialog>
 
+<dialog id="sweep-dialog">
+  <form method="dialog" class="dialog-head"><div><p class="eyebrow">Bring in an XRPL wallet</p><h2>Sweep into private notes</h2></div><button value="close" aria-label="Close">×</button></form>
+  <p class="send-progress-copy">Paste the wallet's secret: its family seed (s…) or its 12 or 24 words. It signs here, in this page, and is never stored or sent anywhere.</p>
+  <label class="field" for="sweep-secret"><span>Secret</span><input id="sweep-secret" class="mono" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+  <div class="dialog-actions"><button class="secondary" id="sweep-check" type="button">Check the wallet</button></div>
+  <div id="sweep-plan" hidden>
+    <div class="detail"><span>Wallet</span><code id="sweep-address"></code></div>
+    <div class="detail"><span>Moves</span><strong id="sweep-moves"></strong></div>
+    <div class="detail"><span>Stays behind</span><strong id="sweep-stays"></strong></div>
+    <p class="fine-print">The ledger shows this wallet paying the pool, once. What arrives becomes notes of <b id="sweep-into"></b>; any part too small for a note waits on its tag for the next payment.</p>
+    <div class="dialog-actions"><button class="primary" id="sweep-go" type="button">Sweep</button></div>
+  </div>
+  <p class="send-progress-log" id="sweep-status" role="status" aria-live="polite"></p>
+</dialog>
+
 <dialog id="account-dialog">
   <form method="dialog" class="dialog-head"><div><p class="eyebrow">This wallet</p><h2>Accounts</h2></div><button value="close" aria-label="Close">×</button></form>
   <div class="account-list" id="account-list"></div>
-  <button class="link add-account" id="account-add" type="button" hidden>+ Add account</button>
+  <div class="account-links"><button class="link add-account" id="account-add" type="button" hidden>+ Add account</button><button class="link add-account" id="account-import" type="button">↓ Import account</button></div>
   <div class="backup" id="phrase-box" hidden>
     <p class="eyebrow">Recovery phrase</p>
     <p>Every account above comes from it. Import it in the extension, on the website or on a phone, and the same accounts, notes and app accounts come back.</p>
     <ol class="words" id="phrase-words" hidden></ol>
     <div class="dialog-actions"><button class="secondary" id="phrase-show" type="button">Show recovery phrase</button><button class="secondary" id="account-rescan" type="button">Rescan the ledger</button></div>
     <p class="status" id="phrase-status" role="status"></p>
+  </div>
+  <div class="backup" id="key-box" hidden>
+    <p class="eyebrow">Account key</p>
+    <p>This account alone, without the phrase: paste it into Import account in another Opaque wallet. Whoever holds it can spend everything in this account.</p>
+    <code class="key-text" id="key-text" hidden></code>
+    <div class="dialog-actions"><button class="secondary" id="key-show" type="button">Show account key</button><button class="secondary" id="key-copy" type="button" hidden>Copy</button></div>
   </div>
   <div class="backup" id="phrase-setup-box" hidden>
     <p class="eyebrow">Recovery phrase</p>

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// The Opaque extension (extension-xrpl/) on XRPL TESTNET, from the outside.
+// The Opaque extension (extension/) from the outside: XRPL TESTNET, and Arc in the same extension.
 // The extension is a wallet of its own: its side panel page holds the notes,
 // and the hosted demo dapp's stock xrpl-connect GemWallet and Crossmark
 // adapters, with no Opaque code of their own, reach its approval window.
 //
-//   cd frontend && npm run ext:xrpl
+//   cd frontend && npm run ext
 //   cd backend && npm run xrpl:e2e:extension [-- https://<dapp>]
 //
 //   1. the extension's wallet: a faucet deposit, 95 private XRP
@@ -15,6 +15,8 @@
 //   3. Reject in the popup reaches the dapp as a refusal
 //   4. as Crossmark, on the same page: connects without a popup, then a trade
 //   5. after a reload, GemWallet reconnects without a popup
+//   6. one extension for every chain: the picker leads from XRPL to Arc's
+//      pages, and Arc mainnet and testnet boot beside the XRPL wallet
 //
 // Fails if the wallet or its popup sent a request anywhere but their origin
 // and the service's. Runs Playwright's own Chromium: branded Chrome no longer
@@ -30,7 +32,7 @@ import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index
 import { openWallet } from './xrpl-wallet-page.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const EXTENSION = join(ROOT, 'extension-xrpl', 'dist');
+const EXTENSION = join(ROOT, 'extension', 'dist');
 const DAPP = (process.argv[2] ?? 'https://opaque-xrpl-demo.vercel.app').replace(/\/+$/, '');
 const STACK = 'https://opaque-xrpl-testnet-production.up.railway.app';
 const log = (s: string) => process.stdout.write(`${s}\n`);
@@ -40,7 +42,7 @@ const check = (name: string, ok: boolean, detail: string) => {
   log(`${ok ? 'PASS' : 'FAIL'}  ${name}  (${detail})`);
 };
 
-if (!existsSync(join(EXTENSION, 'inject.js'))) throw new Error('extension-xrpl/dist is missing: cd frontend && npm run ext:xrpl');
+if (!existsSync(join(EXTENSION, 'inject.js'))) throw new Error('extension/dist is missing: cd frontend && npm run ext');
 const profile = mkdtempSync(join(tmpdir(), 'opaque-ext-'));
 // ponytail: whichever Chrome for Testing Playwright last downloaded (macOS path); CHROMIUM overrides.
 const cache = join(homedir(), 'Library', 'Caches', 'ms-playwright');
@@ -67,7 +69,7 @@ try {
   // ── 1. the wallet ─────────────────────────────────────────────────────────
   const wallet = await context.newPage();
   police(wallet);
-  await wallet.goto(`${WALLET}/xrpl.html`);
+  await wallet.goto(`${WALLET}/testnet/xrpl.html`);
   await openWallet(wallet);
   await wallet.click('#tab-receive');
   await wallet.click('#receive-button');
@@ -111,7 +113,7 @@ try {
   const connected = await click('connect-gem', { title: /Connect privately/, button: 'approve' });
   const site = /connected (r\w+)/.exec(connected)?.[1] ?? '';
   check('GemWallet connect opens Opaque: a fresh account, funded privately', site !== '', `${connected} in ${Math.round((Date.now() - t0) / 1000)} s`);
-  check('the approval window is the extension\'s own', String(popup?.url()).startsWith(`${WALLET}/xrpl-connect.html`), String(popup?.url()));
+  check('the approval window is the extension\'s own', String(popup?.url()).startsWith(`${WALLET}/testnet/xrpl-connect.html`), String(popup?.url()));
   const trade = await click('trade', { title: /Sign and submit/, button: 'approve' });
   check('a DEX trade through GemWallet\'s submitTransaction', /tesSUCCESS/.test(trade), trade);
   const nft = await click('nft', { title: /Sign \(the site submits it\)/, button: 'approve' });
@@ -137,6 +139,18 @@ try {
   check('after a reload, GemWallet reconnects without a popup', again.includes(site) && popups === beforeReload, again);
 
   check('the wallet and its popup talked to their origin and the service only', outside.length === 0, outside.length === 0 ? 'none' : outside.slice(0, 3).join(', '));
+
+  // ── 6. every chain in one extension ───────────────────────────────────────
+  // The XRPL page's picker leads to Arc's, and both Arc networks boot from the same extension.
+  await wallet.selectOption('#network-switch', 'mainnet');
+  await wallet.waitForURL(`${WALLET}/app.html`, { timeout: 30_000 });
+  for (const [path, name] of [['app.html', 'Arc Mainnet'], ['testnet/app.html', 'Arc Testnet']]) {
+    const arc = path === 'app.html' ? wallet : await context.newPage();
+    if (arc !== wallet) await arc.goto(`${WALLET}/${path}`);
+    const started = await arc.waitForFunction(() => (globalThis as any).opaque !== undefined, undefined, { timeout: 120_000 }).then(() => true, () => false);
+    const picked = await arc.$eval('#network-switch', (e: any) => ({ chosen: e.selectedOptions[0]?.text, all: [...e.options].map((o: any) => o.text) }));
+    check(`${name} boots in the same extension, and its picker offers XRPL`, started && picked.chosen === name && picked.all.includes('XRPL Testnet'), `${picked.chosen} of ${picked.all.join(' / ')}`);
+  }
 } catch (error) {
   failures++;
   log(`FAIL  ${(error as Error).stack ?? error}`);

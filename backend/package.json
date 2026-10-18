@@ -25,7 +25,8 @@
     "xrpl:smoke:hosted": "node --use-system-ca scripts/smoke-xrpl-hosted.ts",
     "xrpl:e2e:extension": "node --use-system-ca scripts/e2e-xrpl-extension.ts",
     "xrpl:e2e:accounts": "node --use-system-ca scripts/e2e-xrpl-accounts.ts",
-    "xrpl:e2e:phrase": "node --use-system-ca scripts/e2e-xrpl-phrase.ts"
+    "xrpl:e2e:phrase": "node --use-system-ca scripts/e2e-xrpl-phrase.ts",
+    "xrpl:e2e:import": "node --use-system-ca scripts/e2e-xrpl-import.ts"
   },
   "comment": [
     "Runs .ts directly: Node >=22.18 strips types natively, so there is no build",
@@ -47,6 +48,8 @@
     "@noble/post-quantum": "^0.7.1",
     "@opaque/pq-wallet": "file:../packages/pq-wallet",
     "@opaque/protocol-types": "file:../packages/protocol-types",
+    "@scure/bip32": "1.7.0",
+    "@scure/bip39": "1.6.0",
     "ripple-address-codec": "^5.0.1",
     "ripple-binary-codec": "^2.11.0",
     "ripple-keypairs": "^3.1.0",

@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite';
 
-// Two pages, not one app: index.html is the landing page and app.html is the
-// wallet. Naming both as inputs is what stops Vite treating index.html as the
-// only entry and silently dropping the wallet from a production build.
+// Wallet pages, not one app: app.html (Arc), xrpl.html and xrpl-connect.html
+// (XRPL). The home page is site/, built on its own (`npm run build:site`).
 //
 // No node: imports here on purpose — it keeps @types/node off the dependency
 // list, so `tsc --noEmit` runs against the DOM lib alone and this config stays
@@ -17,7 +16,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: { landing: 'index.html', app: 'app.html', xrpl: 'xrpl.html', connect: 'xrpl-connect.html' },
+      input: { app: 'app.html', xrpl: 'xrpl.html', connect: 'xrpl-connect.html' },
     },
   },
   server: {

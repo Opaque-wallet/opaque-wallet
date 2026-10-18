@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { createWallet, importWallet } from './xrpl-wallet-page.ts';
 
-const WALLET = (process.argv[2] ?? 'https://opaque-xrpl.vercel.app').replace(/\/+$/, '');
+const WALLET = (process.argv[2] ?? 'https://www.opaque.credit').replace(/\/+$/, '');
 const DAPP = (process.argv[3] ?? 'https://opaque-xrpl-demo.vercel.app').replace(/\/+$/, '');
 const PAGE = `${WALLET}/testnet/xrpl.html`;
 const log = (s: string) => process.stdout.write(`${s}\n`);

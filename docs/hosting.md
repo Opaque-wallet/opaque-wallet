@@ -11,12 +11,12 @@
 
 A third service, `opaque-xrpl-testnet` (`https://opaque-xrpl-testnet-production.up.railway.app`),
 runs the XRPL stack, with its own mesh secret and nothing shared with these
-two. Its wallet is the Vercel project `opaque-xrpl` (`https://opaque-xrpl.vercel.app`):
+two. Its wallet is in the Vercel project `opaque-xrpl`, which serves `opaque.credit`:
 [xrpl.md, Hosted](xrpl.md#hosted-testnet).
 
-`opaque.credit` (Vercel production) is built with `VITE_NETWORK=mainnet` and
-reads the mainnet service through `VITE_STACK_URL`; previews build testnet and
-read the testnet service. The two never share a key: each has its own
+`opaque.credit` is built from this repo by `cd frontend && npm run deploy`: Arc
+mainnet at the root, Arc and XRPL testnet under `testnet/`, each reading its
+own service. The two never share a key: each has its own
 attester, mesh master, egress key and CRE intent key.
 
 The whole stack runs as one Railway service: six relays, the exit (the

@@ -1,6 +1,6 @@
 # The XRPL testnet service as ONE Railway service (opaque-xrpl-testnet, whose
 # RAILWAY_DOCKERFILE_PATH points here): backend/xrpl/stack.ts. The wallet
-# pages are on Vercel (frontend: npm run deploy:xrpl). docs/xrpl.md, Hosted.
+# pages are on Vercel (frontend: npm run deploy). docs/xrpl.md, Hosted.
 #
 # Six relays, the exit, the attester quorum, the CRE stand-in and a test
 # credential authority in one process: one operator, testnet only.

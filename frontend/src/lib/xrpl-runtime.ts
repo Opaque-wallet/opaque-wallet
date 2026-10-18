@@ -31,6 +31,7 @@ import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
 import { accountOf, recipientFor, scopeOf, type XrplDestination } from '../../../backend/xrpl/protocol.ts';
 import { faucetDeposit, meshLedger, nullifierSpent, onrampUrl, registerTag, tagStatus, type XrplSend } from '../../../backend/xrpl/queries.ts';
 import { closeSite, newSite, resultOf, rotate, setupSite, signAndSubmit, signMessage, signOnly, syncIndex, type Site } from '../../../backend/xrpl/site.ts';
+import { planSweep, runSweep, sweepKey, type SweepPlan } from '../../../backend/xrpl/sweep.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient, type NoteVault } from '../../../packages/ring-client/src/index.ts';
 import { xrplDeployment, xrplMeshTrustRoot, type XrplPoolDeployment } from '../../../deployments/xrpl.ts';
@@ -184,6 +185,12 @@ export interface XrplWallet {
   recover(onProgress?: (line: string) => void): Promise<number>;
   /** Whether another account of the phrase has notes in the pools' logs (1) or not (0), keeping none. */
   probe(account: AccountKeys): Promise<number>;
+
+  // ── an ordinary XRPL wallet, swept in (backend/xrpl/sweep.ts) ──
+  /** What sweeping the wallet this secret opens would move into this account. Nothing is signed. */
+  sweepPlan(secret: string): Promise<SweepPlan>;
+  /** Moves it, each asset into a fresh deposit tag of this account, to become notes. The transactions' hashes. */
+  sweep(secret: string, plan: SweepPlan, onProgress?: (line: string) => void): Promise<readonly string[]>;
 }
 
 export async function startXrplWallet(config?: XrplStackConfig, account: AccountKeys | null = null): Promise<XrplWallet> {
@@ -586,6 +593,16 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       // Whether an account was ever used: its first notes of a size are among its first numbers.
       for (const { scope } of scopes()) if ((await scan(other, scope, 0, PROBE_GAP)).length > 0) return 1;
       return 0;
+    },
+
+    sweepPlan: async (secret) => planSweep(ledger, sweepKey(secret), xrplDeployment.pools),
+    async sweep(secret, plan, onProgress) {
+      const key = sweepKey(secret);
+      if (key.address !== plan.address) throw new Error('that secret opens another wallet than the one checked');
+      return runSweep(ledger, key, plan, async (symbol, amount) => {
+        const t = await wallet.receive(symbol, amount);
+        return { pool: t.pool, tag: t.tag };
+      }, onProgress);
     },
 
     async exportBackup(passphrase) {

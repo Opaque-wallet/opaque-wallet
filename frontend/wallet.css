@@ -19,7 +19,7 @@
   --display: "Poppins", system-ui, sans-serif;
   --mark: "Quicksand", system-ui, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --col: 480px;
+  --col: 620px;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 * { box-sizing: border-box; }
@@ -27,7 +27,7 @@ html { min-width: 320px; background: var(--ink); }
 body {
   margin: 0; min-height: 100svh;
   color: var(--text); font: 400 15px/1.45 var(--display); -webkit-font-smoothing: antialiased;
-  background: radial-gradient(60% 40% at 50% -8%, rgba(255, 122, 24, 0.1), transparent 70%), var(--ink);
+  background: var(--bg);
 }
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -36,9 +36,9 @@ button { cursor: pointer; }
 a { color: var(--soft); }
 h1, h2, h3, p { margin: 0; }
 
-/* ── the column ──────────────────────────────────────────────────────── */
+/* ── the column: the page itself in a side panel; centred under the mark on a wide screen ── */
 .app { position: relative; display: flex; flex-direction: column; width: min(100%, var(--col)); min-height: 100svh; margin: 0 auto; background: var(--bg); }
-@media (min-width: 560px) { .app { border-inline: 1px solid var(--line); box-shadow: 0 0 120px rgba(0, 0, 0, 0.6); } }
+.page-logo { display: none; }
 
 .bar {
   position: sticky; top: 0; z-index: 5;
@@ -64,16 +64,10 @@ h1, h2, h3, p { margin: 0; }
 .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--muted); text-decoration: none; }
 .icon-btn:hover { background: var(--surface); color: var(--text); }
 .icon-btn svg { width: 18px; height: 18px; }
-/* In the extension: open in a tab, and the network as a label (the Arc wallet is not in it). */
-.expand, .net-label { display: none; }
+/* In the extension: open in a tab. */
+.expand { display: none; }
 .extension .expand { display: grid; }
-.extension .net-label { display: inline-block; }
-.extension .net { display: none; }
-/* On a wide screen, the mark sits in the corner, outside the column. */
-.corner { position: fixed; top: 22px; left: 28px; display: none; }
-.corner img { width: 112px; height: auto; }
-@media (min-width: 1000px) { .corner { display: block; } }
-.extension .corner { display: none; }
+
 
 .view { flex: 1; padding: 0 16px 28px; animation: in 0.35s var(--ease); }
 @keyframes in { from { opacity: 0; transform: translateY(6px); } }
@@ -91,10 +85,20 @@ h1, h2, h3, p { margin: 0; }
 .tiles button:hover { background: var(--raised); transform: translateY(-1px); }
 .tiles i { color: var(--orange); font-size: 19px; font-style: normal; line-height: 1; }
 
+/* A full page, as a wallet's own tab looks: the mark above, the balance and its four buttons centred. */
+@media (min-width: 700px) {
+  .page-logo { display: flex; justify-content: center; padding: 26px 0 12px; }
+  .page-logo img { width: auto; height: 28px; }
+  .app { min-height: calc(100svh - 66px); }
+  .hero { padding-top: 30px; text-align: center; }
+  .sub { justify-content: center; }
+  .tiles { grid-template-columns: repeat(4, 96px); justify-content: center; }
+}
+
 .promo { position: relative; margin-top: 14px; border: 1px solid rgba(255, 122, 24, 0.24); border-radius: 14px; background: linear-gradient(120deg, rgba(255, 122, 24, 0.17), rgba(255, 122, 24, 0.03)); }
 .promo-go { display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 44px 13px 13px; border: 0; background: none; text-align: left; }
 .promo-go svg { flex: none; width: 46px; height: 46px; padding: 7px; border-radius: 12px; background: var(--orange); }
-.promo-go svg g { transform-origin: 20px 20px; animation: turn 14s linear infinite; }
+#promo-go svg g { transform-origin: 20px 20px; animation: turn 14s linear infinite; }
 .promo-go > span { display: grid; gap: 2px; }
 .promo-go b { font-size: 14px; font-weight: 600; }
 .promo-go small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
@@ -269,6 +273,16 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(3px); 
 .balance-cell { margin-left: auto; font-size: 14px; font-weight: 600; white-space: nowrap; }
 .add-account { justify-self: start; margin-top: 8px; padding: 10px 8px; font-size: 14px; }
 #phrase-words { margin-top: 2px; }
+.account-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.list-label { margin: 10px 8px 2px; }
+.account-row.imported .mark, .mark.imported { background: var(--soft); }
+.key-text { display: block; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--ink); color: var(--soft); font: 12.5px/1.6 var(--mono); overflow-wrap: anywhere; user-select: all; }
+.sweep-card { display: flex; align-items: center; gap: 14px; margin-top: 18px; padding: 14px; border: 1px dashed rgba(255, 122, 24, 0.35); border-radius: 16px; }
+.sweep-card > span { display: grid; gap: 2px; }
+.sweep-card b { font-size: 14px; font-weight: 600; }
+.sweep-card small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.sweep-card .secondary { flex: none; min-height: 40px; }
+#sweep-plan { margin-top: 12px; }
 
 /* ── the approval window ─────────────────────────────────────────────── */
 .approve .view { padding-top: 6px; }

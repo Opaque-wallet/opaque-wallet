@@ -19,3 +19,4 @@ dialog{width:min(480px,calc(100% - 28px));padding:24px;border:1px solid #f4efe92
 .amount strong input{width:4.2ch;padding:0;border:0;border-bottom:1px dashed #f4efe93a;color:var(--text);background:transparent;font:inherit}.amount strong input:focus{outline:0;border-bottom-color:var(--orange)}
 label.amount{display:block}
  .send-progress-copy{margin-top:-6px}.send-progress-log{margin-top:18px;padding:14px;border-left:2px solid var(--orange);color:var(--soft);background:#ff7a1812;font:12px/1.6 var(--mono)}
+.mainnet-warning .dialog-actions .primary{margin-top:0}.mainnet-warning .continue{width:100%;margin-top:14px;padding:10px;border:0;color:var(--muted);background:none;font:inherit;font-size:13px;text-decoration:underline;cursor:pointer}.mainnet-warning .continue:hover{color:var(--text)}

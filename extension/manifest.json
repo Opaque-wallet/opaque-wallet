@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "opaque",
-  "version": "0.5.0",
-  "description": "Private USDC payments on Arc mainnet and testnet: a post-quantum account, ring-signed notes, and a relay mesh.",
+  "name": "Opaque",
+  "version": "0.6.0",
+  "description": "One private wallet for every chain Opaque runs on: Arc mainnet and testnet, and XRPL testnet. Post-quantum proofs, a relay mesh, and an account per app.",
   "action": {
-    "default_title": "Open opaque"
+    "default_title": "Open Opaque"
   },
   "side_panel": {
-    "default_path": "app.html"
+    "default_path": "testnet/xrpl.html"
   },
   "background": {
     "service_worker": "background.js"
@@ -20,6 +20,25 @@
   },
   "permissions": [
     "sidePanel"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["testnet/xrpl-connect.html"],
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
+    }
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"

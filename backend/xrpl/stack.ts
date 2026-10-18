@@ -17,7 +17,7 @@
 //                                         and Verify reached through this service
 //
 // Hosted: Railway service opaque-xrpl-testnet; the wallet pages are on Vercel
-// (frontend: npm run deploy:xrpl). docs/xrpl.md, Hosted.
+// (frontend: npm run deploy). docs/xrpl.md, Hosted.
 //
 // ── What this is NOT ─────────────────────────────────────────────────────
 //

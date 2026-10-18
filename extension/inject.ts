@@ -1,4 +1,4 @@
-// Opaque for XRPL as a browser extension. Dapps that support GemWallet or
+// The Opaque extension's XRPL side. Dapps that support GemWallet or
 // Crossmark find Opaque without changing a line: this script runs in the page
 // (world MAIN), answers both wallets' page protocols, and hands each request to
 // Opaque's adapter, which opens the extension's own approval window, so the
@@ -16,12 +16,12 @@ interface Account { address: string; publicKey?: string; network: { id: string; 
 type Tx = Record<string, unknown>;
 
 const WSS = 'wss://s.altnet.rippletest.net:51233';
-const HOSTED = 'https://opaque-xrpl.vercel.app/testnet/xrpl-connect.html';
+const HOSTED = 'https://www.opaque.credit/testnet/xrpl-connect';
 // bridge.js, which can ask the browser for this extension's address, leaves it
 // on the page; anything else there is ignored and the hosted wallet answers.
 const walletUrl = (): string => {
   const named = document.documentElement.dataset['opaqueWallet'] ?? '';
-  return /^chrome-extension:\/\/[a-p]{32}\/xrpl-connect\.html$/.test(named) ? named : HOSTED;
+  return /^chrome-extension:\/\/[a-p]{32}\/testnet\/xrpl-connect\.html$/.test(named) ? named : HOSTED;
 };
 let opened: OpaqueAdapter | undefined;
 /** Made on first use: by then bridge.js has run, whichever script the browser started first. */

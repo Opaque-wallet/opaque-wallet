@@ -1,12 +1,13 @@
 // Assembles extension/dist/ — the directory you load as an unpacked extension.
+// One extension for every chain: each network's wallet page, as the site serves it.
 //
-//   cd frontend && npm run ext        (builds the frontend, then runs this)
+//   cd frontend && npm run ext        (builds the site, then runs this)
 //   node extension/build.mjs          (assumes frontend/dist is already built)
 //
-// It copies the Vite build of app.html and only the assets that page actually
-// references, then makes three edits Chrome requires. There is no second UI
-// codebase: the popup is the same page served at /app.html, which is the whole
-// reason app.ts is written to Manifest V3's rules in the first place.
+// It copies the Vite build of each wallet page and only the assets that page
+// actually references, then makes the edits Chrome requires. There is no second
+// UI codebase: the side panel shows the pages served at opaque.credit, which is
+// the whole reason they are written to Manifest V3's rules in the first place.
 
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -17,8 +18,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT = join(HERE, '..', 'frontend', 'dist');
 const DIST = join(HERE, 'dist');
 
-if (!existsSync(join(BUILT, 'app.html'))) {
-  console.error('frontend/dist/app.html is missing.\nRun:  cd frontend && npm run build');
+if (!existsSync(join(BUILT, 'app.html')) || !existsSync(join(BUILT, 'testnet', 'xrpl.html'))) {
+  console.error('frontend/dist is missing a wallet page.\nRun:  cd frontend && npm run ext');
   process.exit(1);
 }
 
@@ -26,17 +27,18 @@ rmSync(DIST, { recursive: true, force: true });
 mkdirSync(join(DIST, 'assets'), { recursive: true });
 mkdirSync(join(DIST, 'icons'), { recursive: true });
 
-// One page per network: mainnet at the root, testnet in testnet/, the same
-// layout as the hosted site, so the header's network picker works here too.
-// Their storage names differ (frontend/src/lib/storage-name.ts), so one
-// extension holds two wallets that never share a key.
-const PAGES = ['app.html', 'testnet/app.html'];
+// Every network's wallet, in the hosted site's layout (Arc mainnet at the root,
+// Arc and XRPL testnet in testnet/), so the header's network picker works here
+// too. A new chain adds its page here. Their storage names differ
+// (storage-name.ts, and XRPL's are opaque:xrpl…), so one extension holds every
+// wallet and none shares a key. xrpl-connect.html is the window dapps open.
+const PAGES = ['app.html', 'testnet/app.html', 'testnet/xrpl.html', 'testnet/xrpl-connect.html'];
 let fileCount = 0;
 for (const page of PAGES) {
   const SRC = join(BUILT, dirname(page));
   const OUT = join(DIST, dirname(page));
   mkdirSync(join(OUT, 'assets'), { recursive: true });
-  let html = readFileSync(join(SRC, 'app.html'), 'utf8');
+  let html = readFileSync(join(BUILT, page), 'utf8');
   html = html.replace('<html lang="en">', '<html lang="en" class="extension">');
 
   // ── the CSP guard ─────────────────────────────────────────────────────────
@@ -56,15 +58,15 @@ for (const page of PAGES) {
   ].filter(([re]) => re.test(scannable));
 
   if (violations.length) {
-    console.error('The built app.html breaks the Manifest V3 CSP:');
+    console.error(`The built ${page} breaks the Manifest V3 CSP:`);
     for (const [, why] of violations) console.error(`  - ${why}`);
-    console.error('\nThe popup would load blank. Move the code into src/app.ts.');
+    console.error('\nThe page would load blank. Move the code into its src/*.ts.');
     process.exit(1);
   }
 
   // ── copy only what the page references ────────────────────────────────────
   //
-  // The landing page's photography is ~2MB and the wallet never shows it. The
+  // The build holds every page's assets and the wallet needs few of them. The
   // HTML names the entry script and stylesheet; those name the rest (the proof
   // worker, viem's lazy chunks, the fonts), so references are followed file to
   // file until nothing new turns up. No allow-list to maintain, and nothing the
@@ -79,11 +81,11 @@ for (const page of PAGES) {
   }
   for (const ref of refs) copyFileSync(join(SRC, ref), join(OUT, ref));
 
-  // The wallet finds its backend through stack.json. A build without
-  // VITE_STACK_URL looks for it next to app.html, which inside the extension is
-  // a file that does not exist, and the wallet would open to "Could not start".
+  // The wallet finds its backend through a stack URL built into it. A build
+  // without one looks next to the page, which inside the extension is a file
+  // that does not exist, and the wallet would open to "Could not start".
   const code = refs.filter((r) => r.endsWith('.js')).map((r) => readFileSync(join(SRC, r), 'utf8')).join('\n');
-  if (!/https:\/\/[^"'`\s]+\/(stack\.json|v1\/mesh)/.test(code)) {
+  if (!/https:\/\/[^"'`\s]+\/(stack\.json|v1\/mesh|xrpl-stack\.json)/.test(code)) {
     console.error(`${page} does not name its backend: build it for production (npm run ext does).`);
     process.exit(1);
   }
@@ -100,12 +102,13 @@ for (const page of PAGES) {
   // Both the wordmark and the sidebar return to the hosted product. The wallet
   // now puts classes and nested markup on those anchors, so rewriting the href
   // is more durable than matching one exact old anchor shape.
-  html = html.replaceAll(
-    'href="index.html"',
-    'href="https://www.opaque.credit" target="_blank" rel="noopener"',
-  );
+  for (const home of ['href="index.html"', 'href="/"']) {
+    html = html.replaceAll(home, 'href="https://www.opaque.credit" target="_blank" rel="noopener"');
+  }
+  // A home-screen app manifest means nothing inside an extension.
+  html = html.replace(/\s*<link rel="(?:manifest|apple-touch-icon)"[^>]*>/g, '');
 
-  writeFileSync(join(OUT, 'app.html'), html);
+  writeFileSync(join(DIST, page), html);
 
   // 3. styles.css @imports Cormorant Garamond and Lora from Google Fonts. On the
   //    hosted page that is a normal choice. In a wallet it is not: the popup
@@ -143,8 +146,9 @@ for (const page of PAGES) {
   fileCount += refs.length + 1;
 }
 
-copyFileSync(join(HERE, 'manifest.json'), join(DIST, 'manifest.json'));
-copyFileSync(join(HERE, 'background.js'), join(DIST, 'background.js'));
+for (const file of ['manifest.json', 'background.js', 'bridge.js']) copyFileSync(join(HERE, file), join(DIST, file));
+// What lets XRPL dapps built for GemWallet or Crossmark reach Opaque (inject.ts).
+execFileSync(join(HERE, '..', 'frontend', 'node_modules', '.bin', 'rolldown'), [join(HERE, 'inject.ts'), '-o', join(DIST, 'inject.js'), '-f', 'iife', '-p', 'browser'], { stdio: 'inherit' });
 for (const size of [16, 32, 48, 128]) {
   copyFileSync(join(HERE, 'icons', `${size}.png`), join(DIST, 'icons', `${size}.png`));
 }
@@ -163,5 +167,5 @@ try {
 // unpacked extension's id — its wallet — follows its folder.
 if (existsSync(zip)) copyFileSync(zip, join(HERE, '..', 'frontend', 'public', 'opaque-extension.zip'));
 
-console.log(`built ${DIST}  (${fileCount + 6} files, ${PAGES.length} networks)${existsSync(zip) ? `, and ${basename(zip)} for the Chrome Web Store` : ''}`);
+console.log(`built ${DIST}  (${fileCount + 8} files, ${PAGES.length} pages)${existsSync(zip) ? `, and ${basename(zip)} for the Chrome Web Store` : ''}`);
 console.log('load it: chrome://extensions → Developer mode → Load unpacked → extension/dist');

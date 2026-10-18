@@ -218,6 +218,16 @@ const dots = (fill) => `<svg viewBox="0 0 40 40" aria-hidden="true">${Array.from
   return `<circle cx="${(20 + 13 * Math.cos(a)).toFixed(2)}" cy="${(20 + 13 * Math.sin(a)).toFixed(2)}" r="3.6" fill="${fill}"/>`;
 }).join('')}</svg>`;
 for (const el of document.querySelectorAll('[data-dots]')) el.innerHTML = dots(el.dataset.dots);
+
+// ── the updates bell: its dot shows until the newest update is opened once in this browser ──
+const LATEST = '2026-10-18';
+const seen = () => { try { return localStorage.getItem('opaque:updates-seen') === LATEST; } catch { return false; } };
+if (seen()) $('.bell').classList.add('is-read');
+$('#updates').addEventListener('toggle', (e) => {
+  if (e.newState !== 'open') return;
+  $('.bell').classList.add('is-read');
+  try { localStorage.setItem('opaque:updates-seen', LATEST); } catch {}
+});
 // A code that keeps its three corners and flickers everywhere else; the middle is the ring's note.
 $('.tile__qr').innerHTML = Array.from({ length: 49 }, (_, i) => {
   const x = i % 7, y = Math.floor(i / 7);
@@ -301,6 +311,16 @@ const setSheet = (on) => { nav.toggleAttribute('data-sheet', on); toggle.setAttr
 toggle.addEventListener('click', () => setSheet(!nav.hasAttribute('data-sheet')));
 nav.addEventListener('click', (e) => { if (e.target.closest('.menu__sheet a')) { openMenu(null); setSheet(false); } });
 document.addEventListener('click', (e) => { if (!nav.contains(e.target)) { openMenu(null); setSheet(false); } });
+// In-page links scroll without leaving a #fragment in the address bar. The skip
+// link keeps the browser's own jump, which also moves keyboard focus.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href^="#"]:not(.skip)');
+  const id = a?.getAttribute('href').slice(1);
+  const target = id === 'top' ? document.documentElement : id && document.getElementById(id);
+  if (!target) return;
+  e.preventDefault();
+  if (id === 'top') scrollTo(0, 0); else target.scrollIntoView();
+});
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const open = triggers.find((t) => t.getAttribute('aria-expanded') === 'true');

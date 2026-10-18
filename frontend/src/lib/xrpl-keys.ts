@@ -36,6 +36,8 @@ export interface AccountKeys {
   readonly key: Uint8Array;
   /** Public and stable: names the account's storage, and nothing else. */
   readonly id: string;
+  /** Set for an account brought in by its key: its place among the imported ones. */
+  readonly imported?: number;
 }
 
 // The BIP-39 seed takes 2048 rounds of PBKDF2: once per phrase per page, not once per account.
@@ -74,13 +76,37 @@ export function stream(key: Uint8Array, label: string): (n: number) => Uint8Arra
   };
 }
 
+// ── one account's key: the account without the phrase ─────────────────────
+// `opq1`, the 32-byte key in hex, and 4 bytes of checksum: a typo is caught
+// instead of opening an empty account, and the prefix keeps it from passing
+// for another chain's private key.
+const keyCheck = (key: Uint8Array) => hex(sha256(new Uint8Array([...utf8('opaque/xrpl/account-key'), ...key]))).slice(0, 8);
+const idOfKey = (key: Uint8Array) => hex(sha256(key)).slice(0, 16);
+
+/** An account's key as text. Whoever holds it can spend that account, as the phrase can spend them all. */
+export const accountKeyText = (account: AccountKeys): string => `opq1${hex(account.key)}${keyCheck(account.key)}`;
+export const isAccountKeyText = (text: string): boolean => /^opq1[0-9a-f]{72}$/i.test(text.trim());
+
+function keyFromText(text: string): Uint8Array {
+  const t = text.trim().toLowerCase();
+  if (!/^opq1[0-9a-f]{72}$/.test(t)) throw new Error('an account key is opq1 and then 72 letters and digits');
+  const key = Uint8Array.from(t.slice(4, 68).match(/../g)!.map((b) => parseInt(b, 16)));
+  if (keyCheck(key) !== t.slice(68)) throw new Error('that account key has a typo: its last 8 characters don\'t match the rest');
+  return key;
+}
+export const accountFromKeyText = (text: string, slot: number): AccountKeys => {
+  const key = keyFromText(text);
+  return { index: slot, key, id: idOfKey(key), imported: slot };
+};
+
 // ── what this browser holds ───────────────────────────────────────────────
 
 const PHRASE_KEY = scoped('opaque:xrpl-phrase:v1');
+const IMPORTED_KEY = scoped('opaque:xrpl-imported:v1');
 const STATE_KEY = scoped('opaque:xrpl-accounts:v1');
 
-/** 'browser' is the wallet from before recovery phrases: random notes, backed up by file. */
-export type ActiveAccount = number | 'browser';
+/** A phrase account's number; 'browser', the wallet from before recovery phrases; or an imported account's place. */
+export type ActiveAccount = number | 'browser' | `imported:${number}`;
 export interface WalletState {
   /** How many accounts of the phrase are shown: Account 1 to Account `count`. */
   readonly count: number;
@@ -106,13 +132,37 @@ export function savePhrase(phrase: string, imported: boolean, active: ActiveAcco
   saveWalletState({ count: 1, active, imported, scanned: {} });
 }
 
-export const accountLabel = (account: AccountKeys | 'browser'): string => (account === 'browser' ? 'Browser account' : `Account ${account.index + 1}`);
+export const importedAccounts = (): AccountKeys[] => (read<string[]>(IMPORTED_KEY) ?? []).map((text, slot) => accountFromKeyText(text, slot));
 
-/** The account the wallet opens: a phrase's, the browser wallet, or null before either exists. */
+/** Keeps an account brought in by its key and makes it the one that opens; refuses one already here. */
+export function importAccountKey(text: string): AccountKeys {
+  const key = keyFromText(text);
+  const id = idOfKey(key);
+  const phrase = storedPhrase();
+  if (phrase !== null) {
+    for (let n = 0; n < walletState().count; n++) if (accountKeys(phrase, n).id === id) throw new Error(`that is Account ${n + 1}, already here`);
+  }
+  const list = read<string[]>(IMPORTED_KEY) ?? [];
+  if (importedAccounts().some((a) => a.id === id)) throw new Error('that account is already here');
+  localStorage.setItem(IMPORTED_KEY, JSON.stringify([...list, text.trim().toLowerCase()]));
+  saveWalletState({ active: `imported:${list.length}` });
+  return { index: list.length, key, id, imported: list.length };
+}
+
+export const accountLabel = (account: AccountKeys | 'browser'): string =>
+  (account === 'browser' ? 'Browser account' : account.imported !== undefined ? `Imported ${account.imported + 1}` : `Account ${account.index + 1}`);
+
+/** The account the wallet opens: a phrase's, an imported one, the browser wallet, or null before any exists. */
 export function activeAccount(hasBrowserWallet: boolean): AccountKeys | 'browser' | null {
   const phrase = storedPhrase();
   const { active, count } = walletState();
-  if (phrase !== null && active !== 'browser') return accountKeys(phrase, Math.min(active, count - 1));
+  const imported = importedAccounts();
+  if (typeof active === 'string' && active.startsWith('imported:')) {
+    const chosen = imported[Number(active.slice('imported:'.length))];
+    if (chosen !== undefined) return chosen;
+  }
+  if (phrase !== null && typeof active === 'number') return accountKeys(phrase, Math.min(active, count - 1));
   if (hasBrowserWallet) return 'browser';
-  return phrase === null ? null : accountKeys(phrase, 0);
+  if (phrase !== null) return accountKeys(phrase, 0);
+  return imported[0] ?? null;
 }

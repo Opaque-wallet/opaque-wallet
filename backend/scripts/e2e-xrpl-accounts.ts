@@ -28,7 +28,7 @@ import { openWallet } from './xrpl-wallet-page.ts';
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const WALLET = 'https://opaque-xrpl.vercel.app';
+const WALLET = 'https://www.opaque.credit';
 const APP_A = 'https://opaque-xrpl-demo.vercel.app';
 const APP_B = 'http://localhost:5298';
 const STACK = 'https://opaque-xrpl-testnet-production.up.railway.app';
