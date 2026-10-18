@@ -49,6 +49,7 @@
           <a class="menu__link" href="/testnet/xrpl.html"><strong>Web wallet</strong><span>Runs in your browser, nothing to install</span></a>
           <a class="menu__link" href="/testnet/xrpl.html"><strong>On your phone</strong><span>Add it to your home screen</span></a>
           <a class="menu__link" href="/testnet/xrpl-connect.html"><strong>Connect to an app</strong><span>Scan a WalletConnect QR code</span></a>
+          <a class="menu__link" href="/testnet/opaque-xrpl-extension.zip" download><strong>Browser extension</strong><span>A wallet in Chrome's side panel</span></a>
         </div>
         <div class="menu__popular"><p class="menu__label">Popular</p>
           <a class="menu__card" href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer"><strong>Try the demo app ↗</strong><span>Trade, mint an NFT and sign in, privately</span></a>
@@ -80,6 +81,7 @@
 
 <main id="top">
   <section class="hero" aria-labelledby="hero-title">
+    <canvas class="hero__ledger" aria-hidden="true"></canvas>
     <canvas class="hero__ring" aria-hidden="true"></canvas>
     <div class="hero__copy">
       <p class="pill rise" style="--d: 0"><span class="pill__dot"></span>Live on XRPL testnet</p>
@@ -135,6 +137,75 @@
     </div>
   </section>
 
+  <section class="tour" id="wallet" aria-labelledby="tour-title">
+    <div class="tour__stage">
+      <h2 class="display tour__title" id="tour-title">Spend<br> unseen.</h2>
+      <div class="phone" data-screen="home" aria-hidden="true">
+        <div class="phone__screen">
+          <div class="screen screen--home">
+            <div class="screen__status"><b>9:41</b><span class="screen__bars"><i></i><i></i><i></i><i></i></span></div>
+            <div class="screen__body">
+              <div class="screen__account"><span class="screen__avatar"></span><span><b>Opaque on XRPL</b><small>Private · testnet</small></span><em>⋮</em></div>
+              <p class="screen__eyebrow">Private balance</p>
+              <p class="screen__balance">284.00 <small>XRP</small></p>
+              <p class="screen__hint">Hidden on the ledger · 22 notes</p>
+              <div class="screen__actions"><span><i>↗</i>Send</span><span><i>↙</i>Deposit</span><span><i>◫</i>Apps</span><span><i>◷</i>Activity</span></div>
+              <div class="screen__card"><span><small>Apps on their own accounts</small><b>3 connected</b></span><em>Open</em></div>
+              <p class="screen__head">Your private notes <em>›</em></p>
+              <ul class="screen__list">
+                <li><i class="coin">X</i><span><b>XRP</b><small>14 notes</small></span><span><b>284.00</b><small>2×100 · 8×10 · 4×1</small></span></li>
+                <li><i class="coin coin--dark">R</i><span><b>RLUSD</b><small>3 notes</small></span><span><b>120.00</b><small>1×100 · 2×10</small></span></li>
+                <li><i class="coin coin--line">U</i><span><b>USDC</b><small>5 notes</small></span><span><b>50.00</b><small>5×10</small></span></li>
+              </ul>
+              <p class="screen__head">Apps <em>›</em></p>
+              <ul class="screen__list">
+                <li><i class="coin coin--dark">D</i><span><b>DEX</b><small>Its own account</small></span><span><b>rGEU…9c1</b><small>funded by the pool</small></span></li>
+                <li><i class="coin coin--dark">N</i><span><b>NFT market</b><small>Its own account</small></span><span><b>rUvv…2Lp</b><small>funded by the pool</small></span></li>
+                <li><i class="coin coin--dark">G</i><span><b>Game</b><small>Its own account</small></span><span><b>rP3k…7Qa</b><small>funded by the pool</small></span></li>
+              </ul>
+            </div>
+            <div class="screen__tabs"><span class="is-on"><i>⌂</i>Overview</span><span><i>↗</i>Send</span><span class="screen__fab" data-dots="#070608"></span><span><i>◷</i>Activity</span><span><i>◫</i>Apps</span></div>
+          </div>
+          <div class="screen screen--send">
+            <div class="screen__status"><b>9:41</b><span class="screen__bars"><i></i><i></i><i></i><i></i></span></div>
+            <div class="screen__body">
+              <div class="screen__top"><em>←</em><span><small>Review</small><b>Confirm private transfer</b></span></div>
+              <p class="screen__amount">120 <small>XRP</small></p>
+              <p class="screen__to">to rPEPP…Kq3Y</p>
+              <dl class="screen__rows">
+                <div><dt>Recipient receives</dt><dd>119.3997 XRP</dd></div>
+                <div><dt>Fees</dt><dd>0.6003 XRP</dd></div>
+                <div><dt>Notes spent</dt><dd>1 × 100 + 2 × 10</dd></div>
+                <div><dt>Settles</dt><dd>now, within a minute</dd></div>
+              </dl>
+              <p class="screen__note"><i></i>Paid from the pool through three relays. Nothing on the ledger points back to you.</p>
+            </div>
+            <div class="screen__buttons"><span>Reject</span><span class="is-go">Confirm</span></div>
+            <div class="screen__done"><span class="screen__check">✓</span><b>Sent privately</b><small>The ledger shows the pool paying rPEPP…Kq3Y.</small></div>
+          </div>
+        </div>
+      </div>
+      <div class="tour__tiles">
+        <article class="tile tile--orange">
+          <h3>Deposit from any XRPL wallet or exchange.</h3>
+          <div class="tile__art tile__drop" data-dots="#070608"></div>
+        </article>
+        <article class="tile tile--ink">
+          <h3>Every app gets an account of its own.</h3>
+          <div class="tile__art tile__apps" aria-hidden="true"><span style="--i: 0"><b>DEX</b>rGEU…9c1</span><span style="--i: 1"><b>NFT</b>rUvv…2Lp</span><span style="--i: 2"><b>Game</b>rP3k…7Qa</span></div>
+        </article>
+        <article class="tile tile--ember">
+          <h3>Every key signs once, then retires.</h3>
+          <div class="tile__art tile__keys" aria-hidden="true"><span><b>Key 1</b><em>retired</em></span><span><b>Key 2</b><em>retired</em></span><span class="is-live"><b>Key 3</b><em>signing</em></span></div>
+        </article>
+        <article class="tile tile--glow">
+          <h3>Connect by QR, pop-up or extension.</h3>
+          <div class="tile__art tile__qr" aria-hidden="true"></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
   <section class="connect" id="connect" aria-labelledby="connect-title">
     <div class="section-head" data-reveal>
       <h2 class="display section-title" id="connect-title">Connect anywhere.</h2>
@@ -154,7 +225,8 @@
       <article class="card" data-reveal style="--d: 2">
         <div class="card__icon" data-ring="extension"></div>
         <h3>Browser extension</h3>
-        <p>Apps that support GemWallet or Crossmark open Opaque instead, with no change on their side.</p>
+        <p>A wallet in Chrome's side panel. Apps that support GemWallet or Crossmark open Opaque instead, with no change on their side.</p>
+        <p><a class="card__link" href="/testnet/opaque-xrpl-extension.zip" download>Download for Chrome ↓</a> Unzip it, then Load unpacked in chrome://extensions.</p>
       </article>
     </div>
   </section>
@@ -172,27 +244,121 @@
     </dl>
   </section>
 
-  <section class="final" aria-labelledby="final-title">
-    <canvas class="final__ring" aria-hidden="true"></canvas>
-    <div class="final__copy" data-reveal>
-      <h2 class="display final__title" id="final-title">Go private.</h2>
-      <div class="actions">
-        <a class="btn btn--primary" href="/testnet/xrpl.html">Open the wallet</a>
-        <a class="btn btn--ghost" href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Try the demo app ↗</a>
-      </div>
-      <p class="fine">Testnet today. Test XRP has no value.</p>
+  <section class="proof" id="proof" aria-labelledby="proof-title">
+    <div class="section-head" data-reveal>
+      <h2 class="display section-title" id="proof-title">Nothing leads back.</h2>
+      <p>Look up any Opaque payment on the XRPL explorer. You'll find the pool, a fresh address and a key that has already retired. You won't find you.</p>
     </div>
+    <div class="proof__grid">
+      <article class="proof__card proof__card--pattern" data-reveal style="--d: 0">
+        <h3>Runs in your browser. Nothing to install.</h3>
+        <a class="round" href="/testnet/xrpl.html" aria-label="Open the web wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      </article>
+      <article class="proof__card proof__card--orange" data-reveal style="--d: 1">
+        <h3>On the web, on your phone, or as an extension.</h3>
+        <div class="proof__icons" aria-hidden="true">
+          <span style="--i: 0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg></span>
+          <span style="--i: 1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></span>
+          <span style="--i: 2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M9 4.5a2 2 0 1 1 4 0V6h4a1 1 0 0 1 1 1v4h-1.5a2 2 0 1 0 0 4H18v4a1 1 0 0 1-1 1h-4v-1.5a2 2 0 1 0-4 0V20H5a1 1 0 0 1-1-1v-4h1.5a2 2 0 1 0 0-4H4V7a1 1 0 0 1 1-1h4z"/></svg></span>
+        </div>
+      </article>
+      <article class="proof__card proof__card--ledger" data-reveal style="--d: 2">
+        <h3>What the ledger sees</h3>
+        <div class="ledger">
+          <div class="ledger__ring">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="ledger__track" cx="60" cy="60" r="50"/>
+              <circle class="ledger__arc" cx="60" cy="60" r="50" style="--c: var(--orange); --i: 0" transform="rotate(4 60 60)"/>
+              <circle class="ledger__arc" cx="60" cy="60" r="50" style="--c: var(--soft); --i: 1" transform="rotate(94 60 60)"/>
+              <circle class="ledger__arc" cx="60" cy="60" r="50" style="--c: #ffcf9e; --i: 2" transform="rotate(184 60 60)"/>
+              <circle class="ledger__arc" cx="60" cy="60" r="50" style="--c: var(--cream); --i: 3" transform="rotate(274 60 60)"/>
+            </svg>
+            <p><b data-count="0" data-from="8">0</b><small>links to you</small></p>
+          </div>
+          <ul class="ledger__list">
+            <li style="--c: var(--orange)"><b>Who paid</b><span>the pool</span></li>
+            <li style="--c: var(--soft)"><b>Your apps</b><span>not linked</span></li>
+            <li style="--c: #ffcf9e"><b>Signing key</b><span>used once</span></li>
+            <li style="--c: var(--cream)"><b>Your note</b><span>one of eight</span></li>
+          </ul>
+        </div>
+      </article>
+      <article class="proof__card proof__card--flow" data-reveal style="--d: 3">
+        <h3>Payments, the way the ledger shows them.</h3>
+        <div class="flow" aria-hidden="true">
+          <div class="flow__row"><span>rDep…4Fq <i>→</i> pool <em>Deposit</em></span><span>pool <i>→</i> rPEPP…Kq3Y <em>Paid</em></span><span>pool <i>→</i> rGEU…9c1 <em>App</em></span></div>
+          <div class="flow__row"><span>pool <i>→</i> rUvv…2Lp <em>App</em></span><span>rExc…h7W <i>→</i> pool <em>Deposit</em></span><span>pool <i>→</i> rN7d…Qm2 <em>Paid</em></span></div>
+          <div class="flow__row"><span>pool <i>→</i> rP3k…7Qa <em>App</em></span><span>rBk2…sQ9 <i>→</i> pool <em>Deposit</em></span><span>pool <i>→</i> rHb9…TJ4 <em>Paid</em></span></div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="final" aria-labelledby="final-title">
+    <div class="final__panel">
+      <div class="final__note" aria-hidden="true">
+        <span class="final__note-top"><img src="./logo.png" alt="" width="942" height="200"><em>Private note</em></span>
+        <span class="final__note-ring" data-dots="#070608"></span>
+        <span class="final__note-foot"><b>100 XRP</b><em>1 of 8 · spends once</em></span>
+      </div>
+      <div class="final__phone" aria-hidden="true"></div>
+      <canvas class="final__ring" aria-hidden="true"></canvas>
+      <div class="final__copy" data-reveal>
+        <h2 class="display final__title" id="final-title">Go<br> private.</h2>
+        <div class="actions">
+          <a class="btn btn--primary" href="/testnet/xrpl.html">Open the wallet</a>
+          <a class="btn btn--ghost" href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Try the demo app ↗</a>
+        </div>
+        <p class="fine">Testnet today. Test XRP has no value.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="duo" aria-label="Get started">
+    <article class="duo__card duo__card--orange" data-reveal>
+      <span class="duo__art" data-dots="#070608"></span>
+      <h2 class="display">Try it on testnet.</h2>
+      <p>Take 95 test XRP from the faucet, send some privately, then connect the demo app. Test XRP has no value, so nothing is at stake.</p>
+      <a class="btn btn--dark" href="/testnet/xrpl.html">Get test XRP</a>
+    </article>
+    <article class="duo__card duo__card--dark" data-reveal style="--d: 1">
+      <span class="duo__art" data-dots="#ff7a18"></span>
+      <h2 class="display">New to private payments?</h2>
+      <p>Follow one payment from deposit to app in five short scenes, told with eight dots.</p>
+      <a class="btn btn--primary" href="#story">Follow a payment</a>
+    </article>
   </section>
 </main>
 
 <footer class="footer">
-  <img src="./logo.png" alt="opaque" width="942" height="200">
-  <nav aria-label="Footer">
-    <a href="/testnet/xrpl.html">Wallet</a>
-    <a href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Demo app</a>
-    <a href="/testnet/privacy.html">Privacy</a>
-  </nav>
-  <p>Private payments on the XRP Ledger. © 2026 Opaque.</p>
+  <div class="footer__top">
+    <a class="footer__brand" href="#top" aria-label="opaque, back to top"><img src="./logo.png" alt="opaque" width="942" height="200"></a>
+    <nav class="footer__cols" aria-label="Footer">
+      <div><p class="footer__h">Wallet</p>
+        <a href="/testnet/xrpl.html">Open the wallet</a>
+        <a href="#story">How a payment hides</a>
+        <a href="#connect">An account per app</a>
+        <a href="#keys">Single-use keys</a>
+      </div>
+      <div><p class="footer__h">Get Opaque</p>
+        <a href="/testnet/xrpl.html">Web wallet</a>
+        <a href="/testnet/xrpl.html">On your phone</a>
+        <a href="/testnet/xrpl-connect.html">WalletConnect <span class="badge">New</span></a>
+        <a href="/testnet/opaque-xrpl-extension.zip" download>Browser extension <span class="badge">New</span></a>
+      </div>
+      <div><p class="footer__h">XRP Ledger</p>
+        <a href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer">Testnet explorer ↗</a>
+        <a href="https://xrpl.org/resources/dev-tools/xrp-faucets" target="_blank" rel="noopener noreferrer">XRPL faucets ↗</a>
+        <a href="https://xrpl.org" target="_blank" rel="noopener noreferrer">XRPL.org ↗</a>
+      </div>
+      <div><p class="footer__h">Opaque</p>
+        <a href="https://opaque-xrpl-demo.vercel.app" target="_blank" rel="noopener noreferrer">Demo app ↗</a>
+        <a href="https://www.opaque.credit">Opaque on Arc ↗</a>
+        <a href="/testnet/privacy.html">Privacy</a>
+      </div>
+    </nav>
+  </div>
+  <div class="footer__bottom"><p>Private payments on the XRP Ledger. © 2026 Opaque.</p><p>Runs on XRPL testnet.</p></div>
 </footer>
 
 <script type="module" src="./main.js"></script>

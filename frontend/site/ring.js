@@ -39,8 +39,9 @@ const APPS = [
   { angle: 1.57, name: 'Game', addr: 'rP3k…' },
 ];
 
-/** size: the ring's radius as a share of the canvas's shorter side; dot: a note's diameter as a share of that radius. */
-export function createRing(canvas, { reduced = false, size = 0.3, dot = 0.11, follow = false } = {}) {
+/** size: the ring's radius as a share of the canvas's shorter side; dot: a note's diameter as a share of that radius.
+ *  onDraw, if given, hears where every note is after each frame. */
+export function createRing(canvas, { reduced = false, size = 0.3, dot = 0.11, follow = false, onDraw = null } = {}) {
   const ctx = canvas.getContext('2d');
   const dots = Array.from({ length: N }, () => ({ x: 0, y: 0, s: 1, a: 1, g: 1, hl: 0, layers: 0, sq: 0, z: 0 }));
   const state = { scene: 'idle', p: 0, rot: 0, last: 0, pointer: null, theme: THEMES.dark, ready: false, running: false, frame: 0, followOn: follow, bloom: false };
@@ -291,6 +292,7 @@ export function createRing(canvas, { reduced = false, size = 0.3, dot = 0.11, fo
     const dotSize = g.R * dot;
     drawExtras(extras, th, dotSize);
     [...dots].sort((a, b) => b.z - a.z).forEach((d) => drawDot(d, dotSize, th));
+    onDraw?.({ dots, dotSize, cx: g.cx, cy: g.cy });
   }
 
   function step(now, stiffness) {
