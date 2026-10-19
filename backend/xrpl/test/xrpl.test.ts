@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 // The XRPL layer's rules, offline: crediting, the recipient binding, amounts,
 // and what an attester refuses to sign. The ledger itself is exercised by
 // spike.ts and e2e-payment.ts on testnet.
@@ -229,7 +230,7 @@ test('an attester refuses a spend before it ever signs', async () => {
 
 test('READ answers the allowlist only, and SUBMIT takes only a hex blob', async () => {
   const answer = createXrplAnswerer({
-    registerTag: async () => undefined, tagStatus: async () => ({ registered: false, notes: 0, carried: 0n }), isSpent: async () => false,
+    registerTag: async () => undefined, tagStatus: async () => ({ registered: false, notes: 0, carried: 0n, sizes: {}, owner: null }), isSpent: async () => false,
     read: async (command) => ({ answered: command }), submit: async () => ({ engine_result: 'tesSUCCESS' }),
   });
   const ask = async (operation: 'READ' | 'SUBMIT', request: unknown) =>
@@ -252,4 +253,40 @@ test('MPT amounts: integers in the token\'s own scale, credited by issuance id',
   assert.equal(unitsDelivered(MPT, POOL, { mpt_issuance_id: 'FF'.repeat(24), value: '250' }), null, 'another issuance');
   assert.equal(unitsDelivered(MPT, POOL, { currency: 'USD', issuer: ISSUER, value: '2.5' }), null, 'a trust-line token');
   assert.equal(unitsDelivered(MPT, POOL, '1000000'), null, 'XRP');
+});
+
+test('a reusable address takes more notes from its owner\'s next link, and from nobody else', async () => {
+  const h = (hex: string) => `0x${createHash('sha256').update(Buffer.from(hex.slice(2), 'hex')).digest('hex')}`;
+  const seed = `0x${'ab'.repeat(32)}`;
+  const chain = [seed];
+  for (let i = 0; i < 3; i++) chain.push(h(chain.at(-1)!));
+  const source = createPoolSource({
+    client: fakeLedger({ account_tx: () => ({ ledger_index_max: 50, transactions: [] }) }),
+    config: { account: POOL, asset: { kind: 'XRP' }, sizes: SIZES, deployedAtLedger: 10 },
+  });
+  await source.sync();
+  source.registerTag(500, { [String(XRP)]: [c(1)] }, { owner: chain[3]! });
+  assert.deepEqual(source.owner(500), { anchor: chain[3], depth: 0 });
+  assert.throws(() => source.registerTag(500, { [String(XRP)]: [c(2)] }), /already in use/, 'no proof, no top-up');
+  assert.throws(() => source.registerTag(500, { [String(XRP)]: [c(2)] }, { reveal: chain[1]! }), /next key/, 'a link further down is not the next one');
+  assert.throws(() => source.registerTag(500, { [String(XRP)]: [c(2)] }, { reveal: `0x${'cd'.repeat(32)}` }), /next key/);
+  source.registerTag(500, { [String(XRP)]: [c(2)] }, { reveal: chain[2]! });
+  assert.deepEqual(source.owner(500), { anchor: chain[2], depth: 1 });
+  assert.throws(() => source.registerTag(500, { [String(XRP)]: [c(3)] }, { reveal: chain[2]! }), /next key/, 'a used link is spent');
+  assert.deepEqual(source.registration(500)?.[String(XRP)], [c(1), c(2)], 'appended, in order');
+  source.registerTag(501, { [String(XRP)]: [c(9)] });
+  assert.throws(() => source.registerTag(501, { [String(XRP)]: [c(10)] }, { reveal: chain[1]! }), /only a reusable address/);
+  assert.throws(() => source.registerTag(500, { [String(XRP)]: [c(9)] }, { reveal: chain[1]! }), /another tag/, 'a top-up names only fresh commitments');
+  assert.deepEqual(source.owner(500), { anchor: chain[2], depth: 1 }, 'a refused top-up spends no link');
+  assert.throws(() => source.registerTag(502, { [String(XRP)]: [c(11)] }, { owner: 'not a hash' }), /32-byte hash/);
+});
+
+test('a top-up credits what a reusable address was carrying', () => {
+  const tags = new Map<number, Record<string, NoteCommitment[]>>([[77, { [String(XRP)]: [c(1)] }]]);
+  const payments = [pay({ tag: 77, units: 3n * BigInt(XRP) })];
+  assert.equal(creditDeposits(payments, SIZES, tags).carried.get(77), 2n * BigInt(XRP));
+  tags.set(77, { [String(XRP)]: [c(1), c(2), c(3)] });
+  const after = creditDeposits(payments, SIZES, tags);
+  assert.deepEqual(after.deposits.map((d) => d.commitment), [c(1), c(2), c(3)]);
+  assert.equal(after.carried.get(77), 0n);
 });

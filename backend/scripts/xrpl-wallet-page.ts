@@ -1,12 +1,15 @@
-// The browser tests' way into the XRPL wallet page (frontend/xrpl.html). A
+// The browser tests' way into the wallet pages (frontend/xrpl.html, app.html). A
 // fresh browser opens on onboarding, so a test makes its wallet as a person
 // would: reveal the phrase, tick that it is written down, type three words back.
 // Outside backend's typecheck, like the scripts that use it.
 
 const READY = () => document.getElementById('account-short')?.textContent === 'Notes in this browser';
 
+/** The Arc page (frontend/app.html) is ready once its runtime is. */
+export const ARC_READY = () => (globalThis as { opaque?: unknown }).opaque !== undefined;
+
 /** Creates a wallet from onboarding's first screen; returns its recovery phrase. */
-export async function createWallet(page: any, timeout = 90_000): Promise<string> {
+export async function createWallet(page: any, timeout = 90_000, ready: () => boolean = READY): Promise<string> {
   await page.waitForSelector('#ob-create', { state: 'visible', timeout });
   await page.click('#ob-create');
   await page.click('#ob-reveal');
@@ -15,7 +18,7 @@ export async function createWallet(page: any, timeout = 90_000): Promise<string>
   await page.click('#ob-next');
   for (const input of await page.$$('#ob-quiz input')) await input.fill(words[Number(await input.getAttribute('data-pos'))]!);
   await page.click('#ob-finish');
-  await page.waitForFunction(READY, null, { timeout });
+  await page.waitForFunction(ready, null, { timeout });
   return words.join(' ');
 }
 

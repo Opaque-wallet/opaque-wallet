@@ -23,7 +23,7 @@
 import { keccak_256 } from '@noble/hashes/sha3.js';
 // The codec alone, not xrpl: the wallet page imports this file, and xrpl.js
 // would bring 2 MB of confidential-MPT WebAssembly it never uses.
-import { decodeAccountID, encodeAccountID, isValidClassicAddress } from 'ripple-address-codec';
+import { classicAddressToXAddress, decodeAccountID, encodeAccountID, isValidClassicAddress } from 'ripple-address-codec';
 
 import { ProtocolFailure, type Address, type ChainId, type Denomination, type NoteCommitment, type Nullifier, type PoolScope } from '@opaque/protocol-types';
 import { asAddress, asChainId, asDenomination, asNoteCommitment, fromHex, toHex } from '@opaque/protocol-types/codecs.js';
@@ -170,3 +170,6 @@ export function unitsDelivered(asset: XrplAsset, pool: string, delivered: unknow
 }
 
 export type { Denomination };
+
+/** An address and its destination tag as one string (XLS-5), which most XRPL wallets and exchanges take. */
+export const xAddressOf = (account: string, tag: number, test: boolean): string => classicAddressToXAddress(account, tag, test);

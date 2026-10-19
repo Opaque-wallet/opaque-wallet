@@ -100,6 +100,11 @@ export interface NoteVaultDeps {
   readonly chain: ChainObserver;
   readonly newId?: () => string;
   readonly randomBytes?: (bytes: number) => Uint8Array;
+  /**
+   * A note's secret drawn from a recovery phrase, so the phrase can find the
+   * note again. It must never hand out the same secret twice for one pool.
+   */
+  readonly secretFor?: (scope: PoolScope) => Uint8Array;
 }
 
 export function memoryNoteStorage(seed: readonly StoredNote[] = []): NoteStorage {
@@ -183,7 +188,7 @@ export function createNoteVault(deps: NoteVaultDeps): NoteVault {
   return {
     async create(scope) {
       const validated = asPoolScope(scope);
-      const secret = createNoteSecret(deps.randomBytes);
+      const secret = deps.secretFor?.(validated) ?? createNoteSecret(deps.randomBytes);
       // §6.2 proves THIS derivation. Hashing our own commitment here would
       // produce a note no ring proof could ever open.
       const commitment = deriveCommitment(secret, validated);

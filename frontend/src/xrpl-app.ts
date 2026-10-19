@@ -7,8 +7,9 @@ import { isAccount } from '../../backend/xrpl/protocol.ts';
 import { xrplDeployment } from '../../deployments/xrpl.ts';
 import { networkPicker } from './lib/network-picker.ts';
 import { paymentDeadline } from './lib/payment-deadline.ts';
-import { hasBrowserWallet, poolBySymbol, startXrplWallet, symbolOf, UNIT, type ReceiveTag, type Sent, type XrplWallet } from './lib/xrpl-runtime.ts';
-import { accountKeys, accountKeyText, accountLabel, activeAccount, importAccountKey, importedAccounts, isAccountKeyText, isPhrase, newPhrase, normalizePhrase, savePhrase, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
+import { cachedAddress, hasBrowserWallet, poolBySymbol, startXrplWallet, symbolOf, UNIT, type ReceiveTag, type ReusableAddress, type Sent, type XrplWallet } from './lib/xrpl-runtime.ts';
+import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
+import { copy, idOf, markOf, openOnboarding, setupWalletScreens } from './lib/wallet-ui.ts';
 import type { SweepPlan } from '../../backend/xrpl/sweep.ts';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -20,22 +21,27 @@ const setStatus = (id: string, message: string) => { el(id).textContent = messag
 const units = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 const feeOf = (symbol: string) => Number(poolBySymbol(symbol).spendFee) / UNIT;
 const explorerTx = (hash: string) => `${xrplDeployment.network.explorer}/transactions/${hash}`;
+const still = matchMedia('(prefers-reduced-motion: reduce)');
+/** The balance counts to its new value; a first value, or reduced motion, just appears. */
+function countTo(node: HTMLElement, value: number): void {
+  const from = Number(node.dataset['value']);
+  node.dataset['value'] = String(value);
+  if (!Number.isFinite(from) || from === value || still.matches) { node.textContent = units(value); return; }
+  const start = performance.now();
+  const step = (now: number) => {
+    const k = Math.min(1, (now - start) / 650), eased = 1 - (1 - k) ** 3;
+    node.textContent = k < 1 ? units(Math.round((from + (value - from) * eased) * 100) / 100) : units(value);
+    if (k < 1 && node.dataset['value'] === String(value)) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+/** A token's badge: its first letter, in its own shade of the palette. */
+const badge = (symbol: string) => `<i class="tok tok-${symbol.replace(/^t/, '').toLowerCase()}">${symbol.replace(/^t/, '')[0]}</i>`;
 
 let wallet: XrplWallet;
 let current: ReceiveTag | undefined;
 /** The account open now: one of the phrase's, the browser wallet, or none before onboarding. */
 let account: AccountKeys | 'browser' | null = null;
-const idOf = (a: AccountKeys | 'browser') => (a === 'browser' ? 'browser' : a.id);
-
-/** The ring of eight with one note larger: which one tells the accounts apart (none, the browser wallet). */
-function markOf(index: number): string {
-  const dots = Array.from({ length: 8 }, (_, i) => {
-    const a = (i * Math.PI) / 4 - Math.PI / 2, lead = i === index % 8;
-    return `<circle cx="${(20 + 13 * Math.cos(a)).toFixed(2)}" cy="${(20 + 13 * Math.sin(a)).toFixed(2)}" r="${lead ? 4.8 : 3.4}"${lead || index < 0 ? '' : ' opacity=".6"'}/>`;
-  }).join('');
-  return `<svg viewBox="0 0 40 40" aria-hidden="true"><g fill="#070608">${dots}</g></svg>`;
-}
-
 // ── views ─────────────────────────────────────────────────────────────────
 type View = 'home' | 'send' | 'receive' | 'activity' | 'apps';
 const VIEWS = ['home', 'send', 'receive', 'activity', 'apps'] as const;
@@ -46,7 +52,7 @@ function showView(name: View): void {
   }
   window.scrollTo(0, 0);
   if (name === 'activity') void renderActivity(true);
-  if (name === 'receive') void renderTags();
+  if (name === 'receive') { void renderTags(); void renderAddress(); }
   if (name === 'apps') renderSites();
 }
 
@@ -109,27 +115,33 @@ async function onCloseSite(origin: string, button: HTMLButtonElement): Promise<v
 async function renderBalances(notes?: readonly NoteSummary[]): Promise<void> {
   const all = notes ?? await wallet.notes();
   const rows: HTMLElement[] = [];
+  const chips: HTMLElement[] = [];
   for (const p of wallet.pools) {
     const held = all.filter((n) => n.state === 'AVAILABLE' && symbolOf(n.scope) === p.symbol);
     const total = held.reduce((s, n) => s + n.scope.denomination / UNIT, 0);
     const row = document.createElement('div');
     row.className = 'asset';
     const sizes = p.sizes.map((s) => `${held.filter((n) => n.scope.denomination === s).length}×${s / UNIT}`).join(' · ');
-    row.innerHTML = '<i></i><span><b></b><small></small></span><span class="asset-value"><b></b><small></small></span>';
-    row.querySelector('i')!.textContent = p.symbol === 'XRP' ? '✕' : '$';
+    row.innerHTML = `${badge(p.symbol)}<span><b></b><small></small></span><span class="asset-value"><b></b><small></small></span>`;
     row.querySelector('span > b')!.textContent = p.symbol;
     row.querySelector('span > small')!.textContent = { XRP: 'XRP Ledger native', IOU: 'Trust-line token', MPT: 'Multi-Purpose Token' }[p.asset.kind];
     row.querySelector('.asset-value b')!.textContent = `${units(total)} ${p.symbol}`;
     row.querySelector('.asset-value small')!.textContent = `${held.length} notes (${sizes})`;
     rows.push(row);
+    const chip = document.createElement('span');
+    chip.className = `chip${total > 0 ? ' on' : ''}`;
+    chip.innerHTML = `${badge(p.symbol)}<b></b>`;
+    chip.querySelector('b')!.textContent = total > 0 ? `${units(total)} ${p.symbol}` : p.symbol;
+    chips.push(chip);
     if (p.symbol === 'XRP') {
-      el('balance-main').textContent = units(total);
+      countTo(el('balance-main'), total);
       el('note-count').textContent = `${held.length} private ${held.length === 1 ? 'note' : 'notes'} in this browser`;
       if (account !== null) saveWalletState({ balances: { ...walletState().balances, [idOf(account)]: total } });
       el('promo').hidden = !promoWanted || held.length > 0;
     }
   }
   el('assets').replaceChildren(...rows);
+  el('hero-assets').replaceChildren(...chips);
 }
 
 async function refresh(deep = false): Promise<void> {
@@ -234,6 +246,49 @@ async function onSend(event: SubmitEvent): Promise<void> {
 }
 
 // ── receive ───────────────────────────────────────────────────────────────
+/** The account's reusable address for the asset picked: made the first time, then the same every time. */
+let shown: ReusableAddress | undefined;
+const shortX = (x: string) => `${x.slice(0, 8)}…${x.slice(-6)}`;
+async function renderAddress(): Promise<void> {
+  const symbol = el<HTMLSelectElement>('receive-asset').value;
+  el('address-symbol').textContent = symbol;
+  const keyed = account !== null && account !== 'browser';
+  el('address-card').hidden = !keyed;
+  el('address-none').hidden = keyed;
+  if (!keyed) return;
+  shown = undefined;
+  for (const id of ['address-x', 'address-pool', 'address-tag']) el(id).textContent = id === 'address-x' ? 'Making your address…' : '—';
+  el('address-faucet').hidden = true;
+  try {
+    const a = await wallet.address(symbol);
+    if (a === null || el<HTMLSelectElement>('receive-asset').value !== symbol) return;
+    shown = a;
+    el('address-x').textContent = a.xAddress;
+    el('address-pool').textContent = a.pool;
+    el('address-tag').textContent = String(a.tag);
+    el('address-faucet').hidden = !(symbol === 'XRP' && xrplDeployment.network.name === 'xrpl-testnet');
+    setStatus('address-status', '');
+  } catch (error) {
+    el('address-x').textContent = 'Not ready yet';
+    setStatus('address-status', `Could not make your address: ${(error as Error).message}`);
+  }
+}
+async function onAddressFaucet(): Promise<void> {
+  if (shown === undefined) return;
+  const a = shown;
+  el<HTMLButtonElement>('address-faucet').disabled = true;
+  setStatus('address-status', 'Asking the testnet faucet to pay your address, through the mesh…');
+  try {
+    const { xrp } = await wallet.faucet({ symbol: a.symbol, pool: a.pool, tag: a.tag, createdAt: Date.now() });
+    setStatus('address-status', `The faucet paid ${xrp} XRP to your address. Your notes appear on Home within seconds.`);
+    await refresh(true);
+  } catch (error) {
+    setStatus('address-status', `Faucet unavailable: ${(error as Error).message}`);
+  } finally {
+    el<HTMLButtonElement>('address-faucet').disabled = false;
+  }
+}
+
 async function onReceive(): Promise<void> {
   const symbol = el<HTMLSelectElement>('receive-asset').value;
   const expected = Number(el<HTMLInputElement>('receive-expected').value || '0');
@@ -344,45 +399,6 @@ async function renderActivity(poll = false): Promise<void> {
   }));
 }
 
-// ── accounts: the phrase's, and the browser wallet from before phrases ─────
-function renderAccounts(): void {
-  const phrase = storedPhrase();
-  const { count, balances } = walletState();
-  const row = (key: AccountKeys | 'browser'): HTMLElement => {
-    const open = account !== null && idOf(account) === idOf(key);
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = `account-row${key === 'browser' ? ' browser' : key.imported !== undefined ? ' imported' : ''}`;
-    b.setAttribute('aria-current', String(open));
-    b.innerHTML = `<span class="mark">${markOf(key === 'browser' ? -1 : key.index)}</span><span><b></b><small></small></span><span class="balance-cell"></span>`;
-    b.querySelector('b')!.textContent = accountLabel(key);
-    b.querySelector('small')!.textContent = key === 'browser' ? 'This browser only, backed up by file' : open ? 'Open now' : key.imported !== undefined ? 'Brought in by its key' : 'From your recovery phrase';
-    const balance = balances[idOf(key)];
-    b.querySelector('.balance-cell')!.textContent = balance === undefined ? '' : `${units(balance)} XRP`;
-    // Each account is a wallet of its own: opening one starts it afresh.
-    b.addEventListener('click', () => {
-      if (open) return;
-      saveWalletState({ active: key === 'browser' ? 'browser' : key.imported !== undefined ? `imported:${key.imported}` : key.index });
-      location.reload();
-    });
-    return b;
-  };
-  const rows: HTMLElement[] = [];
-  if (phrase !== null) for (let n = 0; n < count; n++) rows.push(row(accountKeys(phrase, n)));
-  const imported = importedAccounts();
-  if (imported.length > 0) rows.push(Object.assign(document.createElement('p'), { className: 'eyebrow list-label', textContent: 'Imported accounts' }), ...imported.map(row));
-  if (hasBrowserWallet()) rows.push(row('browser'));
-  el('account-list').replaceChildren(...rows);
-  el('account-add').hidden = phrase === null;
-  el('phrase-box').hidden = phrase === null;
-  el('phrase-setup-box').hidden = phrase !== null;
-  el('account-rescan').hidden = account === 'browser';
-  el('key-box').hidden = account === null || account === 'browser';
-  el('key-text').hidden = true;
-  el('key-copy').hidden = true;
-  el('key-show').textContent = 'Show account key';
-}
-
 /** The first time an imported phrase's account opens: its notes from the ledger, and (for Account 1) its other accounts. */
 async function recoverIfImported(keys: AccountKeys): Promise<void> {
   const state = walletState();
@@ -401,132 +417,6 @@ async function recoverIfImported(keys: AccountKeys): Promise<void> {
   saveWalletState({ count: Math.max(count, walletState().count), scanned: { ...walletState().scanned, [keys.id]: true } });
   const others = count - 1;
   progress(`Found ${kept} ${kept === 1 ? 'note' : 'notes'} of ${accountLabel(keys)} on the ledger${others > 0 ? `, and ${others} more ${others === 1 ? 'account' : 'accounts'} of this phrase` : ''}.`);
-}
-
-// ── onboarding: a new wallet, or one brought from elsewhere ───────────────
-let draft = '';
-/** Opened from inside a browser wallet: going back returns to it. */
-let fromWallet = false;
-const obStep = (id: string) => { for (const step of document.querySelectorAll<HTMLElement>('.ob-step')) step.hidden = step.id !== id; window.scrollTo(0, 0); };
-
-function openOnboarding(step: 'ob-welcome' | 'ob-show', inWallet = false): void {
-  fromWallet = inWallet;
-  document.body.classList.add('onboarding');
-  for (const v of VIEWS) el(`view-${v}`).hidden = true;
-  el('onboard').hidden = false;
-  if (step === 'ob-show') startDraft(); else obStep(step);
-}
-
-function startDraft(): void {
-  draft = newPhrase();
-  el('ob-words').replaceChildren(...draft.split(' ').map((w) => Object.assign(document.createElement('li'), { textContent: w })));
-  el('ob-words').classList.add('is-hidden');
-  el('ob-reveal').hidden = false;
-  Object.assign(el<HTMLInputElement>('ob-saved'), { checked: false, disabled: true });
-  el<HTMLButtonElement>('ob-next').disabled = true;
-  obStep('ob-show');
-}
-
-function setupOnboarding(): void {
-  el('ob-create').addEventListener('click', startDraft);
-  el('ob-import').addEventListener('click', () => obStep('ob-restore'));
-  for (const b of document.querySelectorAll<HTMLElement>('[data-ob]')) {
-    b.addEventListener('click', () => (fromWallet && b.dataset['ob'] === 'ob-welcome' ? location.reload() : obStep(b.dataset['ob']!)));
-  }
-  el('ob-reveal').addEventListener('click', () => {
-    el('ob-words').classList.remove('is-hidden');
-    el('ob-reveal').hidden = true;
-    el<HTMLInputElement>('ob-saved').disabled = false;
-  });
-  el('ob-saved').addEventListener('change', () => { el<HTMLButtonElement>('ob-next').disabled = !el<HTMLInputElement>('ob-saved').checked; });
-  el('ob-next').addEventListener('click', () => {
-    // Three of the twelve places, picked at random, asked in order.
-    const places = [...crypto.getRandomValues(new Uint32Array(12))].map((r, i) => [r, i] as const)
-      .sort((a, b) => a[0] - b[0]).slice(0, 3).map(([, i]) => i).sort((a, b) => a - b);
-    el('ob-quiz').replaceChildren(...places.map((i) => {
-      const label = document.createElement('label');
-      label.className = 'field';
-      label.htmlFor = `ob-q-${i}`;
-      label.innerHTML = `<span>Word ${i + 1}</span><input id="ob-q-${i}" data-pos="${i}" class="mono" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">`;
-      return label;
-    }));
-    setStatus('ob-confirm-status', '');
-    obStep('ob-confirm');
-  });
-  el('ob-finish').addEventListener('click', () => {
-    const words = draft.split(' ');
-    for (const input of el('ob-quiz').querySelectorAll<HTMLInputElement>('input')) {
-      const place = Number(input.dataset['pos']);
-      if (normalizePhrase(input.value) !== words[place]) {
-        setStatus('ob-confirm-status', `That isn't word ${place + 1}. Check what you wrote down.`);
-        input.focus();
-        return;
-      }
-    }
-    // A browser wallet with notes stays open; the phrase's Account 1 waits in the account list.
-    savePhrase(draft, false, hasBrowserWallet() ? 'browser' : 0);
-    location.reload();
-  });
-  el('ob-restore-go').addEventListener('click', () => {
-    const text = el<HTMLTextAreaElement>('ob-phrase').value;
-    if (isAccountKeyText(text)) {
-      try { importAccountKey(text); } catch (error) { setStatus('ob-restore-status', `Not imported: ${(error as Error).message}.`); return; }
-      location.reload();
-      return;
-    }
-    if (!isPhrase(text)) { setStatus('ob-restore-status', 'That is neither the 12 words of a recovery phrase nor an account key (opq1…): check the spelling and the order.'); return; }
-    if (storedPhrase() !== null) { setStatus('ob-restore-status', 'This wallet has a recovery phrase already. To bring in one account of another wallet, use that account\'s key (opq1…).'); return; }
-    savePhrase(text, true, 0);
-    location.reload();
-  });
-}
-
-function setupAccounts(): void {
-  const openAccounts = () => { renderAccounts(); el<HTMLDialogElement>('account-dialog').showModal(); };
-  el('account-button').addEventListener('click', openAccounts);
-  el('menu-button').addEventListener('click', openAccounts);
-  el('account-add').addEventListener('click', () => {
-    const { count } = walletState();
-    saveWalletState({ count: count + 1, active: count });
-    location.reload();
-  });
-  el('phrase-show').addEventListener('click', () => {
-    const list = el('phrase-words');
-    const showing = list.hidden;
-    list.replaceChildren(...(showing ? (storedPhrase() ?? '').split(' ').map((w) => Object.assign(document.createElement('li'), { textContent: w })) : []));
-    list.hidden = !showing;
-    el('phrase-show').textContent = showing ? 'Hide recovery phrase' : 'Show recovery phrase';
-  });
-  el('account-rescan').addEventListener('click', () => void (async () => {
-    const button = el<HTMLButtonElement>('account-rescan');
-    button.disabled = true;
-    try {
-      const kept = await wallet.recover((line) => setStatus('phrase-status', line));
-      setStatus('phrase-status', kept === 0 ? 'Nothing new on the ledger.' : `Found ${kept} more ${kept === 1 ? 'note' : 'notes'}.`);
-      await renderBalances();
-    } catch (error) {
-      setStatus('phrase-status', `Could not rescan: ${(error as Error).message}`);
-    } finally {
-      button.disabled = false;
-    }
-  })());
-  el('account-import').addEventListener('click', () => {
-    el<HTMLDialogElement>('account-dialog').close();
-    openOnboarding('ob-welcome', true);
-    obStep('ob-restore');
-  });
-  el('key-show').addEventListener('click', () => {
-    if (account === null || account === 'browser') return;
-    const showing = el('key-text').hidden;
-    el('key-text').textContent = showing ? accountKeyText(account) : '';
-    el('key-text').hidden = !showing;
-    el('key-copy').hidden = !showing;
-    el('key-show').textContent = showing ? 'Hide account key' : 'Show account key';
-  });
-  el('key-copy').addEventListener('click', () => void navigator.clipboard.writeText(el('key-text').textContent ?? ''));
-  const setUp = () => { el<HTMLDialogElement>('account-dialog').close(); openOnboarding('ob-show', true); };
-  el('phrase-setup').addEventListener('click', setUp);
-  el('phrase-card-go').addEventListener('click', setUp);
 }
 
 // ── an ordinary XRPL wallet, swept in ─────────────────────────────────────
@@ -597,7 +487,7 @@ async function onBackupImport(file: File): Promise<void> {
 
 // ── wiring ────────────────────────────────────────────────────────────────
 async function init(): Promise<void> {
-  networkPicker(el<HTMLSelectElement>('network-switch'), 'xrpl');
+  networkPicker(el<HTMLButtonElement>('network-switch'), 'xrpl');
   el('account-network').textContent = xrplDeployment.network.displayName;
   for (const v of VIEWS) el(`tab-${v}`).addEventListener('click', () => showView(v));
   for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => showView('home'));
@@ -605,6 +495,14 @@ async function init(): Promise<void> {
   el('action-receive').addEventListener('click', () => showView('receive'));
   el('action-apps').addEventListener('click', () => showView('apps'));
   el('action-activity').addEventListener('click', () => showView('activity'));
+  el('action-sweep').addEventListener('click', () => el('sweep-open').click());
+  el('action-accounts').addEventListener('click', () => el('account-button').click());
+  // The balance card catches the light where the pointer is.
+  el('hero').addEventListener('pointermove', (e) => {
+    const r = el('hero').getBoundingClientRect();
+    el('hero').style.setProperty('--mx', `${e.clientX - r.left}px`);
+    el('hero').style.setProperty('--my', `${e.clientY - r.top}px`);
+  });
   for (const [tab] of HOME_TABS) el(tab).addEventListener('click', () => showHomeTab(tab));
   setupPromo();
   el('backup-export').addEventListener('click', () => void onBackupExport());
@@ -614,8 +512,20 @@ async function init(): Promise<void> {
     if (file) void onBackupImport(file);
   });
 
-  setupOnboarding();
-  setupAccounts();
+  setupWalletScreens({
+    views: VIEWS, account: () => account, hasBrowserWallet, where: 'on the ledger',
+    browserNote: 'This browser only, backed up by file',
+    addressOf: (key) => cachedAddress(key.id, 'XRP')?.xAddress ?? null,
+    shortAddress: shortX,
+    // Only the open account's: making an address registers its tag with the pool.
+    fillAddresses: async (keys) => {
+      if (account === null || account === 'browser' || !keys.some((k) => k.id === (account as AccountKeys).id)) return false;
+      await wallet.address('XRP');
+      return true;
+    },
+    balanceOf: (key) => { const b = walletState().balances[key === 'browser' ? 'browser' : key.id]; return b === undefined ? '' : `${units(b)} XRP`; },
+    rescan: async (progress) => { const kept = await wallet.recover(progress); await renderBalances(); return kept; },
+  });
   account = activeAccount(hasBrowserWallet());
   // Nothing to open yet: a new wallet, or one brought from elsewhere.
   if (account === null) { openOnboarding('ob-welcome'); return; }
@@ -644,10 +554,15 @@ async function init(): Promise<void> {
   el('wait-for-privacy').addEventListener('change', syncPrivacyWait);
   el<HTMLFormElement>('send-form').addEventListener('submit', (e) => void onSend(e));
   el('receive-button').addEventListener('click', () => void onReceive());
+  el('receive-asset').addEventListener('change', () => void renderAddress());
+  el('address-copy').addEventListener('click', () => { if (shown) copy(shown.xAddress, 'Address'); });
+  el('address-copy-pool').addEventListener('click', () => { if (shown) copy(shown.pool, 'Classic address'); });
+  el('address-copy-tag').addEventListener('click', () => { if (shown) copy(String(shown.tag), 'Destination tag'); });
+  el('address-faucet').addEventListener('click', () => void onAddressFaucet());
   el('buy-button').addEventListener('click', () => void onBuy());
   el('faucet-button').addEventListener('click', () => void onFaucet());
-  el('copy-address').addEventListener('click', () => void navigator.clipboard.writeText(current?.pool ?? ''));
-  el('copy-tag').addEventListener('click', () => void navigator.clipboard.writeText(String(current?.tag ?? '')));
+  el('copy-address').addEventListener('click', () => copy(current?.pool ?? '', 'Address'));
+  el('copy-tag').addEventListener('click', () => copy(String(current?.tag ?? ''), 'Destination tag'));
   el('refresh').addEventListener('click', () => void refresh(true));
   el('refresh-tags').addEventListener('click', () => void renderTags());
   setupSweep();

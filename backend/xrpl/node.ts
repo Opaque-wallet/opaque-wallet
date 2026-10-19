@@ -22,7 +22,7 @@ import { xrplDeployment, type XrplPoolDeployment } from '../../deployments/xrpl.
 import { checkoutUrl, type CheckoutConfig } from '../onramp/moonpay.ts';
 import { verifierId } from '../zk/index.ts';
 import { createAttester, type Attester, type XrplPool } from './attester.ts';
-import { createPoolSource, ringSnapshotOf, type TagRegistration } from './pool.ts';
+import { createPoolSource, ringSnapshotOf, type TagAuth, type TagRegistration } from './pool.ts';
 import { accountOf, scopeOf, type XrplAsset } from './protocol.ts';
 import { createXrplAnswerer, type XrplSend } from './queries.ts';
 import { createXrplSettlement, type XrplSettlement } from './settlement.ts';
@@ -75,12 +75,18 @@ export function xrplAnswerer(node: XrplNode, moonpay?: CheckoutConfig): XrplSend
   // ponytail: one faucet call at a time, since the faucet limits by IP; a queue if testnet traffic grows.
   let fauceting = false;
   return createXrplAnswerer({
-    registerTag: (pool, tag, registration) => node.registerTag(pool, tag, registration),
+    registerTag: (pool, tag, registration, auth) => node.registerTag(pool, tag, registration, auth),
     async tagStatus(pool, tag) {
       const source = sourceOf(pool);
       await source.sync();
       const log = source.log();
-      return { registered: source.registered(tag), notes: log.deposits.filter((d) => d.tag === tag).length, carried: log.carried.get(tag) ?? 0n };
+      const mine = log.deposits.filter((d) => d.tag === tag);
+      const registration = source.registration(tag) ?? {};
+      // Counts only: which commitments a tag holds is between its owner and the pool.
+      const sizes = Object.fromEntries(source.config.sizes.map((size) => [String(size), {
+        registered: registration[String(size)]?.length ?? 0, credited: mine.filter((d) => d.denomination === size).length,
+      }]));
+      return { registered: source.registered(tag), notes: mine.length, carried: log.carried.get(tag) ?? 0n, sizes, owner: source.owner(tag) ?? null };
     },
     isSpent: (pool, nullifier) => sourceOf(pool).isSpent(nullifier),
     read: (command, params) => nodeLedger(node.client).request(command, params),
@@ -126,7 +132,7 @@ export interface XrplNode {
   readonly attesters: readonly Attester[];
   readonly settlement: XrplSettlement;
   ringSnapshot(scope: PoolScope): Promise<RingSnapshot>;
-  registerTag(pool: string, tag: number, registration: TagRegistration): Promise<void>;
+  registerTag(pool: string, tag: number, registration: TagRegistration, auth?: TagAuth): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -178,12 +184,12 @@ export async function startXrpl(options: { readonly dir?: string; readonly log?:
         now: BigInt(Math.floor(Date.now() / 1000)) as UnixSeconds,
       });
     },
-    async registerTag(pool, tag, registration) {
+    async registerTag(pool, tag, registration, auth) {
       const source = pools.get(pool)?.source;
       if (source === undefined) throw new ProtocolFailure('INVALID_INPUT', 'no XRPL pool at that address');
       // Current first: a tag that was paid since the last read is refused.
       await source.sync();
-      source.registerTag(tag, registration);
+      source.registerTag(tag, registration, auth);
     },
     close: () => client.disconnect(),
   };

@@ -17,8 +17,17 @@
 // The log is a pure function of (payments in ledger order, tag table), so two
 // attesters with the same registrations compute the same log. A registration
 // that arrived late could credit a payment someone else made, so a tag that has
-// already received anything is refused (registerTag).
+// already received anything is refused (registerTag), unless its owner adds to it.
+//
+// A REUSABLE ADDRESS is a tag with an owner: registered with the end of a
+// SHA-256 hash chain (the anchor), it takes more commitments only from whoever
+// reveals the anchor's preimage, which then becomes the anchor. The address is
+// public, so without this anyone could append their own commitments and catch
+// its payments. Hashes only: nothing here a quantum computer breaks.
+// Commitments are appended per size, so a payment's credits never move and a
+// carried remainder is credited as soon as there are notes for it.
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 import type { Client } from 'xrpl';
@@ -49,6 +58,10 @@ export interface Deposit {
 
 /** Per note size (as a decimal string of units), the commitments to credit, in order. */
 export type TagRegistration = Readonly<Record<string, readonly NoteCommitment[]>>;
+/** A reusable tag's owner: the current end of its hash chain, and how many top-ups it has taken. */
+export interface TagOwner { readonly anchor: string; readonly depth: number }
+/** A first registration may name an owner; a top-up reveals the next link instead. */
+export type TagAuth = { readonly owner: string } | { readonly reveal: string };
 
 export interface DepositLog {
   readonly deposits: readonly Deposit[];
@@ -63,6 +76,10 @@ const MAX_TAG = 0xffff_ffff;
 /** Per registration. A wallet asks for 9 of each smaller size and a few of the largest. */
 export const MAX_REGISTERED = 64;
 const MAX_TAGS = 100_000;
+/** One reusable tag's commitments, all top-ups together. */
+const MAX_TAG_NOTES = 4096 * MAX_REGISTERED;
+const HASH = /^0x[0-9a-f]{64}$/;
+const sha256Hex = (hex: string) => `0x${createHash('sha256').update(Buffer.from(hex.slice(2), 'hex')).digest('hex')}`;
 
 const refuse = (message: string): never => { throw new ProtocolFailure('INVALID_INPUT', message); };
 
@@ -182,8 +199,10 @@ export interface PoolSource {
   sync(): Promise<void>;
   log(): DepositLog;
   indexedThrough(): number;
-  registerTag(tag: number, registration: TagRegistration): void;
+  registerTag(tag: number, registration: TagRegistration, auth?: TagAuth): void;
   registered(tag: number): boolean;
+  registration(tag: number): TagRegistration | undefined;
+  owner(tag: number): TagOwner | undefined;
   /** The ledger's answer: does the pool hold a credential for this nullifier? */
   isSpent(nullifier: Nullifier): Promise<boolean>;
   /** Counts each member of a ring an attester verified, for decoy selection's reuse limit. */
@@ -205,6 +224,16 @@ export function createPoolSource(options: { readonly client: Client; readonly co
       ? Object.entries(JSON.parse(readFileSync(options.tagFile, 'utf8')) as Record<string, TagRegistration>).map(([t, r]) => [Number(t), r])
       : [],
   );
+  const ownerFile = options.tagFile?.replace(/\.json$/, '.owners.json');
+  const owners = new Map<number, TagOwner>(
+    ownerFile !== undefined && existsSync(ownerFile)
+      ? Object.entries(JSON.parse(readFileSync(ownerFile, 'utf8')) as Record<string, TagOwner>).map(([t, o]) => [Number(t), o])
+      : [],
+  );
+  const persist = () => {
+    if (options.tagFile !== undefined) writeFileSync(options.tagFile, JSON.stringify(Object.fromEntries(tags)), { mode: 0o600 });
+    if (ownerFile !== undefined) writeFileSync(ownerFile, JSON.stringify(Object.fromEntries(owners)), { mode: 0o600 });
+  };
   const rings = new Map<string, number>();
   let through = config.deployedAtLedger - 1;
   let current: DepositLog = creditDeposits([], config.sizes, tags);
@@ -246,12 +275,20 @@ export function createPoolSource(options: { readonly client: Client; readonly co
     },
     log: () => current,
     indexedThrough: () => through,
-    registerTag(tag, registration) {
+    registerTag(tag, registration, auth) {
       if (!Number.isInteger(tag) || tag <= INVOICE_TAG || tag > MAX_TAG) refuse('a tag is 1 to 2^32-1; 0 is for InvoiceID deposits');
-      if (tags.has(tag) || tagsSeen.has(tag)) refuse('that tag is already in use; pick another');
-      // Anyone can register through the mesh, so the table is bounded.
-      // ponytail: a hard cap; expire tags that were never paid if it is reached.
-      if (tags.size >= MAX_TAGS) refuse('this pool takes no new tags right now');
+      const topUp = auth !== undefined && 'reveal' in auth;
+      if (topUp) {
+        const owner = owners.get(tag);
+        if (owner === undefined) refuse('only a reusable address takes more notes');
+        if (typeof auth.reveal !== 'string' || !HASH.test(auth.reveal) || sha256Hex(auth.reveal) !== owner!.anchor) refuse('that is not this address\'s next key');
+      } else {
+        if (tags.has(tag) || tagsSeen.has(tag)) refuse('that tag is already in use; pick another');
+        // Anyone can register through the mesh, so the table is bounded.
+        // ponytail: a hard cap; expire tags that were never paid if it is reached.
+        if (tags.size >= MAX_TAGS) refuse('this pool takes no new tags right now');
+        if (auth !== undefined && (typeof auth.owner !== 'string' || !HASH.test(auth.owner))) refuse('an owner is a 32-byte hash');
+      }
       const fresh = new Set<string>();
       let count = 0;
       for (const [size, list] of Object.entries(registration)) {
@@ -267,11 +304,25 @@ export function createPoolSource(options: { readonly client: Client; readonly co
       }
       if (count === 0 || count > MAX_REGISTERED) refuse(`a registration names 1 to ${MAX_REGISTERED} commitments`);
       for (const r of tags.values()) for (const list of Object.values(r)) if (list.some((c) => fresh.has(c))) refuse('a commitment is already registered to another tag');
-      tags.set(tag, registration);
-      if (options.tagFile !== undefined) writeFileSync(options.tagFile, JSON.stringify(Object.fromEntries(tags)), { mode: 0o600 });
+      if (topUp) {
+        const before = tags.get(tag)!;
+        const total = Object.values(before).reduce((n, l) => n + l.length, 0) + count;
+        if (total > MAX_TAG_NOTES) refuse('this address holds all the notes it can');
+        // Appended per size: earlier payments keep the notes they were credited.
+        const merged: Record<string, readonly NoteCommitment[]> = { ...before };
+        for (const [size, list] of Object.entries(registration)) merged[size] = [...(before[size] ?? []), ...list];
+        tags.set(tag, merged);
+        owners.set(tag, { anchor: (auth as { reveal: string }).reveal, depth: owners.get(tag)!.depth + 1 });
+      } else {
+        tags.set(tag, registration);
+        if (auth !== undefined) owners.set(tag, { anchor: (auth as { owner: string }).owner, depth: 0 });
+      }
+      persist();
       recompute();
     },
     registered: (tag) => tags.has(tag),
+    registration: (tag) => tags.get(tag),
+    owner: (tag) => owners.get(tag),
     async isSpent(nullifier) {
       const response = await client.request({
         command: 'ledger_entry', ledger_index: 'validated',

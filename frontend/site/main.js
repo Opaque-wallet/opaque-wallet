@@ -311,16 +311,21 @@ const setSheet = (on) => { nav.toggleAttribute('data-sheet', on); toggle.setAttr
 toggle.addEventListener('click', () => setSheet(!nav.hasAttribute('data-sheet')));
 nav.addEventListener('click', (e) => { if (e.target.closest('.menu__sheet a')) { openMenu(null); setSheet(false); } });
 document.addEventListener('click', (e) => { if (!nav.contains(e.target)) { openMenu(null); setSheet(false); } });
-// In-page links scroll without leaving a #fragment in the address bar. The skip
-// link keeps the browser's own jump, which also moves keyboard focus.
+// In-page links scroll without leaving a #fragment in the address bar; the logo
+// (href "/") scrolls to the top instead of reloading. The skip link keeps the
+// browser's own jump, which also moves keyboard focus.
 document.addEventListener('click', (e) => {
-  const a = e.target.closest('a[href^="#"]:not(.skip)');
-  const id = a?.getAttribute('href').slice(1);
-  const target = id === 'top' ? document.documentElement : id && document.getElementById(id);
+  const a = e.target.closest('a[href="/"], a[href^="#"]:not(.skip)');
+  const href = a?.getAttribute('href');
+  const target = href === '/' ? document.documentElement : href && document.getElementById(href.slice(1));
   if (!target) return;
   e.preventDefault();
-  if (id === 'top') scrollTo(0, 0); else target.scrollIntoView();
+  if (href === '/') scrollTo(0, 0); else target.scrollIntoView();
 });
+// A link that arrives with a #section still lands there; then the address drops it.
+const dropHash = () => history.replaceState(null, '', location.pathname + location.search);
+if (location.hash) addEventListener('load', dropHash, { once: true });
+addEventListener('hashchange', dropHash);
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const open = triggers.find((t) => t.getAttribute('aria-expanded') === 'true');

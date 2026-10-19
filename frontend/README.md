@@ -34,7 +34,7 @@ Nothing in the wallet is simulated. [`src/lib/runtime.ts`](src/lib/runtime.ts) b
 ```
 frontend/
 ├── app.html                    # Wallet, and the extension's side panel
-├── app.css                     # Page styles
+├── wallet.css                  # Every wallet page's styles (Arc and XRPL)
 ├── styles.css, fonts.css       # Design tokens, and fonts served from this origin
 ├── src/
 │   ├── app.ts                  # The wallet UI, every handler via addEventListener

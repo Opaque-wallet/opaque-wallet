@@ -14,16 +14,14 @@
 //   account and  WALLET_RPC through the mesh: the account's registry state,
 //   note reads   balances, nonce, a note's nullifier, the pool's capabilities.
 //                No RPC or bundler learns which wallet asked.
-//   funding      the wallet's transactions, and the reads they need, through
-//   wallet       its own provider. The page opens no connection to an RPC.
 //   intent       sealed here to the CRE key, then chunked across the mesh.
 //   status       a mesh query. The page never opens a connection to the exit.
 //   account      LIVE on Arc: FORS keys in IndexedDB, the account deployed by
-//                PQAccountFactory. The funding wallet only pays for that.
+//                PQAccountFactory. No browser wallet (MetaMask or any other)
+//                is read or asked: Opaque is a wallet of its own.
 //   deposit      from the account: one UserOperation its PQ key signs, for
 //                any number of notes. The first deploys the account too, from
-//                USDC at its address; a funding wallet, where there is one,
-//                tops it up in one confirmation. Attributable either way.
+//                USDC sent to its address from anywhere. Attributable.
 //   pools        one RING_8 pool per configured denomination, compiled
 //                in from deployments/ like the relay root: a server that
 //                could name the pools could take the deposits.
@@ -47,15 +45,19 @@ import { chainTo } from '../../../backend/mesh/directory.ts';
 import { createGraphHealth } from '../../../backend/mesh/graph-health.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from '../../../backend/mesh/contracts.ts';
 import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
-import { ARC_AUTHORITY, createLivePqWallet, createPqAccountOps, pendingDeployment } from '../../../backend/chain/pq-wallet-chain.ts';
-import { browserPayer, createBrowserPool, createMeshChainObserver, sendFromFundingWallet, type DepositMany } from '../../../backend/chain/wallet-chain.ts';
+import { ARC_AUTHORITY, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../../backend/chain/pq-wallet-chain.ts';
+import { browserPayer, createBrowserPool, createMeshChainObserver, type DepositMany } from '../../../backend/chain/wallet-chain.ts';
 import { capabilitiesOf } from '../../../backend/chain/pool.ts';
 import { readOne, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient } from '../../../packages/ring-client/src/index.ts';
 import { IndexedDbSignerStore } from '../../../packages/pq-wallet/src/indexeddb-store.ts';
+import { adoptWallet, createPqWallet } from '../../../packages/pq-wallet/src/wallet.ts';
+import { toHex } from '@opaque/protocol-types/codecs.js';
 import { deployment, meshTrustRoot, requireService } from '../../../deployments/index.ts';
-import { exportBackup, keyStoreName, restoreBackup } from './backup.ts';
+import { exportBackup, keyStoreName, NOTES_KEY, restoreBackup, WALLET_ID } from './backup.ts';
+import { arcState, arcStorageOf, findNotes, forsSeed, noteCounters, noteSecret, saveArcState } from './arc-keys.ts';
+import type { AccountKeys } from './xrpl-keys.ts';
 import { createWorkerProver } from './prover.ts';
 import { createPaymentApplication, type AdapterPorts } from './protocol/index.ts';
 import { localNoteStorage } from './note-storage.ts';
@@ -130,15 +132,35 @@ export interface WalletRuntime {
   accountFunds(address: `0x${string}`): Promise<{ readonly usdc: number; readonly prepaidGas: number }>;
   /** Everything the account holds, less this operation's gas, to `to`. */
   withdraw(address: `0x${string}`, to: `0x${string}`): Promise<TxHash>;
-  /** `usdc` from the funding wallet to the account: one confirmation. */
-  fundAccount(address: `0x${string}`, usdc: number): Promise<TxHash>;
+  /** The account open: one of the recovery phrase's, or this browser's own from before phrases. */
+  readonly account: AccountKeys | 'browser';
+  /** Where this account's sent payments are kept. */
+  readonly sentKey: string;
+  /** Makes the account ready to sign: its keys from the chain (a phrase's), or new ones the first time. */
+  open(): Promise<void>;
+  /**
+   * A phrase account's notes, found on chain: from the first index (`full`),
+   * or from where this browser is, which catches deposits another device made.
+   * Returns how many were new here.
+   */
+  recover(full: boolean, progress?: (line: string) => void): Promise<number>;
+  /** Whether an address holds an account or USDC: how an imported phrase's other accounts are found. */
+  inUse(address: `0x${string}`): Promise<boolean>;
+  /** Drops this browser's copy of a phrase account's keys; the next open rebuilds them from the chain. */
+  forgetKeys(): void;
   exportBackup(passphrase: string): Promise<Blob>;
   /** Into a new key store; reload the page to open it. Returns the notes it added. */
   restoreBackup(file: Blob, passphrase: string): Promise<number>;
-  hasWallet: boolean;
 }
 
-export async function startWallet(config?: StackConfig): Promise<WalletRuntime> {
+/** Whether this browser holds an Arc account from before recovery phrases: keys in IndexedDB, or notes. */
+export async function hasBrowserAccount(): Promise<boolean> {
+  try { if (Object.keys(JSON.parse(localStorage.getItem(NOTES_KEY) ?? '{}') as object).length > 0) return true; } catch { return true; }
+  const store = new IndexedDbSignerStore(keyStoreName());
+  try { return (await store.readWallet(WALLET_ID)) !== undefined; } catch { return false; } finally { await store.close(); }
+}
+
+export async function startWallet(config?: StackConfig, account: AccountKeys | 'browser' = 'browser'): Promise<WalletRuntime> {
   const cfg = config ?? (await loadStack());
   const scopes: readonly PoolScope[] = deployment.pools
     .filter((p) => p.proofMode === 'RING_8')
@@ -173,8 +195,9 @@ export async function startWallet(config?: StackConfig): Promise<WalletRuntime> 
 
   if (devRoot === undefined) savePinnedRoot(root);
 
-  const provider = (globalThis as { ethereum?: unknown }).ethereum as never;
-  const browserPool = createBrowserPool(provider, cfg.capabilities);
+  // Opaque is a wallet of its own: it never reads or asks a browser wallet
+  // such as MetaMask. Reads cross the mesh; the account's PQ key signs.
+  const browserPool = createBrowserPool(undefined, cfg.capabilities);
   // Every read that names this wallet's account or notes, and every
   // UserOperation, crosses the mesh (§7.5): see backend/chain/wallet-rpc.ts.
   const walletRpc: WalletRpcSend = async (operation, encodedRequest) =>
@@ -182,10 +205,15 @@ export async function startWallet(config?: StackConfig): Promise<WalletRuntime> 
   // The account's FORS keys, encrypted under a non-extractable key, in this
   // browser and nowhere else. Back them up (exportBackup), or clearing site
   // data loses the account.
-  const keys = new IndexedDbSignerStore(keyStoreName());
-  const wallet = createLivePqWallet({
-    signerStore: keys, walletStore: keys, publicClient: browserPool.publicClient, payer: browserPayer(provider), walletRpc,
+  // A phrase account's keys are drawn from the phrase, so this store is only
+  // their copy and signing log here; the browser account's exist nowhere else.
+  const names = arcStorageOf(account, keyStoreName());
+  const keys = new IndexedDbSignerStore(names.keys);
+  const walletOptions = livePqWalletOptions({
+    signerStore: keys, walletStore: keys, publicClient: browserPool.publicClient, payer: browserPayer(undefined), walletRpc,
+    ...(account === 'browser' ? {} : { seedFor: (epoch: bigint) => forsSeed(account, epoch) }),
   });
+  const wallet = createPqWallet(walletOptions);
   // Until the account exists, its operations carry the factory call that
   // deploys it, so the first deposit is also the activation.
   const opsFor = (account: `0x${string}`) => createPqAccountOps({
@@ -207,7 +235,19 @@ export async function startWallet(config?: StackConfig): Promise<WalletRuntime> 
     walletRpc,
     ringSnapshot: async (s) => (await query<RingSnapshot>({ kind: 'RING_SNAPSHOT', scope: s })).value,
   });
-  const vault = createNoteVault({ storage: localNoteStorage(), chain });
+  const storage = localNoteStorage(names.notes);
+  const counters = noteCounters(names.counters);
+  const vault = createNoteVault({
+    storage, chain,
+    // A phrase account's notes are drawn from it, one index per note per pool.
+    ...(account === 'browser' ? {} : {
+      secretFor: (scope: PoolScope) => {
+        const i = counters.next(scope);
+        counters.raise(scope, i + 1);
+        return noteSecret(account, scope, i);
+      },
+    }),
+  });
   const ring = createRingClient(vault, createWorkerProver());
 
   const credentials = new Map<string, string>();
@@ -253,11 +293,35 @@ export async function startWallet(config?: StackConfig): Promise<WalletRuntime> 
     },
   };
 
+  // A phrase account's notes, found among each pool's deposits (lib/arc-keys.ts).
+  let looking: Promise<number> = Promise.resolve(0);
+  async function recover(full: boolean, progress?: (line: string) => void): Promise<number> {
+    if (account === 'browser') return 0;
+    let added = 0;
+    for (const scope of scopes) {
+      progress?.(`Looking for your ${Number(scope.denomination) / 1e6} USDC notes…`);
+      const deposits = new Set((await query<RingSnapshot>({ kind: 'RING_SNAPSHOT', scope })).value.candidates.map((c) => c.commitment.toLowerCase()));
+      const known = counters.next(scope);
+      const { found, next } = await findNotes(account, scope, deposits, full ? 0 : known, known);
+      // What this browser holds now, not when the look began: a deposit may have landed meanwhile.
+      const mine = new Set((await storage.all()).map((n) => n.commitment.toLowerCase()));
+      for (const note of found) {
+        if (mine.has(note.commitment.toLowerCase())) continue;
+        // CREATED, so listing reconciles it: AVAILABLE, or SPENT if its nullifier is.
+        await storage.write({ id: crypto.randomUUID() as never, scope, commitment: note.commitment, secret: toHex(note.secret),
+          state: 'CREATED', depositTx: null, createdAtBlock: null, reservation: null });
+        added++;
+      }
+      counters.raise(scope, next);
+    }
+    saveArcState({ scanned: { ...arcState().scanned, [account.id]: true } });
+    return added;
+  }
+
   return {
     app: createPaymentApplication(ports),
     scopes,
     config: cfg,
-    hasWallet: provider !== undefined,
     pathFor: () => bootstrap.pathFor(),
     async obtainCredential(recipient) {
       const response = await fetch(cfg.credentialUrl, {
@@ -276,7 +340,26 @@ export async function startWallet(config?: StackConfig): Promise<WalletRuntime> 
       return { usdc: Number(f.usdc6) / 1e6, prepaidGas: Number(f.prepaidGas) / 1e18 };
     },
     withdraw: (address, to) => opsFor(address).withdraw(to.toLowerCase() as never),
-    fundAccount: (address, usdc) => sendFromFundingWallet(provider, browserPool.publicClient, address, usdc),
+    account,
+    sentKey: names.sent,
+    async open() {
+      if (account !== 'browser') await adoptWallet({ ...walletOptions, signerStore: keys });
+      if ((await keys.readWallet(WALLET_ID)) === undefined) await wallet.create();
+    },
+    // One look at a time: two at once (the first open's, a deposit's) would each store what they found.
+    recover: (full, progress) => (looking = looking.then(() => recover(full, progress), () => recover(full, progress))),
+    async inUse(address) {
+      const [registered, funds] = await Promise.all([
+        readOne(walletRpc, ARC_AUTHORITY.registry, 'stateOf', [address]).then((r) => BigInt((r.value as { pkCommitment: Hex }).pkCommitment) !== 0n),
+        opsFor(address).funds(),
+      ]);
+      return registered || funds.usdc6 > 0n;
+    },
+    forgetKeys() {
+      if (account === 'browser') return;
+      const { generations } = arcState();
+      saveArcState({ generations: { ...generations, [account.id]: (generations[account.id] ?? 0) + 1 } });
+    },
     exportBackup: (passphrase) => exportBackup(keys, passphrase),
     restoreBackup,
   };

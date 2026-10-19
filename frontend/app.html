@@ -2,91 +2,137 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>opaque — private wallet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>opaque — private USDC on Arc</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="app.css">
+  <meta name="theme-color" content="#0b090c">
+  <link rel="stylesheet" href="wallet.css">
 </head>
 <body>
-<div class="bg" aria-hidden="true"></div>
-<main class="wallet">
-  <header class="topbar">
-    <a class="brand" href="index.html" aria-label="Opaque home"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
-    <div class="top-actions">
-      <select class="network" id="network-switch" aria-label="Network"></select>
-      <button class="account" id="account-button" type="button"><span class="identicon"><i></i></span><span><b>Opaque account</b><small id="account-short">Starting…</small></span><strong>⋮</strong></button>
+<a class="page-logo" href="/" aria-label="About opaque"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
+<main class="app">
+  <header class="bar">
+    <button class="acct" id="account-button" type="button" aria-label="Account, backup and withdraw"><span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><g fill="#070608"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg></span><span><b id="account-name">Opaque account</b><small id="account-short">Starting…</small></span></button>
+    <div class="bar-right">
+      <button class="net" id="network-switch" type="button" aria-label="Network">Network</button>
+      <a class="icon-btn expand" href="app.html" target="_blank" rel="noopener" title="Open in a tab" aria-label="Open in a tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></a>
     </div>
   </header>
 
-  <div class="layout">
-    <aside class="sidebar">
-      <div><p class="eyebrow side-label">Wallet</p>
-        <nav class="nav" aria-label="Wallet navigation">
-          <button id="tab-home" aria-selected="true" type="button"><span class="nav-icon">⌂</span>Overview</button>
-          <button id="tab-send" aria-selected="false" type="button"><span class="nav-icon">↗</span>Send</button>
-          <button id="tab-ring" aria-selected="false" type="button"><span class="nav-icon">◎</span>Privacy</button>
-          <button id="tab-activity" aria-selected="false" type="button"><span class="nav-icon">◷</span>Activity</button>
-        </nav>
+  <section class="view onboard" id="onboard" hidden>
+    <div class="ob-step" id="ob-welcome">
+      <div class="ob-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><g fill="#070608"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg></div>
+      <h1 class="ob-title">Your money, unseen.</h1>
+      <p class="lede">Private USDC on Arc. One recovery phrase holds all your accounts, on every chain Opaque supports: here, in the extension or on your phone.</p>
+      <div class="ob-actions"><button class="primary" id="ob-create" type="button">Create a new wallet</button><button class="secondary" id="ob-import" type="button">I have a recovery phrase</button></div>
+    </div>
+    <div class="ob-step" id="ob-show" hidden>
+      <div class="screen-head"><button class="back" data-ob="ob-welcome" type="button" aria-label="Back">←</button><h1>Your recovery phrase</h1><span></span></div>
+      <p class="lede">These 12 words are your wallet. Anyone who has them can spend everything in it, and Opaque can't bring them back if they are lost. Write them down in order and keep them offline.</p>
+      <div class="words-wrap">
+        <ol class="words is-hidden" id="ob-words"></ol>
+        <button class="reveal" id="ob-reveal" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><b>Reveal the words</b><small>Make sure nobody can see your screen</small></button>
       </div>
-      <div class="side-foot"><a href="index.html">Back to opaque ↗</a></div>
-    </aside>
+      <button class="copy-btn" id="ob-copy" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/></svg>Copy to clipboard</button>
+      <label class="privacy-toggle ob-check" for="ob-saved"><input id="ob-saved" type="checkbox" disabled><span><b>I wrote them down</b><small>On paper, somewhere only I can find.</small></span></label>
+      <button class="primary" id="ob-next" type="button" disabled>Continue</button>
+    </div>
+    <div class="ob-step" id="ob-confirm" hidden>
+      <div class="screen-head"><button class="back" data-ob="ob-show" type="button" aria-label="Back">←</button><h1>Confirm your phrase</h1><span></span></div>
+      <p class="lede">Type these three words from your phrase, to be sure it is written down.</p>
+      <div class="form" id="ob-quiz"></div>
+      <button class="primary" id="ob-finish" type="button">Create wallet</button>
+      <p class="status" id="ob-confirm-status" role="status"></p>
+    </div>
+    <div class="ob-step" id="ob-restore" hidden>
+      <div class="screen-head"><button class="back" data-ob="ob-welcome" type="button" aria-label="Back">←</button><h1>Import a wallet</h1><span></span></div>
+      <p class="lede">The 12-word recovery phrase of an Opaque wallet, or one account's key (opq1…), from the extension, the website or your phone. Your account and notes are found again on chain.</p>
+      <label class="field" for="ob-phrase"><span>Recovery phrase or account key</span><textarea id="ob-phrase" class="mono" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="twelve words, separated by spaces"></textarea></label>
+      <button class="primary" id="ob-restore-go" type="button">Import</button>
+      <p class="status" id="ob-restore-status" role="status"></p>
+    </div>
+  </section>
+  <section class="view" id="view-home" aria-labelledby="tab-home">
+    <div class="hero" id="hero">
+      <svg class="hero-ring" viewBox="0 0 40 40" aria-hidden="true"><g fill="currentColor"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg>
+      <div class="hero-top"><span class="hero-label">Private balance</span><span class="shield">Shielded on Arc</span></div>
+      <h1 class="balance"><span id="balance">—</span> <small>USDC</small></h1>
+      <p class="sub" id="note-count">Loading notes…</p>
+      <div class="hero-assets"><span class="chip on"><i class="tok tok-usdc">U</i><b>USDC</b></span></div>
+    </div>
+    <div class="tiles">
+      <button id="action-send" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 10 14M20.5 3.5 14 20.5l-4-6.5-6.5-4z"/></svg></i>Send</button>
+      <button id="action-receive" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><path d="M13.5 13.5h2.5v2.5M20 13.5v6.5h-6.5M16.8 16.8h.2"/></svg></i>Receive</button>
+      <button id="tile-deposit" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></svg></i>Deposit</button>
+      <button id="tile-privacy" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 5 6.5v5c0 4.2 3 7.6 7 9 4-1.4 7-4.8 7-9v-5z"/><path d="m9 12 2 2 4-4"/></svg></i>Privacy</button>
+      <button id="tile-activity" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></i>Activity</button>
+      <button id="tile-account" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1.4-3.6 3.9-5.2 7-5.2s5.6 1.6 7 5.2"/></svg></i>Account</button>
+    </div>
+    <div class="deposit-card" id="deposit-card">
+      <div class="deposit-copy"><p class="eyebrow">Deposit</p><p id="deposit-copy">USDC at your address becomes private notes.</p></div>
+      <div class="deposit-row">
+        <label class="deposit-amount" for="deposit-count"><input id="deposit-count" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1" aria-describedby="deposit-split"><span>USDC</span></label>
+        <button class="primary" id="deposit" type="button">Deposit</button>
+      </div>
+      <small class="deposit-split" id="deposit-split">As notes of 1 to 100 USDC, each hidden among notes its size</small>
+      <p class="status" id="deposit-status" role="status"></p>
+    </div>
 
-    <section class="workspace">
-      <section class="view" id="view-home" aria-labelledby="tab-home">
-        <div class="balance-head">
-          <div><p class="eyebrow">Private balance</p><h1><span id="balance">—</span> <small>USDC</small></h1><p id="note-count">Loading notes…</p></div>
-          <span class="shielded">▣ Shielded</span>
-        </div>
-        <div class="quick-actions">
-          <button id="action-send" type="button"><i>↗</i><span>Send</span></button>
-          <button id="action-receive" type="button"><i>↙</i><span>Receive</span></button>
-          <button id="deposit" type="button"><i>↓</i><span>Deposit</span></button>
-          <label class="deposit-amount" for="deposit-count"><span>Deposit amount</span><span class="amount-input"><input id="deposit-count" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1" aria-describedby="deposit-split"><span class="unit">USDC</span></span><small id="deposit-split">As notes of 1 to 100 USDC, each hidden among notes its size</small></label>
-        </div>
-        <p class="status" id="deposit-status" role="status"></p>
+    <div id="home-notes">
+      <div class="list-head"><span>Your funds</span><button class="link" id="refresh-balance" type="button">Refresh</button></div>
+      <div id="assets"><div class="asset"><i class="tok tok-usdc">U</i><span><b>USD Coin</b><small>Private notes on Arc</small></span><span class="asset-value"><b><span id="asset-balance">—</span> USDC</b><small id="asset-notes">—</small></span></div></div>
+      <p class="status" id="home-status" role="status"></p>
+    </div>
+    <div id="home-privacy">
+      <div class="list-head"><span>Signing key</span><span>In this browser</span></div>
+      <div class="card budget" id="budget">
+        <div class="budget-head"><span>Signatures left</span><strong><b id="sig-left">—</b> <small id="sig-max"></small></strong></div>
+        <div class="meter" id="meter"></div>
+        <p class="fine-print">A post-quantum key: each deposit or withdrawal uses one signature, and it rotates itself before it runs out.</p>
+        <p class="status" id="rotate-status" role="status"></p>
+      </div>
+    </div>
+  </section>
 
-        <div class="dashboard">
-          <section class="panel">
-            <div class="panel-head"><div><p class="eyebrow">Assets</p><h2>Your funds</h2></div><button id="refresh-balance" type="button">Refresh</button></div>
-            <div class="asset"><i>$</i><span><b>USD Coin</b><small>Private note balance</small></span><span class="asset-value"><b><span id="asset-balance">—</span> USDC</b><small id="asset-notes">—</small></span></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><div><p class="eyebrow">Account security</p><h2>Signing key</h2></div><span class="local">Local</span></div>
-            <div class="budget" id="budget"><div><span>Signatures remaining</span><strong><b id="sig-left">—</b> <small id="sig-max"></small></strong></div><div class="meter" id="meter"></div><p class="status" id="rotate-status" role="status"></p></div>
-          </section>
-        </div>
-      </section>
+  <section class="view" id="view-send" aria-labelledby="tab-send" hidden>
+    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Send privately</h1><span></span></div>
+    <form class="form" id="send-form">
+      <label class="amount" for="send-amount"><span>Amount</span><strong><input id="send-amount" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1"><small>USDC</small></strong></label>
+      <label class="field" for="recipient"><span>To</span><input id="recipient" class="mono" type="text" placeholder="0x…" autocomplete="off" spellcheck="false"><small>An Arc address.</small></label>
+      <fieldset class="privacy-choice">
+        <label class="privacy-toggle" for="wait-for-privacy"><input id="wait-for-privacy" type="checkbox"><span><b>Wait for stronger privacy</b><small>Settles once privacy conditions are strong, and no later than the time below.</small></span></label>
+        <p class="immediate-note" id="immediate-settlement">Send now: settles as soon as the network accepts it.</p>
+        <label class="field deadline-field" id="privacy-deadline-wrap" for="privacy-deadline" hidden><span>Settle no later than</span><input id="privacy-deadline" type="datetime-local" autocomplete="off" aria-describedby="privacy-deadline-help" disabled><small id="privacy-deadline-help">A latest-settlement deadline, not a scheduled send time.</small></label>
+      </fieldset>
+      <button class="primary" id="arm" type="submit">Send privately</button>
+      <p class="status" id="send-status" role="status"></p>
+    </form>
+  </section>
 
-      <section class="view narrow" id="view-send" aria-labelledby="tab-send" hidden>
-        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">Private transfer</p><h1>Send USDC</h1></div></div>
-        <form class="panel send-form" id="send-form">
-          <label class="amount" for="send-amount"><span>Amount</span><strong><input id="send-amount" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1"> <small>USDC</small></strong></label>
-          <label class="field" for="recipient"><span>Recipient</span><input id="recipient" class="mono" type="text" placeholder="0x0000…" autocomplete="off" spellcheck="false"><small>Arc address</small></label>
-          <fieldset class="privacy-choice">
-            <label class="privacy-toggle" for="wait-for-privacy"><input id="wait-for-privacy" type="checkbox"><span><b>Wait for stronger privacy</b><small>We’ll settle as soon as privacy conditions are strong. Otherwise, it settles no later than the time below.</small></span></label>
-            <p class="immediate-note" id="immediate-settlement">Send immediately — settles as soon as the network accepts it.</p>
-            <label class="field deadline-field" id="privacy-deadline-wrap" for="privacy-deadline" hidden><span>Settle no later than</span><input id="privacy-deadline" type="datetime-local" autocomplete="off" aria-describedby="privacy-deadline-help" disabled><small id="privacy-deadline-help">This is a latest-settlement deadline, not a scheduled send time.</small></label>
-          </fieldset>
-          <button class="primary" id="arm" type="submit">Send privately</button>
-          <p class="status" id="send-status" role="status"></p>
-        </form>
-      </section>
+  <section class="view" id="view-ring" aria-labelledby="tab-ring" hidden>
+    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Privacy</h1><span></span></div>
+    <p class="lede">Your payment hides among 8 identical notes. Every member is shown the same: the wallet never shows which one is yours.</p>
+    <div class="card ring-card"><div id="ring-wrap"></div><p>One member signed. No member is singled out.</p></div>
+    <dl class="stats"><div><dt>Pool freshness</dt><dd id="freshness-now">—</dd></div><div><dt>Pool deposits</dt><dd id="pool-size">—</dd></div></dl>
+    <div class="card route"><p class="eyebrow">Relay path · 3 hops</p><div class="hops" id="hops"></div><p class="fine-print">Each payment draws a fresh route from the verified relay directory.</p></div>
+  </section>
 
-      <section class="view" id="view-ring" aria-labelledby="tab-ring" hidden>
-        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">Privacy route</p><h1>Your cover set</h1><p>Every member is shown identically. The wallet never reveals which one belongs to you.</p></div></div>
-        <div class="privacy-grid">
-          <section class="panel ring-panel"><div id="ring-wrap"></div><p>One member signed. No member is singled out.</p></section>
-          <div class="privacy-side"><dl class="stats"><div><dt>Pool freshness</dt><dd id="freshness-now">—</dd></div><div><dt>Pool deposits</dt><dd id="pool-size">—</dd></div></dl><section class="panel route"><p class="eyebrow">Relay path · 3 hops</p><div id="hops"></div><p>Each payment draws a fresh route from the verified relay directory.</p></section></div>
-        </div>
-      </section>
+  <section class="view" id="view-activity" aria-labelledby="tab-activity" hidden>
+    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Activity</h1><span></span></div>
+    <p class="lede">Private transfers made in this browser.</p>
+    <div class="card" id="intent-list"></div>
+  </section>
 
-      <section class="view" id="view-activity" aria-labelledby="tab-activity" hidden>
-        <div class="title"><button class="back" data-back type="button">←</button><div><p class="eyebrow">History</p><h1>Activity</h1><p>Private transfers created in this browser.</p></div></div>
-        <section class="panel activity"><div id="intent-list"></div></section>
-      </section>
-    </section>
-  </div>
   <footer id="boot-error" role="alert" hidden></footer>
+
+  <nav class="tabbar" aria-label="Wallet">
+    <a class="side-logo" href="/" aria-label="About opaque"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
+    <button id="tab-home" aria-selected="true" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4.5l8 6.5v8.5H14.5V14h-5v5.5H4z"/></svg></i>Home</button>
+    <button id="tab-send" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 10 14M20.5 3.5 14 20.5l-4-6.5-6.5-4z"/></svg></i>Send</button>
+    <button id="tab-ring" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 5 6.5v5c0 4.2 3 7.6 7 9 4-1.4 7-4.8 7-9v-5z"/><path d="m9 12 2 2 4-4"/></svg></i>Privacy</button>
+    <button id="tab-activity" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></i>Activity</button>
+    <p class="side-note"><span class="shield">Private on Arc</span>Your key and notes stay in this browser. Opaque never connects to another wallet.</p>
+  </nav>
 </main>
 
 <dialog id="mainnet-warning" class="mainnet-warning" aria-labelledby="mainnet-warning-title">
@@ -109,30 +155,53 @@
 </dialog>
 
 <dialog id="receive-dialog">
-  <form method="dialog" class="dialog-head"><div><p class="eyebrow">Receive on Arc</p><h2>Your Opaque account</h2></div><button value="close" aria-label="Close">×</button></form>
-  <p>Your PQ account on Arc: only this browser's post-quantum key can move what it holds. Send USDC here from any wallet or exchange; Deposit turns it into private notes, and the first deposit also sets the account up on chain.</p>
-  <div class="address"><span class="identicon"><i></i></span><code id="receive-address">Starting…</code></div>
+  <form method="dialog" class="dialog-head"><div><p class="eyebrow">Receive on Arc</p><h2 id="receive-name">Your Opaque account</h2></div><button value="close" aria-label="Close">×</button></form>
+  <p>One address for every payment to this account: share it as often as you like. Only its post-quantum key can move what it holds. Send USDC here from any wallet or exchange (Opaque never connects to one); <span id="receive-then">Deposit turns it into private notes</span>, and the first deposit also sets the account up on chain.</p>
+  <div class="address"><code id="receive-address">Starting…</code></div>
   <div class="dialog-actions"><button class="secondary" id="copy-address" type="button">Copy address</button><a class="primary" id="open-explorer" href="#" target="_blank" rel="noopener">View on explorer</a></div>
 </dialog>
 <dialog id="account-dialog">
-  <form method="dialog" class="dialog-head"><div><p class="eyebrow">Account details</p><h2>Opaque account</h2></div><button value="close" aria-label="Close">×</button></form>
-  <div class="detail"><span>Account address</span><code id="account-address">Starting…</code></div>
-  <div class="detail"><span>Account</span><strong id="account-state">—</strong></div>
-  <div class="detail"><span>Browser wallet (optional)</span><strong id="funding-state">Not connected</strong></div>
-  <div id="withdraw-box" hidden>
-    <label class="field" for="withdraw-to"><span>Withdraw everything to</span><input id="withdraw-to" class="mono" type="text" placeholder="0x… (your funding wallet if empty)" autocomplete="off" spellcheck="false"></label>
-    <button class="secondary" id="withdraw" type="button">Withdraw</button>
+  <form method="dialog" class="dialog-head"><div><p class="eyebrow">This wallet</p><h2>Accounts</h2></div><button value="close" aria-label="Close">×</button></form>
+  <div class="account-list" id="account-list"></div>
+  <div class="account-links"><button class="link add-account" id="account-add" type="button" hidden>+ Add account</button><button class="link add-account" id="account-import" type="button">↓ Import account</button></div>
+  <div class="backup" id="phrase-box" hidden>
+    <p class="eyebrow">Recovery phrase</p>
+    <p>Every account above comes from it, on every chain. Import it in the extension, on the website or on a phone, and the same accounts, addresses and notes come back.</p>
+    <ol class="words" id="phrase-words" hidden></ol>
+    <div class="dialog-actions"><button class="secondary" id="phrase-show" type="button">Show recovery phrase</button><button class="secondary" id="phrase-copy" type="button" hidden>Copy</button><button class="secondary" id="account-rescan" type="button">Rescan Arc</button></div>
+    <p class="status" id="phrase-status" role="status"></p>
   </div>
-  <button class="secondary" id="connect-wallet" type="button">Fund from a browser wallet (optional)</button><p class="status" id="wallet-status" role="status"></p>
+  <div class="backup" id="key-box" hidden>
+    <p class="eyebrow">Account key</p>
+    <p>This account alone, without the phrase: paste it into Import account in another Opaque wallet. Whoever holds it can spend everything in this account.</p>
+    <code class="key-text" id="key-text" hidden></code>
+    <div class="dialog-actions"><button class="secondary" id="key-show" type="button">Show account key</button><button class="secondary" id="key-copy" type="button" hidden>Copy</button></div>
+  </div>
+  <div class="backup" id="phrase-setup-box" hidden>
+    <p class="eyebrow">Recovery phrase</p>
+    <p>This browser's account has no recovery phrase: only a backup file brings it back. Make a phrase for new accounts that come back anywhere.</p>
+    <button class="primary" id="phrase-setup" type="button">Set up a recovery phrase</button>
+  </div>
   <div class="backup">
-    <p class="eyebrow">Backup</p>
-    <p>Your account keys and private notes exist only in this browser. A backup holds both, encrypted under this passphrase: without it nobody can open the file, you included.</p>
+    <p class="eyebrow">This account on Arc</p>
+    <div class="detail"><span>Address</span><code id="account-address">Starting…</code></div>
+    <div class="detail"><span>Account</span><strong id="account-state">—</strong></div>
+    <div id="withdraw-box" hidden>
+      <label class="field" for="withdraw-to"><span>Withdraw everything to</span><input id="withdraw-to" class="mono" type="text" placeholder="0x… an Arc address" autocomplete="off" spellcheck="false"></label>
+      <button class="secondary" id="withdraw" type="button">Withdraw</button>
+    </div>
+    <p class="status" id="wallet-status" role="status"></p>
+  </div>
+  <div class="backup" id="backup-box">
+    <p class="eyebrow">Backup file</p>
+    <p>This browser's account keys and private notes exist only here. A backup holds both, encrypted under this passphrase: without it nobody can open the file, you included.</p>
     <label class="field" for="backup-pass"><span>Passphrase (12+ characters)</span><input id="backup-pass" type="password" autocomplete="new-password" minlength="12"></label>
     <div class="dialog-actions"><button class="secondary" id="backup-export" type="button">Download backup</button><button class="secondary" id="backup-import" type="button">Restore from file</button></div>
     <input id="backup-file" type="file" accept="application/json,.json" hidden>
     <p class="status" id="backup-status" role="status"></p>
   </div>
 </dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="/src/app.ts"></script>
 </body>
 </html>

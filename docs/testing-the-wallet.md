@@ -40,13 +40,18 @@ wallet after restarting the stack.
 
 ## Pay someone
 
-1. **A wallet on Arc testnet.** MetaMask: add network — chain id `5042002`,
-   RPC `https://rpc.testnet.arc.io`, currency `USDC`. Get USDC from
-   [faucet.circle.com](https://faucet.circle.com). It pays gas too, so nothing
-   else needs funding.
-2. **Deposit.** Set *Deposit amount* in whole USDC and press *Deposit*. It
-   becomes the fewest notes of 1, 2, 5, 10, 20, 50 and 100 USDC: 123 is
-   100 + 20 + 2 + 1.
+1. **A wallet.** The page opens on onboarding: create a 12-word recovery
+   phrase, or import one (the same phrase the XRPL page uses: one wallet, every
+   chain). Then send USDC to the account's *Receive* address from any wallet or
+   exchange; Opaque never connects to one. On testnet, get it from
+   [faucet.circle.com](https://faucet.circle.com) (Arc Testnet). It pays gas
+   too, so nothing else needs funding.
+2. **Deposit.** On testnet, USDC that reaches the address becomes notes by
+   itself, as much as one deposit holds; a deposit that fails is not retried
+   until the page reloads, since each try signs with the few-time key. On
+   mainnet, which is not audited yet, it waits: set *Deposit amount* in whole
+   USDC and press *Deposit*. Either way it becomes the fewest notes of 1, 2,
+   5, 10, 20, 50 and 100 USDC: 123 is 100 + 20 + 2 + 1.
    Each size has its own pool, because a ring is formed only among notes of
    one size (spec §6.6), and a pool fills from anyone's deposits. A note can
    be sent once its pool holds 8; the field says when part of a deposit will
@@ -55,12 +60,9 @@ wallet after restarting the stack.
    Deposits come from your **PQ account**, as one UserOperation its FORS key
    signs however many notes and pools it covers; a public bundler submits it.
    The first one also deploys the account. It is paid from USDC at the
-   account's address: anything sent to the *Receive* address counts, and a
-   funding wallet, if the browser has one, tops it up in one confirmation.
-   Each deposit keeps 0.2 USDC in the account for gas, and what gas does not
-   use pays for the next one. Each deposit uses one of the key's 32
-   signatures, shown under *Signing key*. The keys live in this browser only,
-   so clearing site data loses the account, unless you have a backup.
+   account's address. Each deposit keeps 0.2 USDC in the account for gas, and
+   what gas does not use pays for the next one. Each deposit uses one of the
+   key's 32 signatures, shown under *Signing key*.
 
    The deposit is public by design — it is the *spend* that is private. A
    note shows as spendable once the chain confirms it, never before.
@@ -126,9 +128,39 @@ wallet's own provider (MetaMask's RPC). They name that wallet on chain
 whatever route they take. A content blocker that blocks `rpc.testnet.arc.io`
 in the page no longer breaks anything.
 
+## Accounts and the recovery phrase
+
+One phrase holds every account on every chain: the account list on the Arc
+page is the XRPL page's, and opening an account on one opens it on the other.
+Each Arc account is a PQ account at one address, which you can share as often
+as you like; the list shows it under each account, with a copy button. Code:
+[frontend/src/lib/arc-keys.ts](../frontend/src/lib/arc-keys.ts).
+
+- **Everything comes from the phrase.** An account's PQ key at each epoch
+  draws its seed from the account's key under `arc/<chain id>/fors/<epoch>`,
+  and its i-th note in a pool under `arc/<chain id>/note/<pool>/<i>`. The
+  address is CREATE2 of the first two keys and a fixed first deadline
+  (2100-01-01), so the words alone give it back. Each chain id has keys of its
+  own: mainnet and testnet addresses differ, and no key signs on two chains.
+  The known-answer test pins this.
+- **Importing finds it all again.** The key in force is found on chain, however
+  many rotations later (`adoptWallet` in packages/pq-wallet), with a signing log
+  as long as the chain's use count plus two, for signatures another device may
+  have made that never landed. Notes are found among each pool's deposits, by
+  index, until 40 in a row are absent. An imported phrase's Account 1 then
+  looks for its other accounts (registered, or holding USDC). **Rescan Arc** in
+  the account menu looks again.
+- **Before each deposit** the wallet catches up with deposits another device
+  made, so no note index is used twice. If another device rotated the key, the
+  page rebuilds its copy of the keys from the chain once.
+- **One device at a time** for signing: a few-time key is weakened by every
+  signature, and two devices each count only their own.
+- **The browser account.** An Arc account from before phrases stays as
+  **Browser account**, backed up by file, and opens first on the first visit.
+
 ## Your account's controls
 
-Under *Account details* and *Signing key*:
+Under *Accounts* and *Signing key*:
 
 - **Key rotation.** Automatic, with nothing to press. Once a quarter of the
   budget is left the wallet signs a rotation with the current key and the mesh
@@ -141,7 +173,7 @@ Under *Account details* and *Signing key*:
   withdrawal itself, to your funding wallet or any address you type. A few
   cents of prepaid gas stay with the EntryPoint and pay for the account's
   next operation.
-- **Backup / Restore.** One file holds the account's keys, with their signing
+- **Backup / Restore** (the browser account). One file holds the account's keys, with their signing
   logs, and your private notes, encrypted under a passphrase (PBKDF2, then
   AES-GCM). Restore writes into a fresh key store and never overwrites one.
   - A backup older than the account's chain state restores, but the wallet
@@ -151,8 +183,9 @@ Under *Account details* and *Signing key*:
 
 ## Known gaps in this build
 
-- Notes live in `localStorage`. Any script on the origin can read them, and
-  clearing site data destroys them unless you took a backup.
+- Notes, and the phrase, live in `localStorage`. Any script on the origin can
+  read them. Clearing site data destroys the browser account's unless you took
+  a backup; a phrase account's come back from the phrase. A password lock is next.
   See `frontend/src/lib/note-storage.ts`.
 - CRE is simulated: an ordinary process on the Railway box holds the key that
   opens sealed payments. It moves into a Chainlink enclave once deploy access

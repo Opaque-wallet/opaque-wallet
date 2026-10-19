@@ -97,8 +97,10 @@ const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.leng
 
 export async function initializeSigner(store: SignerStore, input: {
   keyEpoch: bigint; maxUses: bigint; lifecycleReserve: bigint; params: ForsParams;
+  /** A seed drawn from a recovery phrase, so the key can be made again; random when absent. */
+  seed?: Uint8Array;
 }): Promise<Bytes32> {
-  const seed = new Uint8Array(randomSeed());
+  const seed = new Uint8Array(input.seed ?? randomSeed());
   try {
     const pair = keyGen(seed, input.params);
     const id = pkCommitment(pair.publicKey);

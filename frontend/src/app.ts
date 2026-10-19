@@ -17,7 +17,11 @@ import type { IntentStatus, NoteSummary, PrivacyScore, StatusHandle, UnixSeconds
 import { makeAmount, MAX_NOTES_PER_DEPOSIT } from './lib/protocol/index.js';
 import { paymentDeadline } from './lib/payment-deadline.js';
 import { runPaymentLanes } from './lib/payment-lanes.js';
-import { startWallet, type WalletRuntime } from './lib/runtime.js';
+import { hasBrowserAccount, startWallet, type WalletRuntime } from './lib/runtime.js';
+import { arcAddressOf, arcState, arcStorageOf, saveArcState } from './lib/arc-keys.ts';
+import { keyStoreName } from './lib/backup.ts';
+import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
+import { copy, idOf, markOf, openOnboarding, setupWalletScreens, type OpenAccount } from './lib/wallet-ui.ts';
 import { deployment, NETWORK } from '../../deployments/index.ts';
 import { networkPicker } from './lib/network-picker.ts';
 import { scoped } from './lib/storage-name.ts';
@@ -50,17 +54,11 @@ let notes: readonly NoteSummary[] = [];
 const poolSizes = new Map<string, number>();
 let hops: readonly string[] = [];
 let opaqueAddress = '';
-let fundingAddress = '';
+/** The account open now: one of the recovery phrase's, or this browser's own from before phrases. */
+let account: OpenAccount | null = null;
+let browserAccount = false;
 
-interface BrowserProvider {
-  request(input: { method: string; params?: readonly unknown[] }): Promise<unknown>;
-  on?(event: string, listener: (...args: unknown[]) => void): void;
-}
-
-const provider = (): BrowserProvider | undefined =>
-  (globalThis as { ethereum?: BrowserProvider }).ethereum;
 const ARC_CHAIN_ID = deployment.network.chainId;
-const ARC_HEX = `0x${ARC_CHAIN_ID.toString(16)}`;
 const ARC_EXPLORER = deployment.network.explorer;
 const ARC_NAME = deployment.network.displayName;
 /**
@@ -82,64 +80,6 @@ const isRejected = (error: unknown) => typeof error === 'object' && error !== nu
 
 function setStatus(id: string, message: string): void { el(id).textContent = message; }
 
-async function copyText(value: string, button?: HTMLButtonElement): Promise<void> {
-  if (!value) return;
-  await navigator.clipboard.writeText(value);
-  if (button) {
-    const old = button.textContent ?? 'Copy address';
-    button.textContent = 'Copied';
-    window.setTimeout(() => { button.textContent = old; }, 1_500);
-  }
-}
-
-async function readFundingWallet(): Promise<void> {
-  const injected = provider();
-  if (!injected) {
-    // Not needed: the account is funded by sending USDC to its address.
-    el('funding-state').textContent = 'None — send USDC to your address from any wallet';
-    el('connect-wallet').hidden = true;
-    return;
-  }
-  const accounts = await injected.request({ method: 'eth_accounts' }) as string[];
-  fundingAddress = accounts[0] ?? '';
-  el('funding-state').textContent = shortAddress(fundingAddress);
-  const chainId = await injected.request({ method: 'eth_chainId' }) as string;
-  if (Number.parseInt(chainId, 16) !== ARC_CHAIN_ID) el('funding-state').textContent += ` — switch it to ${ARC_NAME}`;
-}
-
-async function connectFundingWallet(): Promise<boolean> {
-  const injected = provider();
-  if (!injected) {
-    setStatus('wallet-status', 'Install MetaMask or another EIP-1193 wallet to fund private notes.');
-    window.open('https://metamask.io/download/', '_blank', 'noopener');
-    return false;
-  }
-  const button = el<HTMLButtonElement>('connect-wallet');
-  button.disabled = true;
-  setStatus('wallet-status', 'Waiting for your wallet…');
-  try {
-    const accounts = await injected.request({ method: 'eth_requestAccounts' }) as string[];
-    fundingAddress = accounts[0] ?? '';
-    const chainId = await injected.request({ method: 'eth_chainId' }) as string;
-    if (Number.parseInt(chainId, 16) !== ARC_CHAIN_ID) {
-      try {
-        await injected.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC_HEX }] });
-      } catch (error) {
-        if (typeof error === 'object' && error !== null && 'code' in error && (error as { code: unknown }).code === 4902) {
-          await injected.request({ method: 'wallet_addEthereumChain', params: [{ chainId: ARC_HEX, chainName: ARC_NAME, nativeCurrency: deployment.network.nativeCurrency, rpcUrls: [deployment.network.rpcUrl], blockExplorerUrls: [ARC_EXPLORER] }] });
-        } else { throw error; }
-      }
-    }
-    await readFundingWallet();
-    button.textContent = 'Funding wallet connected';
-    setStatus('wallet-status', `Connected ${shortAddress(fundingAddress)} on ${ARC_NAME}.`);
-    return true;
-  } catch (error) {
-    if (isRejected(error)) setStatus('wallet-status', '');
-    else setStatus('wallet-status', `Could not connect: ${(error as Error).message}`);
-    return false;
-  } finally { button.disabled = false; }
-}
 
 // ── payments this browser has sent ────────────────────────────────────────
 //
@@ -158,11 +98,14 @@ interface SentPayment {
   state?: IntentStatus['state'];
   txHash?: string;
 }
-const SENT_KEY = scoped('opaque:sent:v1');
-const sent: SentPayment[] = (() => {
-  try { return JSON.parse(localStorage.getItem(SENT_KEY) ?? '[]') as SentPayment[]; } catch { return []; }
-})();
-const saveSent = () => localStorage.setItem(SENT_KEY, JSON.stringify(sent));
+/** Each account keeps its own: set once the page knows which account is open. */
+let sentKey = scoped('opaque:sent:v1');
+let sent: SentPayment[] = [];
+function loadSent(key: string): void {
+  sentKey = key;
+  try { sent = JSON.parse(localStorage.getItem(sentKey) ?? '[]') as SentPayment[]; } catch { sent = []; }
+}
+const saveSent = () => localStorage.setItem(sentKey, JSON.stringify(sent));
 const TERMINAL = new Set(['SETTLED', 'FAILED']);
 
 // ── the PQ account key ────────────────────────────────────────────────────
@@ -209,6 +152,7 @@ async function renderBudget(): Promise<void> {
     if (ready >= 1 && field.value.trim() === '') { field.value = String(ready); renderDepositSplit(); }
     if (ready >= 1 && /^Send /.test(el('deposit-status').textContent ?? '')) el('deposit-status').textContent = '';
     renderBalance();
+    if (AUTO_DEPOSIT && ready >= 1 && !depositing && !autoFailed && Date.now() > quietUntil) void autoDeposit(ready);
   }
   el('account-state').textContent = state.active
     ? `Active${balance} · deposits are signed by its PQ key`
@@ -248,11 +192,7 @@ async function autoRotate(): Promise<void> {
 }
 
 async function onWithdraw(): Promise<void> {
-  let to = el<HTMLInputElement>('withdraw-to').value.trim().toLowerCase();
-  if (to === '') {
-    if (!await connectFundingWallet()) return;
-    to = fundingAddress.toLowerCase();
-  }
+  const to = el<HTMLInputElement>('withdraw-to').value.trim().toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(to)) { setStatus('wallet-status', 'Enter an Arc address to withdraw to.'); return; }
   const button = el<HTMLButtonElement>('withdraw');
   button.disabled = true;
@@ -287,6 +227,7 @@ async function onBackupImport(file: File): Promise<void> {
   if (!window.confirm('Restore switches this browser to the account in the backup. The current account stays in storage but is no longer shown. Use a backup on one device at a time. Continue?')) return;
   try {
     const added = await rt.restoreBackup(file, el<HTMLInputElement>('backup-pass').value);
+    saveWalletState({ active: 'browser' });
     setStatus('backup-status', `Restored, with ${added} note${added === 1 ? '' : 's'} new to this browser. Reloading…`);
     window.setTimeout(() => window.location.reload(), 800);
   } catch (error) {
@@ -433,6 +374,7 @@ function renderBalance(): void {
   const depositable = Math.floor(accountUsdc - DEPOSIT_GAS_USDC);
   if (depositable >= 1) parts.push(`${depositable} USDC at your address, ready to deposit`);
   el('balance').textContent = `${total}.00`;
+  if (account !== null && runtimeReady) saveArcState({ balances: { ...arcState().balances, [idOf(account)]: total } });
   el('note-count').textContent = parts.join(' · ');
   el('asset-balance').textContent = `${total}.00`;
   el('asset-notes').textContent = `${available.length} private note${available.length === 1 ? '' : 's'}`;
@@ -457,23 +399,56 @@ function renderDepositSplit(): void {
   el('deposit-split').textContent = `As ${describe(counts)} USDC notes, each sendable at once.${later}`;
 }
 
-async function onDeposit(): Promise<void> {
+/**
+ * Testnet only: USDC that reaches the address becomes notes by itself, as a
+ * payment to an XRPL address does. Mainnet waits for the audit, and a tap.
+ */
+const AUTO_DEPOSIT = NETWORK === 'testnet';
+let depositing = false;
+/** A deposit that failed by itself is not tried again until a reload: each try signs with the few-time key. */
+let autoFailed = false;
+/**
+ * Not before this: just after a deposit, a lagging RPC node can still show the
+ * USDC it spent, and a deposit of that would fail.
+ */
+let quietUntil = 0;
+
+let autoRunning = false;
+async function autoDeposit(ready: number): Promise<void> {
+  if (autoRunning) return; // two balance reads at once start one deposit
+  autoRunning = true;
+  try {
+    await refreshPools();
+    if (depositing) return; // a deposit pressed meanwhile takes it
+    // The most of it one deposit holds: 27 notes.
+    let amount = ready;
+    while (amount > 1 && [...makeAmount(amount, readySizes())!.values()].reduce((a, b) => a + b, 0) > MAX_NOTES_PER_DEPOSIT) amount--;
+    el<HTMLInputElement>('deposit-count').value = String(amount);
+    renderDepositSplit();
+    if (!(await onDeposit(true))) autoFailed = true;
+  } finally { autoRunning = false; }
+}
+
+/** Deposits what the field says; `auto`, for USDC that just arrived, without the progress sheet. True if it landed. */
+async function onDeposit(auto = false): Promise<boolean> {
+  if (depositing) return false;
   const button = el<HTMLButtonElement>('deposit');
   const status = el('deposit-status');
   const amount = depositAmount();
   if (amount === undefined) {
     status.textContent = 'Choose a whole amount of USDC, 1 or more.';
-    return;
+    return false;
   }
   // Open before any network work. Reading which pools can hide a note is
   // eight queries across the mesh, and doing that first left the button dead
   // for seconds with nothing on screen to say the click had registered.
+  depositing = true;
   button.disabled = true;
   const progressDialog = el<HTMLDialogElement>('deposit-progress-dialog');
-  const progressLog = el('deposit-progress-log');
-  if (!progressDialog.open) progressDialog.showModal();
-  progressLog.textContent = 'Checking which pools can hide your notes…';
+  const progressLog = auto ? status : el('deposit-progress-log');
+  if (!auto && !progressDialog.open) progressDialog.showModal();
   status.textContent = '';
+  progressLog.textContent = auto ? `USDC arrived at your address: depositing ${amount} USDC as private notes…` : 'Checking which pools can hide your notes…';
 
   // The fewest notes, largest first, from pools that can hide them now.
   await refreshPools();
@@ -482,51 +457,45 @@ async function onDeposit(): Promise<void> {
   if (count > MAX_NOTES_PER_DEPOSIT) {
     progressDialog.close();
     button.disabled = false;
+    depositing = false;
     status.textContent = `That is ${count} notes (${describe(counts)}); one deposit holds up to ${MAX_NOTES_PER_DEPOSIT}. Deposit it in two parts.`;
-    return;
+    return false;
   }
   const notes = count === 1 ? 'one note' : `${count} notes`;
-  progressLog.textContent = 'Preparing your deposit…';
+  if (!auto) progressLog.textContent = 'Preparing your deposit…';
   try {
     // Deposits come from the account: ONE transaction however many notes,
     // signed by its PQ key, where a plain wallet would need a confirmation
     // per note. The first one also deploys the account, paid from the USDC at
-    // its address. A funding wallet, if this browser has one, tops the
-    // account up in one confirmation; without one (the extension), USDC is
-    // sent to the address from anywhere.
+    // its address. Opaque is a wallet of its own and never asks another one:
+    // USDC is sent to the address from anywhere.
     const state = await rt.app.walletState();
     const account = state.accountAddress as `0x${string}`;
     const want = amount + DEPOSIT_GAS_USDC;
     const have = (await rt.accountFunds(account)).usdc;
     const topUp = Math.ceil((want - have) * 100) / 100;
     if (topUp > 0) {
-      if (!rt.hasWallet) {
-        // A deposit keeps DEPOSIT_GAS_USDC back for its own gas, so a round
-        // balance never covers the round number people type. Offer the amount
-        // that does fit before sending anyone off to fetch more USDC: the
-        // dialog below covers this message, and a covered message is how
-        // "I pressed Deposit and nothing happened" begins.
-        const affordable = Math.floor(have - DEPOSIT_GAS_USDC);
-        if (affordable >= 1) {
-          progressDialog.close();
-          status.textContent = `Your address holds ${have.toFixed(2)} USDC, which covers ${affordable} USDC of notes plus gas. Deposit ${affordable}, or send ${topUp.toFixed(2)} USDC more to deposit ${amount}.`;
-          return;
-        }
-        status.textContent = `Send ${topUp.toFixed(2)} USDC to your Opaque address (${notes} and gas) from any wallet, then press Deposit again.`;
-        // Close first: the receive dialog is the thing to act on, and two open
-        // modals leave it behind the progress one.
+      // A deposit keeps DEPOSIT_GAS_USDC back for its own gas, so a round
+      // balance never covers the round number people type. Offer the amount
+      // that does fit before sending anyone off to fetch more USDC: the
+      // dialog below covers this message, and a covered message is how
+      // "I pressed Deposit and nothing happened" begins.
+      const affordable = Math.floor(have - DEPOSIT_GAS_USDC);
+      if (affordable >= 1) {
         progressDialog.close();
-        el<HTMLDialogElement>('receive-dialog').showModal();
-        return;
+        status.textContent = `Your address holds ${have.toFixed(2)} USDC, which covers ${affordable} USDC of notes plus gas. Deposit ${affordable}, or send ${topUp.toFixed(2)} USDC more to deposit ${amount}.`;
+        return false;
       }
-      // This also verifies/switches the chain when an account was already exposed.
-      if (!await connectFundingWallet()) { progressDialog.close(); return; }
-      progressLog.textContent = `Confirm in your funding wallet: ${topUp.toFixed(2)} USDC to your account, for ${notes} and gas…`;
-      await rt.fundAccount(account, topUp);
-      // A lagging RPC node can still show the old balance; the deposit checks it.
-      await settle(async () => (await rt.accountFunds(account)).usdc >= want - 0.005);
+      status.textContent = `Send ${topUp.toFixed(2)} USDC to your Opaque address (${notes} and gas) from any wallet, then press Deposit again.`;
+      // Close first: the receive dialog is the thing to act on, and two open
+      // modals leave it behind the progress one.
+      progressDialog.close();
+      if (!auto) el<HTMLDialogElement>('receive-dialog').showModal();
+      return false;
     }
-    progressLog.textContent = state.active
+    // Notes drawn from the phrase: first catch up with any another device made, so no index is used twice.
+    if (rt.account !== 'browser') await rt.recover(false);
+    if (!auto) progressLog.textContent = state.active
       ? `Signing one deposit of ${notes} with your account's PQ key; a public bundler submits it…`
       : `Signing your account's first operation with its PQ key: it sets the account up on chain and deposits ${notes}…`;
     const made = await rt.app.depositNotes(rt.scopes
@@ -534,20 +503,53 @@ async function onDeposit(): Promise<void> {
       .map((s) => ({ scope: s, count: counts.get(Number(s.denomination) / 1e6)! })));
     const waiting = made.filter((n) => n.state !== 'AVAILABLE').length;
     await refreshPools();
-    progressLog.textContent = 'Deposit submitted on chain.';
+    if (!auto) progressLog.textContent = 'Deposit submitted on chain.';
     progressDialog.close();
     status.textContent = waiting === 0
       ? `Deposited ${amount} USDC as ${describe(counts)}, on chain.${fillNote(counts.keys()) || ' Spendable now.'}`
       : `Deposit sent; ${waiting} of ${notes} still wait for the chain to confirm them.`;
+    depositing = false;
+    quietUntil = Date.now() + 30_000;
     await Promise.all([refreshNotes(), renderBudget().catch(() => undefined)]);
+    return true;
   } catch (error) {
     if (progressDialog.open) progressDialog.close();
-    status.textContent = isRejected(error) ? '' : `Deposit failed: ${(error as Error).message}`;
+    status.textContent = isRejected(error) ? '' : `Deposit failed: ${(error as Error).message}${auto ? ' Press Deposit to try again.' : ''}`;
     // A deposit stopped halfway (a later popup rejected) still funded the
     // notes before it; listing finds them, so the balance shows what landed.
     await refreshNotes().catch(() => undefined);
+    return false;
   } finally {
+    depositing = false;
+    quietUntil = Date.now() + 30_000;
     button.disabled = false;
+  }
+}
+
+/**
+ * The first time a phrase account opens in this browser: its notes, found on
+ * chain, and for an imported phrase's Account 1, the phrase's other accounts.
+ */
+async function firstLook(keys: AccountKeys): Promise<void> {
+  const progress = (line: string) => setStatus('home-status', line);
+  try {
+    const found = await rt.recover(true, progress);
+    let more = 0;
+    const phrase = storedPhrase();
+    if (keys.index === 0 && keys.imported === undefined && walletState().imported && phrase !== null) {
+      for (let n = 1; n < 20; n++) {
+        progress(`Looking for Account ${n + 1} of this phrase on Arc…`);
+        if (!await rt.inUse(arcAddressOf(accountKeys(phrase, n)))) break;
+        more = n;
+      }
+      if (more + 1 > walletState().count) saveWalletState({ count: more + 1 });
+    }
+    await refreshNotes();
+    // Said for a phrase brought in, found or not; for one made here, only when there was something.
+    const imported = walletState().imported || keys.imported !== undefined;
+    progress(found === 0 && more === 0 && !imported ? '' : `Found ${found} ${found === 1 ? 'note' : 'notes'} of ${accountLabel(keys)} on Arc${more > 0 ? `, and ${more} more ${more === 1 ? 'account' : 'accounts'} of this phrase` : ''}.`);
+  } catch (error) {
+    progress(`Could not look for your notes: ${(error as Error).message}. Rescan from the account menu.`);
   }
 }
 
@@ -830,6 +832,7 @@ function showView(name: View): void {
     el(`view-${view}`).hidden = view !== name;
     el(`tab-${view}`).setAttribute('aria-selected', String(view === name));
   }
+  window.scrollTo(0, 0);
 }
 
 async function init(): Promise<void> {
@@ -844,11 +847,19 @@ async function init(): Promise<void> {
   onlyWholeAmounts(el<HTMLInputElement>('deposit-count'), renderDepositSplit);
   onlyWholeAmounts(el<HTMLInputElement>('send-amount'), () => undefined);
   el('action-send').addEventListener('click', () => showView('send'));
+  el('tile-deposit').addEventListener('click', () => { el('deposit-card').scrollIntoView({ block: 'center' }); el<HTMLInputElement>('deposit-count').focus(); });
+  el('tile-privacy').addEventListener('click', () => el('tab-ring').click());
+  el('tile-activity').addEventListener('click', () => el('tab-activity').click());
+  el('tile-account').addEventListener('click', () => el('account-button').click());
+  // The balance card catches the light where the pointer is.
+  el('hero').addEventListener('pointermove', (e) => {
+    const r = el('hero').getBoundingClientRect();
+    el('hero').style.setProperty('--mx', `${e.clientX - r.left}px`);
+    el('hero').style.setProperty('--my', `${e.clientY - r.top}px`);
+  });
   el('action-receive').addEventListener('click', () => el<HTMLDialogElement>('receive-dialog').showModal());
-  el('account-button').addEventListener('click', () => el<HTMLDialogElement>('account-dialog').showModal());
-  el('copy-address').addEventListener('click', (event) => void copyText(opaqueAddress, event.currentTarget as HTMLButtonElement));
+  el('copy-address').addEventListener('click', () => { if (opaqueAddress) copy(opaqueAddress, 'Address'); });
   el('refresh-balance').addEventListener('click', () => { void refreshNotes(); void renderBudget().catch(() => undefined); });
-  el('connect-wallet').addEventListener('click', () => void connectFundingWallet());
   el('withdraw').addEventListener('click', () => void onWithdraw());
   el('backup-export').addEventListener('click', () => void onBackupExport());
   el('backup-import').addEventListener('click', () => el<HTMLInputElement>('backup-file').click());
@@ -860,21 +871,69 @@ async function init(): Promise<void> {
   // The account is a wallet itself: the header picks the network, never a
   // browser wallet. Each network is its own page (opaque.credit/ and
   // /testnet/, the same in the extension), with its own storage names.
-  networkPicker(el<HTMLSelectElement>('network-switch'), NETWORK);
+  networkPicker(el<HTMLButtonElement>('network-switch'), NETWORK);
   // Real USDC on unaudited contracts: every visit to mainnet starts with this warning.
   if (NETWORK === 'mainnet') el<HTMLDialogElement>('mainnet-warning').showModal();
   document.querySelectorAll<HTMLElement>('[data-back]').forEach((node) => node.addEventListener('click', () => showView('home')));
   renderRingSvg();
+
+  // One recovery phrase holds every chain's accounts (lib/xrpl-keys.ts); an
+  // Arc account from before phrases stays here as the browser account.
+  browserAccount = await hasBrowserAccount();
+  if (!arcState().seen) {
+    // The first visit since Arc took phrases: an account this browser already has stays the one that opens.
+    if (browserAccount) saveWalletState({ active: 'browser' });
+    saveArcState({ seen: true });
+  }
+  setupWalletScreens({
+    views: ['home', 'send', 'ring', 'activity'], account: () => account, hasBrowserWallet: () => browserAccount,
+    browserNote: 'This browser only, backed up by file', where: 'on Arc',
+    addressOf: (key) => arcState().addresses[key.id] ?? null,
+    shortAddress,
+    // Two key generations each: one at a time, so the page keeps moving.
+    fillAddresses: async (keys) => {
+      for (const key of keys) { arcAddressOf(key); await new Promise((r) => setTimeout(r)); }
+      return true;
+    },
+    balanceOf: (key) => { const b = arcState().balances[idOf(key)]; return b === undefined ? '' : `${b} USDC`; },
+    rescan: async (progress) => { const kept = await rt.recover(true, progress); await refreshNotes(); return kept; },
+  });
+  account = activeAccount(browserAccount);
+  // Nothing to open yet: a new wallet, or one brought from elsewhere.
+  if (account === null) { openOnboarding('ob-welcome'); return; }
+  el('account-name').textContent = accountLabel(account);
+  el('receive-name').textContent = accountLabel(account);
+  document.querySelector('.acct .mark')!.innerHTML = markOf(account === 'browser' ? -1 : account.index);
+  if (account !== 'browser') {
+    el('backup-export').hidden = true;
+    el('backup-box').querySelector('p:not(.eyebrow):not(.status)')!.textContent = 'Your recovery phrase backs this account up. A backup file from before phrases brings that browser account back here.';
+  }
+  if (AUTO_DEPOSIT) {
+    el('deposit-copy').textContent = 'USDC sent to your address becomes private notes by itself.';
+    el('receive-then').textContent = 'on testnet it becomes private notes by itself';
+  }
+  loadSent(arcStorageOf(account, keyStoreName()).sent);
   renderActivity();
 
   try {
-    rt = await startWallet();
+    rt = await startWallet(undefined, account);
+    // A phrase's account comes back from the chain: its key, however many rotations on.
+    await rt.open();
   } catch (error) {
     showBootError(`Could not start: ${(error as Error).message}`);
     return;
   }
-  // The PQ account key lives in this browser; create one the first time.
-  try { await rt.app.walletState(); } catch { await rt.app.createWallet(); }
+  try { await rt.app.walletState(); } catch (error) {
+    // This browser's copy of a phrase account's keys is behind the chain: another
+    // device with the phrase rotated the key. Built again from the chain, once.
+    const REBUILT = 'opaque:arc-keys-rebuilt';
+    if (account !== 'browser' && (error as { code?: string }).code === 'SIGNER_STATE_UNSAFE' && sessionStorage.getItem(REBUILT) === null) {
+      sessionStorage.setItem(REBUILT, '1');
+      rt.forgetKeys();
+      location.reload();
+      return;
+    }
+  }
   runtimeReady = true;
 
   // One failed read must not stop the rest of the page from starting.
@@ -884,10 +943,8 @@ async function init(): Promise<void> {
   ]);
   renderDepositSplit();
   void refreshPools();
-  await readFundingWallet().catch(() => undefined);
-  provider()?.on?.('accountsChanged', () => void readFundingWallet());
-  provider()?.on?.('chainChanged', () => void readFundingWallet());
   void refreshRing();
+  if (account !== 'browser' && !arcState().scanned[account.id]) void firstLook(account);
   void pollActivity();
   setInterval(() => void pollActivity(), 5_000);
   // USDC sent to the address from any wallet shows up without a refresh.

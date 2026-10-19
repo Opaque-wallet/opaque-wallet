@@ -28,7 +28,7 @@ import { chainTo } from '../../../backend/mesh/directory.ts';
 import { createGraphHealth } from '../../../backend/mesh/graph-health.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from '../../../backend/mesh/contracts.ts';
 import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
-import { accountOf, recipientFor, scopeOf, type XrplDestination } from '../../../backend/xrpl/protocol.ts';
+import { accountOf, recipientFor, scopeOf, xAddressOf, type XrplDestination } from '../../../backend/xrpl/protocol.ts';
 import { faucetDeposit, meshLedger, nullifierSpent, onrampUrl, registerTag, tagStatus, type XrplSend } from '../../../backend/xrpl/queries.ts';
 import { closeSite, newSite, resultOf, rotate, setupSite, signAndSubmit, signMessage, signOnly, syncIndex, type Site } from '../../../backend/xrpl/site.ts';
 import { planSweep, runSweep, sweepKey, type SweepPlan } from '../../../backend/xrpl/sweep.ts';
@@ -42,6 +42,8 @@ import { localNoteStorage } from './note-storage.ts';
 import { runPaymentLanes } from './payment-lanes.ts';
 import type { WalletConnectConfig } from './walletconnect.ts';
 import { scoped } from './storage-name.ts';
+import { sha256 } from '@noble/hashes/sha256';
+
 import { stream, type AccountKeys } from './xrpl-keys.ts';
 
 export interface XrplStackConfig {
@@ -66,7 +68,7 @@ const UNIT = 1_000_000;
  */
 const storageOf = (account: AccountKeys | null) => {
   const name = (part: string) => scoped(account === null ? `opaque:xrpl-${part}:v1` : `opaque:xrpl:${account.id}:${part}:v1`);
-  return { notes: name('notes'), tags: name('tags'), activity: name('activity'), sites: name('sites'), counters: name('note-counters') };
+  return { notes: name('notes'), tags: name('tags'), activity: name('activity'), sites: name('sites'), counters: name('note-counters'), addresses: name('addresses') };
 };
 /** Whether the browser wallet from before recovery phrases holds anything. */
 export const hasBrowserWallet = (): boolean => {
@@ -81,6 +83,25 @@ export const hasBrowserWallet = (): boolean => {
 const SCAN_GAP = 250;
 /** A used account has a note among the first numbers of some size; an unused one is told by this much. */
 const PROBE_GAP = 64;
+/**
+ * A reusable address's hash chain: one link per top-up, 64 notes each, so
+ * about 260,000 notes for one address. Revealing a link is the only way to add
+ * notes to it (backend/xrpl/pool.ts): SHA-256, nothing a quantum computer breaks.
+ */
+const CHAIN = 4096;
+/** A size tops up when fewer of its notes than this are left: one payment can take 9 of a smaller size. */
+const LOW = 9;
+/** Where an address is kept: which of its candidate tags it took, and how far its notes are synced. */
+interface AddressRecord { readonly i: number; readonly tag: number; readonly synced: Readonly<Record<string, number>> }
+/** An account's reusable address for one asset: the pool's address and a tag only this account can top up. */
+export interface ReusableAddress { readonly symbol: string; readonly pool: string; readonly tag: number; readonly xAddress: string }
+const isTestnet = () => xrplDeployment.network.name !== 'xrpl-mainnet';
+/** Another account's address for an asset, if this browser has made or found it: for the account list. */
+export function cachedAddress(accountId: string, symbol: string): ReusableAddress | null {
+  const p = poolBySymbol(symbol);
+  const rec = load<Record<string, AddressRecord>>(storageOf({ id: accountId } as AccountKeys).addresses, {})[p.account];
+  return rec === undefined ? null : { symbol, pool: p.account, tag: rec.tag, xAddress: xAddressOf(p.account, rec.tag, isTestnet()) };
+}
 /** At most this many notes travel at once: each is a 1.1 MiB proof upload. */
 const LANES = 2;
 /** What a payment that chose to wait asks of the pool's privacy score. */
@@ -183,6 +204,11 @@ export interface XrplWallet {
   // ── recovery (phrase accounts only) ──
   /** Finds this account's notes in the pools' logs and keeps them: what an imported phrase holds. */
   recover(onProgress?: (line: string) => void): Promise<number>;
+  /**
+   * This account's reusable address for an asset, made the first time it is
+   * asked for; null for the browser wallet, which has no phrase to find it again.
+   */
+  address(symbol: string): Promise<ReusableAddress | null>;
   /** Whether another account of the phrase has notes in the pools' logs (1) or not (0), keeping none. */
   probe(account: AccountKeys): Promise<number>;
 
@@ -289,6 +315,90 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     return found;
   }
   const scopes = () => xrplDeployment.pools.flatMap((p) => p.sizes.map((size) => ({ p, scope: scopeFor(p, size) })));
+
+  // ── the reusable address: one per pool, found again from the phrase ─────
+  // Everything is drawn from the account key: candidate tag i, its hash chain,
+  // and note j of each size, which is the j-th note that size credits on the
+  // tag. So any browser with the phrase knows which notes a payment made,
+  // without a scan, and the pool learns nothing it did not already hold.
+  const addressLabel = (p: XrplPoolDeployment, i: number) => `address/${xrplDeployment.network.name}/${p.account}/${i}`;
+  const tagAt = (keys: AccountKeys, p: XrplPoolDeployment, i: number) => {
+    const b = stream(keys.key, `${addressLabel(p, i)}/tag`)(4);
+    return 1 + ((((b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0) % 0xffff_fffe);
+  };
+  /** Link n of candidate i's chain: SHA-256 applied n times to its seed. The anchor is link CHAIN. */
+  const linkAt = (keys: AccountKeys, p: XrplPoolDeployment, i: number, n: number) => {
+    let h = stream(keys.key, `${addressLabel(p, i)}/owner`)(32);
+    for (let k = 0; k < n; k++) h = sha256(h);
+    return toHex(h) as string;
+  };
+  const addressDraw = (keys: AccountKeys, p: XrplPoolDeployment, i: number, size: number, j: number) => stream(keys.key, `${addressLabel(p, i)}/note/${size}/${j}`);
+  const addressCommitment = (keys: AccountKeys, p: XrplPoolDeployment, i: number, size: number, j: number) =>
+    deriveCommitment(createNoteSecret(addressDraw(keys, p, i, size, j)), scopeFor(p, size));
+  /** The next notes for the tag: per size, from position `from[size]`, at most 64 in all. */
+  const addressBatch = (keys: AccountKeys, p: XrplPoolDeployment, i: number, from: Record<string, number>) => {
+    const per = Math.min(20, Math.floor(64 / Object.keys(from).length));
+    return Object.fromEntries(Object.entries(from).map(([size, start]) =>
+      [size, Array.from({ length: per }, (_, k) => addressCommitment(keys, p, i, Number(size), start + k))]));
+  };
+  const addresses = () => load<Record<string, AddressRecord>>(K.addresses, {});
+  const saveAddress = (pool: string, rec: AddressRecord) => save(K.addresses, { ...addresses(), [pool]: rec });
+  /**
+   * This account's address on a pool: the first candidate tag whose chain is
+   * its own, or, with `make`, the first free one, registered with its anchor.
+   * ponytail: without `make` it stops at the first free candidate, so an
+   * address that skipped a tag someone had paid unregistered is found only by
+   * asking for it; scan all eight if that ever matters.
+   */
+  async function claimAddress(keys: AccountKeys, p: XrplPoolDeployment, make: boolean): Promise<AddressRecord | null> {
+    for (let i = 0; i < 8; i++) {
+      const tag = tagAt(keys, p, i);
+      const s = await tagStatus(xrpl, p.account, tag);
+      if (s.owner !== null) {
+        if (linkAt(keys, p, i, CHAIN - s.owner.depth) === s.owner.anchor) return { i, tag, synced: {} };
+        continue;
+      }
+      if (s.registered || s.notes > 0) continue;
+      if (!make) return null;
+      try {
+        await registerTag(xrpl, p.account, tag, addressBatch(keys, p, i, Object.fromEntries(p.sizes.map((size) => [String(size), 0]))), { owner: linkAt(keys, p, i, CHAIN) });
+        return { i, tag, synced: {} };
+      } catch (error) {
+        // Paid before anyone registered it: the next candidate.
+        if (!/already in use/.test((error as Error).message)) throw error;
+      }
+    }
+    throw new Error('no free tag for this account\'s address yet: try again');
+  }
+  /**
+   * Keeps the notes payments have credited to the address, and tops it up
+   * when a size runs low, revealing the next link. Returns the notes it kept.
+   */
+  async function syncAddress(keys: AccountKeys, p: XrplPoolDeployment, rec: AddressRecord): Promise<number> {
+    const s = await tagStatus(xrpl, p.account, rec.tag);
+    const have = new Set((await vault.list()).map((n) => n.commitment as string));
+    const synced = { ...rec.synced };
+    let kept = 0;
+    for (const size of p.sizes) {
+      const credited = s.sizes[String(size)]?.credited ?? 0;
+      for (let j = synced[String(size)] ?? 0; j < credited; j++) {
+        if (have.has(addressCommitment(keys, p, rec.i, size, j))) continue;
+        drawing = addressDraw(keys, p, rec.i, size, j);
+        try { await vault.create(scopeFor(p, size)); } finally { drawing = undefined; }
+        kept++;
+      }
+      synced[String(size)] = Math.max(synced[String(size)] ?? 0, credited);
+    }
+    saveAddress(p.account, { ...rec, synced });
+    const low = p.sizes.filter((size) => { const z = s.sizes[String(size)]; return z !== undefined && z.registered - z.credited < LOW; });
+    if (low.length > 0 && s.owner !== null) {
+      const from = Object.fromEntries(low.map((size) => [String(size), s.sizes[String(size)]!.registered]));
+      // Another browser of the phrase may top it up first; its link is then spent, and the next sync sees its notes.
+      await registerTag(xrpl, p.account, rec.tag, addressBatch(keys, p, rec.i, from), { reveal: linkAt(keys, p, rec.i, CHAIN - s.owner.depth - 1) }).catch(() => undefined);
+    }
+    return kept;
+  }
+  const poolOf = (account: string) => xrplDeployment.pools.find((p) => p.account === account);
   const seal = createIntentSealer({
     crePublicKey: cfg.cre.publicKey, encryptionKeyId: cfg.cre.encryptionKeyId,
     resolveCredential: async (handle) => {
@@ -308,6 +418,14 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
   }
 
   async function refresh(deep = false): Promise<readonly NoteSummary[]> {
+    // What paid this account's addresses since, first: their notes are kept here, then reconciled below.
+    if (account !== null) {
+      const keys = account;
+      await Promise.all(Object.entries(addresses()).map(([pool, rec]) => {
+        const p = poolOf(pool);
+        return p === undefined ? 0 : syncAddress(keys, p, rec).catch(() => 0);
+      }));
+    }
     const notes = await vault.list();
     for (const n of notes) {
       // A tag's notes are only worth asking about once the log names them.
@@ -386,6 +504,13 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       }
     },
     tags: () => load<ReceiveTag[]>(K.tags, []),
+    async address(symbol) {
+      if (account === null) return null;
+      const p = poolBySymbol(symbol);
+      const rec = addresses()[p.account] ?? await claimAddress(account, p, true);
+      if (addresses()[p.account] === undefined) saveAddress(p.account, rec!);
+      return { symbol, pool: p.account, tag: rec!.tag, xAddress: xAddressOf(p.account, rec!.tag, isTestnet()) };
+    },
     tagStatus: (t) => tagStatus(xrpl, t.pool, t.tag),
     buyUrl: (t, fiat) => onrampUrl(xrpl, t.pool, t.tag, fiat),
     faucet: (t) => faucetDeposit(xrpl, t.pool, t.tag),
@@ -584,6 +709,13 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
         // New notes start past everything found, and past what this browser already drew.
         counters[counterOf(scope)] = Math.max(from, (found.at(-1) ?? -1) + 1);
         save(K.counters, counters);
+      }
+      // The account's reusable addresses, wherever another browser made them.
+      for (const p of xrplDeployment.pools) {
+        if (addresses()[p.account] !== undefined) continue;
+        onProgress?.(`Looking for your ${p.symbol} address…`);
+        const rec = await claimAddress(account, p, false).catch(() => null);
+        if (rec !== null) { saveAddress(p.account, rec); kept += await syncAddress(account, p, rec).catch(() => 0); }
       }
       onProgress?.('Checking which of them are still yours to spend…');
       await refresh(true);

@@ -36,7 +36,7 @@ import { toPackedUserOperation } from 'viem/account-abstraction';
 
 import { ProtocolFailure, type Address, type Bytes32, type Hex, type PqWallet, type TxHash } from '@opaque/protocol-types';
 import { asAddress, asBytes32, asChainId } from '@opaque/protocol-types/codecs.js';
-import { createPqWallet, encodeSignature, FORS_C_DEFAULT, keyGen, pqDigest, sign } from '@opaque/pq-wallet';
+import { createPqWallet, encodeSignature, FORS_C_DEFAULT, keyGen, pqDigest, sign, type WalletOptions } from '@opaque/pq-wallet';
 
 import { deployment, entryPoint, requireContract } from '../../deployments/index.ts';
 // Not in pq-wallet's pinned public API; imported from source, as
@@ -228,28 +228,44 @@ const YEAR = 365n * 86_400n;
 /** Per key. FORS+C is few-time; two of these are held back for rotate and disable. */
 export const ACCOUNT_MAX_USES = 32n;
 
-/** A PQ wallet whose account lives on Arc. In a browser both stores are one IndexedDbSignerStore. */
-export function createLivePqWallet(options: {
+/**
+ * The first deadline of an account drawn from a recovery phrase (2100-01-01).
+ * It is part of the account's address, so it cannot be the clock's: the
+ * phrase alone must give the address back. The registry only records it.
+ */
+export const PHRASE_ROTATION_DEADLINE = 4_102_444_800n;
+
+export interface LivePqWalletOptions {
   readonly signerStore: SignerStore;
   readonly walletStore: WalletStateStore;
   readonly publicClient: PublicClient;
   readonly payer: () => Promise<WalletClient>;
   readonly walletRpc: WalletRpcSend;
   readonly walletId?: string;
-}): PqWallet {
+  /** Keys drawn from a recovery phrase, by epoch; random when absent. */
+  readonly seedFor?: (keyEpoch: bigint) => Uint8Array;
+}
+
+/** What a PQ wallet on Arc is made of: createLivePqWallet's, and adoptWallet's. */
+export function livePqWalletOptions(options: LivePqWalletOptions): WalletOptions {
   const now = BigInt(Math.floor(Date.now() / 1000));
+  const deadline = options.seedFor === undefined ? now + YEAR : PHRASE_ROTATION_DEADLINE;
   const chain = createLiveWalletChain({
     publicClient: options.publicClient, authority: ARC_AUTHORITY, payer: options.payer, walletRpc: options.walletRpc,
-    maxUses: ACCOUNT_MAX_USES, rotationDeadline: now + YEAR, initialKeyEpoch: 0n,
+    maxUses: ACCOUNT_MAX_USES, rotationDeadline: deadline, initialKeyEpoch: 0n,
     epochOf: async (pk) => (await options.signerStore.read(pk))?.keyEpoch,
   });
-  return createPqWallet({
+  return {
     walletId: options.walletId ?? 'opaque-account', signerStore: options.signerStore, walletStore: options.walletStore, chain,
     authority: ARC_AUTHORITY, params: FORS_C_DEFAULT, maxUses: ACCOUNT_MAX_USES, lifecycleReserve: 2n,
-    initialKeyEpoch: 0n, initialRotationDeadline: now + YEAR, registryPolicy: CONTRACT_POLICY,
+    initialKeyEpoch: 0n, initialRotationDeadline: deadline, registryPolicy: CONTRACT_POLICY,
     nextKeyEpoch: (epoch) => epoch + 1n, nextRotationDeadline: (t) => t + YEAR,
-  });
+    ...(options.seedFor === undefined ? {} : { seedFor: options.seedFor }),
+  };
 }
+
+/** A PQ wallet whose account lives on Arc. In a browser both stores are one IndexedDbSignerStore. */
+export const createLivePqWallet = (options: LivePqWalletOptions): PqWallet => createPqWallet(livePqWalletOptions(options));
 
 /**
  * The factory call a not-yet-registered account's first operation carries

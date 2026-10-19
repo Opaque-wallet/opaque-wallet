@@ -11,7 +11,7 @@
 import { ProtocolFailure, type Hex, type NoteCommitment, type Nullifier, type XrplOperation } from '@opaque/protocol-types';
 import { asBytes32, fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
-import type { TagRegistration } from './pool.ts';
+import type { TagAuth, TagOwner, TagRegistration } from './pool.ts';
 import type { Ledger } from './site.ts';
 
 export type XrplSend = (operation: XrplOperation, encodedRequest: Hex) => Promise<Hex>;
@@ -24,9 +24,18 @@ const str = (v: unknown, label: string): string => (typeof v === 'string' ? v : 
 const int = (v: unknown, label: string): number => (typeof v === 'number' && Number.isSafeInteger(v) ? v : refuse(`${label} must be an integer`));
 
 /** What the exit needs from the XRPL node; built in the stack from xrpl/node.ts. */
+/** A tag as the pool sees it: per note size, how many commitments it holds and how many payments have credited. */
+export interface TagState {
+  readonly registered: boolean;
+  readonly notes: number;
+  readonly carried: bigint;
+  readonly sizes: Readonly<Record<string, { readonly registered: number; readonly credited: number }>>;
+  readonly owner: TagOwner | null;
+}
+
 export interface XrplAnswererDeps {
-  registerTag(pool: string, tag: number, registration: TagRegistration): Promise<void>;
-  tagStatus(pool: string, tag: number): Promise<{ readonly registered: boolean; readonly notes: number; readonly carried: bigint }>;
+  registerTag(pool: string, tag: number, registration: TagRegistration, auth?: TagAuth): Promise<void>;
+  tagStatus(pool: string, tag: number): Promise<TagState>;
   isSpent(pool: string, nullifier: Nullifier): Promise<boolean>;
   /** Absent: Buy is not offered by this exit. */
   onrampUrl?(pool: string, tag: number, fiatAmount: number): Promise<string>;
@@ -55,12 +64,13 @@ export function createXrplAnswerer(deps: XrplAnswererDeps): XrplSend {
       const tag = int(r['tag'], 'tag');
       const commitments = r['commitments'];
       if (typeof commitments !== 'object' || commitments === null) refuse('commitments are a list per note size');
-      await deps.registerTag(pool, tag, commitments as TagRegistration);
+      const auth = typeof r['reveal'] === 'string' ? { reveal: r['reveal'] } : typeof r['owner'] === 'string' ? { owner: r['owner'] } : undefined;
+      await deps.registerTag(pool, tag, commitments as TagRegistration, auth);
       return { pool, tag };
     },
     async TAG_STATUS(r) {
       const s = await deps.tagStatus(str(r['pool'], 'pool'), int(r['tag'], 'tag'));
-      return { registered: s.registered, notes: s.notes, carried: s.carried.toString(10) };
+      return { registered: s.registered, notes: s.notes, carried: s.carried.toString(10), sizes: s.sizes, owner: s.owner };
     },
     async NULLIFIER_SPENT(r) {
       return { spent: await deps.isSpent(str(r['pool'], 'pool'), asBytes32(r['nullifier']) as unknown as Nullifier) };
@@ -116,12 +126,14 @@ export async function xrplCall<T>(send: XrplSend, operation: XrplOperation, requ
   return answer.result as T;
 }
 
-export const registerTag = (send: XrplSend, pool: string, tag: number, commitments: Readonly<Record<string, readonly NoteCommitment[]>>) =>
-  xrplCall<{ pool: string; tag: number }>(send, 'REGISTER_TAG', { pool, tag, commitments });
+/** `auth`: an owner anchor makes the tag a reusable address; a reveal tops one up. */
+export const registerTag = (send: XrplSend, pool: string, tag: number, commitments: Readonly<Record<string, readonly NoteCommitment[]>>, auth?: TagAuth) =>
+  xrplCall<{ pool: string; tag: number }>(send, 'REGISTER_TAG', { pool, tag, commitments, ...auth });
 
-export const tagStatus = async (send: XrplSend, pool: string, tag: number) => {
-  const s = await xrplCall<{ registered: boolean; notes: number; carried: string }>(send, 'TAG_STATUS', { pool, tag });
-  return { ...s, carried: BigInt(s.carried) };
+export const tagStatus = async (send: XrplSend, pool: string, tag: number): Promise<TagState> => {
+  const s = await xrplCall<Omit<TagState, 'carried'> & { carried: string }>(send, 'TAG_STATUS', { pool, tag });
+  // An exit from before reusable addresses answers without these.
+  return { ...s, carried: BigInt(s.carried), sizes: s.sizes ?? {}, owner: s.owner ?? null };
 };
 
 export const nullifierSpent = async (send: XrplSend, pool: string, nullifier: Nullifier) =>

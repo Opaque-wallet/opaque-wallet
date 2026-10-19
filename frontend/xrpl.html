@@ -16,7 +16,7 @@
   <header class="bar">
     <button class="acct" id="account-button" type="button" aria-label="Account, backup and network"><span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><g fill="#070608"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg></span><span><b id="account-name">Opaque on XRPL</b><small id="account-short">Starting…</small></span></button>
     <div class="bar-right">
-      <select class="net" id="network-switch" aria-label="Network"></select>
+      <button class="net" id="network-switch" type="button" aria-label="Network">Network</button>
       <button class="icon-btn" id="menu-button" type="button" title="Accounts and settings" aria-label="Accounts and settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <a class="icon-btn expand" href="xrpl.html" target="_blank" rel="noopener" title="Open in a tab" aria-label="Open in a tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></a>
     </div>
@@ -32,8 +32,11 @@
     <div class="ob-step" id="ob-show" hidden>
       <div class="screen-head"><button class="back" data-ob="ob-welcome" type="button" aria-label="Back">←</button><h1>Your recovery phrase</h1><span></span></div>
       <p class="lede">These 12 words are your wallet. Anyone who has them can spend everything in it, and Opaque can't bring them back if they are lost. Write them down in order and keep them offline.</p>
-      <ol class="words is-hidden" id="ob-words"></ol>
-      <button class="secondary" id="ob-reveal" type="button">Reveal the words</button>
+      <div class="words-wrap">
+        <ol class="words is-hidden" id="ob-words"></ol>
+        <button class="reveal" id="ob-reveal" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><b>Reveal the words</b><small>Make sure nobody can see your screen</small></button>
+      </div>
+      <button class="copy-btn" id="ob-copy" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/></svg>Copy to clipboard</button>
       <label class="privacy-toggle ob-check" for="ob-saved"><input id="ob-saved" type="checkbox" disabled><span><b>I wrote them down</b><small>On paper, somewhere only I can find.</small></span></label>
       <button class="primary" id="ob-next" type="button" disabled>Continue</button>
     </div>
@@ -54,15 +57,20 @@
   </section>
 
   <section class="view" id="view-home" aria-labelledby="tab-home">
-    <div class="hero">
+    <div class="hero" id="hero">
+      <svg class="hero-ring" viewBox="0 0 40 40" aria-hidden="true"><g fill="currentColor"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg>
+      <div class="hero-top"><span class="hero-label">Private balance</span><span class="shield">Hidden on the ledger</span></div>
       <h1 class="balance"><span id="balance-main">—</span> <small id="balance-main-unit">XRP</small></h1>
-      <p class="sub"><span class="shield">Hidden on the ledger</span><span id="note-count">Loading notes…</span></p>
+      <p class="sub" id="note-count">Loading notes…</p>
+      <div class="hero-assets" id="hero-assets"></div>
     </div>
     <div class="tiles">
-      <button id="action-receive" type="button"><i>↙</i>Deposit</button>
-      <button id="action-send" type="button"><i>↗</i>Send</button>
-      <button id="action-apps" type="button"><i>◫</i>Apps</button>
-      <button id="action-activity" type="button"><i>◷</i>Activity</button>
+      <button id="action-receive" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></svg></i>Deposit</button>
+      <button id="action-send" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 10 14M20.5 3.5 14 20.5l-4-6.5-6.5-4z"/></svg></i>Send</button>
+      <button id="action-apps" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg></i>Apps</button>
+      <button id="action-activity" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></i>Activity</button>
+      <button id="action-sweep" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12h11M10.5 7.5 15 12l-4.5 4.5M20 4v16"/></svg></i>Sweep in</button>
+      <button id="action-accounts" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1.4-3.6 3.9-5.2 7-5.2s5.6 1.6 7 5.2"/></svg></i>Accounts</button>
     </div>
     <div class="promo" id="phrase-card" hidden>
       <button class="promo-go" id="phrase-card-go" type="button">
@@ -88,6 +96,7 @@
       <p class="status" id="home-status" role="status"></p>
     </div>
     <div id="home-privacy" role="tabpanel" aria-labelledby="hometab-privacy" hidden>
+      <div class="list-head wide-only"><span>How your notes stay private</span></div>
       <div class="card prose">
         <p>Your coins sit in a pool among notes of the same size. A payment proves it owns one of 8 of them without saying which, and the pool pays from its own account.</p>
         <p>The pool's keys sign once each, and every payout swaps in keys nobody has seen yet. That protects against a future quantum computer by timing: an attacker gets a few seconds per key. It is not a mathematical guarantee.</p>
@@ -114,11 +123,24 @@
 
   <section class="view" id="view-receive" aria-labelledby="tab-receive" hidden>
     <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Deposit</h1><span></span></div>
-    <p class="lede">A fresh tag on the pool's address. Pay it from any XRPL wallet or exchange: the sender sees the pool and the tag, never you. What arrives becomes notes only this browser can spend.</p>
+    <p class="lede">Send to your address from any XRPL wallet or exchange. The sender sees the pool and a tag, never your notes, and what arrives becomes notes only you can spend.</p>
+    <label class="field" for="receive-asset"><span>Asset</span><select id="receive-asset"></select></label>
+    <div class="address-card" id="address-card">
+      <p class="eyebrow">Your <span id="address-symbol">XRP</span> address</p>
+      <div class="addr-row"><code class="addr" id="address-x">Making your address…</code><button class="icon-btn" id="address-copy" type="button" title="Copy address" aria-label="Copy address"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/></svg></button></div>
+      <div class="detail"><span>Classic address</span><code id="address-pool">—</code></div>
+      <div class="detail"><span>Destination tag</span><strong id="address-tag">—</strong></div>
+      <div class="dialog-actions"><button class="secondary" id="address-copy-pool" type="button">Copy classic address</button><button class="secondary" id="address-copy-tag" type="button">Copy tag</button></div>
+      <button class="primary" id="address-faucet" type="button" hidden>Get 95 test XRP at this address</button>
+      <p class="status" id="address-status" role="status"></p>
+      <p class="fine-print">Yours to reuse, like any wallet address. It holds no key, so there is nothing in it for a quantum computer to break, and only this wallet can add notes to it. Payments into it can be linked to each other; what you spend can't.</p>
+    </div>
+    <p class="card notice" id="address-none" hidden>The browser account has no recovery phrase, so it can't keep a reusable address. Use a one-time address below, or set up a recovery phrase in Accounts.</p>
+    <p class="section-label">One-time address</p>
+    <p class="fine-print one-time-note">A fresh tag for one deposit, unlinkable to your others.</p>
     <div class="form">
-      <label class="field" for="receive-asset"><span>Asset</span><select id="receive-asset"></select></label>
       <label class="field" for="receive-expected"><span>Expected amount (optional)</span><input id="receive-expected" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="e.g. 250"></label>
-      <button class="primary" id="receive-button" type="button">New deposit tag</button>
+      <button class="secondary" id="receive-button" type="button">New one-time address</button>
       <p class="status" id="receive-status" role="status"></p>
       <div class="result" id="receive-result" hidden>
         <div class="detail"><span>Pay to</span><code id="receive-address"></code></div>
@@ -164,11 +186,13 @@
   <footer id="boot-error" role="alert" hidden></footer>
 
   <nav class="tabbar" aria-label="Wallet">
-    <button id="tab-home" aria-selected="true" type="button"><i>⌂</i>Home</button>
-    <button id="tab-send" aria-selected="false" type="button"><i>↗</i>Send</button>
-    <button id="tab-receive" aria-selected="false" type="button"><i>↙</i>Deposit</button>
-    <button id="tab-activity" aria-selected="false" type="button"><i>◷</i>Activity</button>
-    <button id="tab-apps" aria-selected="false" type="button"><i>◫</i>Apps</button>
+    <a class="side-logo" href="/" aria-label="About opaque"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
+    <button id="tab-home" aria-selected="true" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4.5l8 6.5v8.5H14.5V14h-5v5.5H4z"/></svg></i>Home</button>
+    <button id="tab-send" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 10 14M20.5 3.5 14 20.5l-4-6.5-6.5-4z"/></svg></i>Send</button>
+    <button id="tab-receive" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></svg></i>Deposit</button>
+    <button id="tab-activity" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></i>Activity</button>
+    <button id="tab-apps" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg></i>Apps</button>
+    <p class="side-note"><span class="shield">Private on XRPL testnet</span>Notes stay in this browser. Only the pool shows on the ledger.</p>
   </nav>
 </main>
 
@@ -210,7 +234,7 @@
     <p class="eyebrow">Recovery phrase</p>
     <p>Every account above comes from it. Import it in the extension, on the website or on a phone, and the same accounts, notes and app accounts come back.</p>
     <ol class="words" id="phrase-words" hidden></ol>
-    <div class="dialog-actions"><button class="secondary" id="phrase-show" type="button">Show recovery phrase</button><button class="secondary" id="account-rescan" type="button">Rescan the ledger</button></div>
+    <div class="dialog-actions"><button class="secondary" id="phrase-show" type="button">Show recovery phrase</button><button class="secondary" id="phrase-copy" type="button" hidden>Copy</button><button class="secondary" id="account-rescan" type="button">Rescan the ledger</button></div>
     <p class="status" id="phrase-status" role="status"></p>
   </div>
   <div class="backup" id="key-box" hidden>
@@ -239,6 +263,7 @@
   </div>
   <a class="home-link" href="/">About opaque ↗</a>
 </dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="/src/xrpl-app.ts"></script>
 </body>
 </html>

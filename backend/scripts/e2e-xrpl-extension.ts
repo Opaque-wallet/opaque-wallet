@@ -142,13 +142,14 @@ try {
 
   // ── 6. every chain in one extension ───────────────────────────────────────
   // The XRPL page's picker leads to Arc's, and both Arc networks boot from the same extension.
-  await wallet.selectOption('#network-switch', 'mainnet');
+  await wallet.click('#network-switch');
+  await wallet.click('#network-dialog [data-network="mainnet"]');
   await wallet.waitForURL(`${WALLET}/app.html`, { timeout: 30_000 });
   for (const [path, name] of [['app.html', 'Arc Mainnet'], ['testnet/app.html', 'Arc Testnet']]) {
     const arc = path === 'app.html' ? wallet : await context.newPage();
     if (arc !== wallet) await arc.goto(`${WALLET}/${path}`);
     const started = await arc.waitForFunction(() => (globalThis as any).opaque !== undefined, undefined, { timeout: 120_000 }).then(() => true, () => false);
-    const picked = await arc.$eval('#network-switch', (e: any) => ({ chosen: e.selectedOptions[0]?.text, all: [...e.options].map((o: any) => o.text) }));
+    const picked = await arc.evaluate(() => ({ chosen: document.getElementById('network-switch')?.textContent?.trim(), all: [...document.querySelectorAll('#network-dialog .net-row b')].map((b) => b.textContent ?? '') }));
     check(`${name} boots in the same extension, and its picker offers XRPL`, started && picked.chosen === name && picked.all.includes('XRPL Testnet'), `${picked.chosen} of ${picked.all.join(' / ')}`);
   }
 } catch (error) {

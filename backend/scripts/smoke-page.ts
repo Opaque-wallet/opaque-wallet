@@ -11,6 +11,7 @@
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 
 import { deployment, requireService } from '../../deployments/index.ts';
+import { ARC_READY, createWallet } from './xrpl-wallet-page.ts';
 
 const APP_URL = process.env['APP_URL'] ?? 'https://www.opaque.credit/app.html';
 const stackOrigin = new URL(requireService('meshExitUrl')).origin;
@@ -33,13 +34,18 @@ const check = (name: string, ok: boolean, detail: string) => {
 console.log(`\n  ${APP_URL} — expecting ${deployment.network.displayName}\n`);
 const t0 = Date.now();
 await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+// A fresh browser opens on onboarding: make a wallet as a person would.
+if (await page.waitForSelector('#ob-create', { state: 'visible', timeout: 30_000 }).then(() => true, () => false)) {
+  if (await page.isVisible('#mainnet-continue')) await page.click('#mainnet-continue');
+  await createWallet(page, 120_000, ARC_READY);
+}
 const started = await page.waitForFunction(() => (globalThis as { opaque?: unknown }).opaque !== undefined, undefined, { timeout: 120_000 })
   .then(() => true, () => false);
 const bootError = await page.evaluate(() => document.body.innerText.match(/Could not start:[^\n]*/)?.[0] ?? '');
 check('wallet runtime started', started && bootError === '', bootError || `${Date.now() - t0} ms`);
 
 if (started) {
-  const picker = await page.$eval('#network-switch', (e) => { const s = e as HTMLSelectElement; return { chosen: s.selectedOptions[0]?.text, all: [...s.options].map((o) => o.text) }; });
+  const picker = await page.evaluate(() => ({ chosen: document.getElementById('network-switch')?.textContent?.trim(), all: [...document.querySelectorAll('#network-dialog .net-row b')].map((b) => b.textContent ?? '') }));
   check('network picker shows this network, offers the others', picker.chosen === deployment.network.displayName && picker.all.length > 1, `"${picker.chosen}" of ${picker.all.join(' / ')}`);
   const state = await page.evaluate(async () => {
     const rt = (globalThis as { opaque?: any }).opaque;

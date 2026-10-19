@@ -10,7 +10,8 @@
 //   account n   HMAC-SHA256(root, "account/n")
 //   a secret    HMAC-SHA256(account, "<label>#<block>"), block by block
 //
-// Labels: `note/<network>/<pool>/<size>/<i>` per note, `site/<origin>` per app.
+// Labels: `note/<network>/<pool>/<size>/<i>` per note, `site/<origin>` per app;
+// Arc's begin `arc/<chain id>/` (lib/arc-keys.ts).
 // Nothing here leaves the page. The phrase sits in this origin's storage beside
 // the notes, which are secrets of the same weight.
 
@@ -101,8 +102,11 @@ export const accountFromKeyText = (text: string, slot: number): AccountKeys => {
 
 // ── what this browser holds ───────────────────────────────────────────────
 
-const PHRASE_KEY = scoped('opaque:xrpl-phrase:v1');
-const IMPORTED_KEY = scoped('opaque:xrpl-imported:v1');
+// One phrase for every chain and network, as one Opaque wallet: each chain
+// draws its own keys from it under its own labels (Arc's: lib/arc-keys.ts).
+// The names predate that, and stay so a phrase already here is found.
+const PHRASE_KEY = 'opaque:xrpl-phrase:v1';
+const IMPORTED_KEY = 'opaque:xrpl-imported:v1';
 const STATE_KEY = scoped('opaque:xrpl-accounts:v1');
 
 /** A phrase account's number; 'browser', the wallet from before recovery phrases; or an imported account's place. */

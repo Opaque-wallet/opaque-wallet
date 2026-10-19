@@ -1,9 +1,9 @@
-import { ProtocolFailure, type PqWallet, type PqWalletState, type Hex, type TxHash } from '@opaque/protocol-types';
-import { asAddress, asChainId, asUnixSeconds, assertHex } from '@opaque/protocol-types/codecs.js';
+import { ProtocolFailure, type Bytes32, type PqWallet, type PqWalletState, type Hex, type TxHash } from '@opaque/protocol-types';
+import { asAddress, asChainId, asUnixSeconds, assertHex, toHex } from '@opaque/protocol-types/codecs.js';
 import { pqDigest } from './digest.ts';
-import { assertForsParams, forsSchemeId, type ForsParams } from './fors.ts';
+import { assertForsParams, forsSchemeId, keyGen, pkCommitment, type ForsParams } from './fors.ts';
 import { assertUsable, disablePayload, rotationPayload, uint64, validateKeyState, validateRegistryPolicy, type RegistryPolicy } from './registry.ts';
-import { initializeSigner, signerSummary, unsafeState, validateSignerRecord, type SignerStore, type SignedOutput } from './signer-state.ts';
+import { initializeSigner, restoreSigner, signerSummary, unsafeState, validateSignerRecord, type RestorableSignerStore, type SignerStore, type SignedOutput } from './signer-state.ts';
 import { signDigest } from './sign.ts';
 import { authorityConfigId, validateAuthorityConfig, validatePreparedOperation, type AuthorityConfig, type ChainObservation, type PreparedUserOperation } from './authority.ts';
 import type { WalletChainAdapter } from './chain-adapter.ts';
@@ -24,9 +24,76 @@ export interface WalletOptions {
   /** Supplied from the approved epoch and deadline rules, never inferred from chain useCount. */
   readonly nextKeyEpoch: (epoch: bigint) => bigint;
   readonly nextRotationDeadline: (now: bigint) => bigint;
+  /**
+   * Each key's seed, by epoch, drawn from a recovery phrase: the phrase then
+   * makes every key this wallet will ever hold, and adoptWallet finds them on
+   * chain again. Random keys when absent.
+   */
+  readonly seedFor?: (keyEpoch: bigint) => Uint8Array;
 }
 
 export function createPqWallet(options: WalletOptions): PqWallet { return new Wallet(options); }
+
+/** How many rotations adoptWallet looks through for the key the chain holds. */
+const ADOPT_EPOCHS = 256;
+/**
+ * Signatures assumed made beyond what the chain counted: ones another device
+ * signed that never landed. A key adopted from the chain cannot know them, and
+ * a few-time key must count every signature it ever made.
+ */
+const ADOPT_MARGIN = 2n;
+
+/**
+ * Brings a phrase's wallet into an empty store from the chain alone: the key
+ * the chain holds now, the next one, and a signing log as long as the chain's
+ * use count. Returns false when there is nothing to adopt, either because the
+ * store already holds the wallet or because it was never registered, in which
+ * case create() makes the same keys and the same address.
+ *
+ * One device at a time: two devices signing with one key each count only
+ * their own signatures, and a few-time key is weakened by every one.
+ */
+export async function adoptWallet(options: WalletOptions & { readonly signerStore: RestorableSignerStore }): Promise<boolean> {
+  const o = options;
+  if (o.seedFor === undefined) throw new ProtocolFailure('INVALID_INPUT', 'only a wallet drawn from a phrase can be adopted');
+  if (await o.walletStore.readWallet(o.walletId)) return false;
+  const made = new Map<bigint, Bytes32>();
+  const commitmentAt = (epoch: bigint): Bytes32 => {
+    let id = made.get(epoch);
+    if (id === undefined) {
+      const seed = o.seedFor!(epoch);
+      try { id = pkCommitment(keyGen(seed, o.params).publicKey); } finally { seed.fill(0); }
+      made.set(epoch, id);
+    }
+    return id;
+  };
+  const first = o.initialKeyEpoch;
+  const account = asAddress(await o.chain.deriveAccount(commitmentAt(first), commitmentAt(o.nextKeyEpoch(first))));
+  const observation = await o.chain.observe(account);
+  const chain = observation.state;
+  if (!chain) return false;
+  let epoch = first;
+  for (let i = 0; i < ADOPT_EPOCHS && commitmentAt(epoch) !== chain.pkCommitment; i++) epoch = o.nextKeyEpoch(epoch);
+  const nextEpoch = o.nextKeyEpoch(epoch);
+  if (commitmentAt(epoch) !== chain.pkCommitment || commitmentAt(nextEpoch) !== chain.nextCommitment) throw unsafeState();
+
+  const signed = chain.useCount + ADOPT_MARGIN < chain.maxUses ? chain.useCount + ADOPT_MARGIN : chain.useCount;
+  const restore = async (keyEpoch: bigint, uses: bigint) => {
+    const seed = o.seedFor!(keyEpoch);
+    try {
+      return await restoreSigner(o.signerStore, { id: commitmentAt(keyEpoch), keyEpoch, params: o.params, seed: toHex(seed), maxUses: o.maxUses,
+        lifecycleReserve: o.lifecycleReserve,
+        // Stand-ins for signatures this store never saw: unique, and never a digest anyone signs.
+        reservations: Array.from({ length: Number(uses) }, (_, i) => ({ index: BigInt(i + 1),
+          digest: pqDigest({ chainId: o.authority.chainId, walletAddress: account, schemeId: 'adopted', useCount: BigInt(i), payload: toHex(new TextEncoder().encode(`adopted/${keyEpoch}`)) }) })) });
+    } finally { seed.fill(0); }
+  };
+  const active = await restore(epoch, signed);
+  const next = await restore(nextEpoch, 0n);
+  const record: WalletRecord = { version: 1, revision: 0n, accountAddress: account, authorityId: authorityConfigId(o.authority), active, next,
+    rotationDeadline: chain.rotationDeadline, lastChainUseCount: chain.useCount, lastObservedBlock: observation.blockNumber, registered: true };
+  return o.walletStore.compareAndSwapWallet(o.walletId, undefined, record);
+}
 
 class Wallet implements PqWallet {
   #options: WalletOptions;
@@ -134,8 +201,11 @@ class Wallet implements PqWallet {
   }
 
   async #newKey(keyEpoch: bigint) {
-    return initializeSigner(this.#options.signerStore, { keyEpoch, maxUses: this.#options.maxUses,
-      lifecycleReserve: this.#options.lifecycleReserve, params: this.#options.params });
+    const seed = this.#options.seedFor?.(keyEpoch);
+    try {
+      return await initializeSigner(this.#options.signerStore, { keyEpoch, maxUses: this.#options.maxUses,
+        lifecycleReserve: this.#options.lifecycleReserve, params: this.#options.params, ...(seed ? { seed } : {}) });
+    } finally { seed?.fill(0); }
   }
   #nextEpoch(epoch: bigint): bigint {
     const next = this.#options.nextKeyEpoch(epoch);
