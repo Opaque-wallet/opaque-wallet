@@ -91,6 +91,17 @@ export function issueCredential(
   return { ...input, tag: toHex(hmac(sha256, secret, macInput(input))) };
 }
 
+/**
+ * The test authority's answer for `recipient`: a day's credential as the
+ * wallet keeps it, JSON with bigints in decimal. One for its HTTP route (old
+ * clients) and the CREDENTIAL mesh query.
+ */
+export function credentialJson(recipient: string, policyVersion: string, secret: Uint8Array, now: UnixSeconds): string {
+  if (!/^0x[0-9a-f]{40}$/.test(recipient)) throw new ProtocolFailure('INVALID_INPUT', 'recipient must be a lower-case address');
+  const credential = issueCredential({ recipient: recipient as Address, policyVersion, expiresAt: (now + 86_400n) as UnixSeconds }, secret);
+  return JSON.stringify(credential, (_k, v) => (typeof v === 'bigint' ? v.toString(10) : v));
+}
+
 export type CredentialOutcome =
   | { readonly kind: 'APPROVED' }
   | { readonly kind: 'DENIED'; readonly reason: string };

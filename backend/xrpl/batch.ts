@@ -4,6 +4,9 @@
 //                          and NEVER an Expiration: an expired credential can be
 //                          deleted by anyone, and the note spent again.
 //   Payment                pool → destination, the notes' value less the fee.
+//                          Into another pool of another asset it is a swap:
+//                          cross-currency, partial, at least DeliverMin of that
+//                          pool's asset (swap.ts).
 //   SignerListSet          the attesters' next single-use keys.
 //
 // A reused nullifier fails its CredentialCreate with tecDUPLICATE and nothing in
@@ -11,7 +14,7 @@
 // reports tesSUCCESS, and a failed ALLORNOTHING batch records none of its inner
 // transactions, so success is read from the inner Payment's own result.
 
-import { BatchFlags, GlobalFlags, type Batch, type SignerListSet, type SubmittableTransaction } from 'xrpl';
+import { BatchFlags, GlobalFlags, PaymentFlags, type Batch, type SignerListSet, type SubmittableTransaction } from 'xrpl';
 
 import { ProtocolFailure, type Nullifier } from '@opaque/protocol-types';
 
@@ -29,9 +32,26 @@ export interface Payout {
   readonly units: bigint;
   readonly nextSigners: readonly string[];
   readonly quorum: number;
+  /** A swap: the destination is a pool of `asset`, and gets at least `min` of it. */
+  readonly deliver?: { readonly asset: XrplAsset; readonly min: bigint };
 }
 
-const inner = (tx: SubmittableTransaction) => ({ RawTransaction: { ...tx, Flags: GlobalFlags.tfInnerBatchTxn } as SubmittableTransaction });
+/**
+ * The Payment's amounts. A swap spends at most the notes' value and delivers
+ * everything it buys, at least `min`: partial, with Amount a ceiling it cannot
+ * reach (four times `min`, which an attester holds to at least half the
+ * market). Token to token goes through XRP.
+ */
+function amountsOf(p: Payout): Record<string, unknown> {
+  if (p.deliver === undefined) return { Amount: amountOf(p.asset, p.units) };
+  return {
+    Amount: amountOf(p.deliver.asset, p.deliver.min * 4n), SendMax: amountOf(p.asset, p.units), DeliverMin: amountOf(p.deliver.asset, p.deliver.min),
+    Flags: PaymentFlags.tfPartialPayment,
+    ...(p.asset.kind !== 'XRP' && p.deliver.asset.kind !== 'XRP' ? { Paths: [[{ currency: 'XRP' }]] } : {}),
+  };
+}
+
+const inner = (tx: SubmittableTransaction) => ({ RawTransaction: { ...tx, Flags: ((tx as { Flags?: number }).Flags ?? 0) | GlobalFlags.tfInnerBatchTxn } as SubmittableTransaction });
 
 export const signerListOf = (signers: readonly string[], quorum: number) => ({
   SignerQuorum: quorum,
@@ -50,7 +70,7 @@ export function payoutBatch(p: Payout): Batch {
     RawTransactions: [
       ...p.nullifiers.map((n) => inner({ TransactionType: 'CredentialCreate', Account: p.pool, Subject: p.pool, CredentialType: credentialTypeOf(n) })),
       inner({
-        TransactionType: 'Payment', Account: p.pool, Destination: p.destination.account, Amount: amountOf(p.asset, p.units) as never,
+        TransactionType: 'Payment', Account: p.pool, Destination: p.destination.account, ...amountsOf(p) as { Amount: never },
         ...(p.destination.tag === null ? {} : { DestinationTag: p.destination.tag }),
       }),
       inner({ TransactionType: 'SignerListSet', Account: p.pool, ...signerListOf(p.nextSigners, p.quorum) }),

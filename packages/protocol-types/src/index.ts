@@ -347,7 +347,9 @@ export type WalletRpcOperation =
   | 'STATE' | 'DIGEST' | 'ESTIMATE'
   | 'SUBMIT_USER_OPERATION' | 'USER_OPERATION_RECEIPT'
   /** A key rotation the account already signed, submitted and paid for by the exit. */
-  | 'ROTATE';
+  | 'ROTATE'
+  /** A swap quote from LI.FI, asked by the exit: LI.FI sees the exit, never the wallet. */
+  | 'SWAP_QUOTE';
 
 /**
  * XRPL's questions for a pool's attesters, answered at the exit like
@@ -363,12 +365,29 @@ export type WalletRpcOperation =
  */
 export type XrplOperation = 'REGISTER_TAG' | 'TAG_STATUS' | 'NULLIFIER_SPENT' | 'ONRAMP_URL' | 'FAUCET' | 'READ' | 'SUBMIT';
 
+/**
+ * A wallet's encrypted backup, kept by Opaque under an id only its passkey
+ * can work out (frontend/src/lib/passkey-backup.ts). The exit sees ciphertext
+ * and an id, never who asked; a write needs the token the passkey derives.
+ *
+ *   GET     the blob kept under an id, or nothing
+ *   PUT     keep a blob under an id (the first PUT sets its token)
+ *   DELETE  forget it
+ */
+export type BackupOperation = 'GET' | 'PUT' | 'DELETE';
+
 export type MeshQuery =
   | { readonly kind: 'RING_SNAPSHOT'; readonly scope: PoolScope }
   | { readonly kind: 'RELAY_SNAPSHOT' }
   | { readonly kind: 'PRIVACY_CONDITIONS'; readonly scope: PoolScope }
   | { readonly kind: 'WALLET_RPC'; readonly operation: WalletRpcOperation; readonly encodedRequest: Hex }
   | { readonly kind: 'XRPL'; readonly operation: XrplOperation; readonly encodedRequest: Hex }
+  | { readonly kind: 'BACKUP'; readonly operation: BackupOperation; readonly encodedRequest: Hex }
+  /**
+   * A policy credential for one recipient, asked before paying it. Across the
+   * mesh like every read: the authority learns a recipient, never who asked.
+   */
+  | { readonly kind: 'CREDENTIAL'; readonly recipient: Address }
   | { readonly kind: 'INTENT_STATUS'; readonly handle: StatusHandle }
   | { readonly kind: 'MESH_STATUS'; readonly handle: MessageHandle }
   | { readonly kind: 'POOL_RECEIPT'; readonly txHash: TxHash };
@@ -379,6 +398,9 @@ export type MeshQueryResult =
   | { readonly kind: 'PRIVACY_CONDITIONS'; readonly value: PrivacyConditions }
   | { readonly kind: 'WALLET_RPC'; readonly value: Hex }
   | { readonly kind: 'XRPL'; readonly value: Hex }
+  | { readonly kind: 'BACKUP'; readonly value: Hex }
+  /** The credential as the wallet keeps it: its JSON, hex-encoded. */
+  | { readonly kind: 'CREDENTIAL'; readonly value: Hex }
   | { readonly kind: 'INTENT_STATUS'; readonly value: IntentStatus }
   | { readonly kind: 'MESH_STATUS'; readonly value: MeshStatusEvent }
   | { readonly kind: 'POOL_RECEIPT'; readonly value: Hex };

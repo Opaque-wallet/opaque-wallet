@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opaque Docs</title>
+<meta name="description" content="How Opaque works, how to use the wallet, and how to build on it: private payments on Arc and the XRP Ledger.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&family=Quicksand:wght@700&display=swap">
+<style>
+  :root {
+    --ink: #070608; --surface: #0d0b0f; --raised: #151117; --cream: #f4efe9; --muted: #aaa19b; --faint: #746b66;
+    --line: rgba(244, 239, 233, 0.12); --orange: #ff7a18; --soft: #ffa052; --tint: rgba(255, 122, 24, 0.12);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--ink); scroll-behavior: smooth; scroll-padding-top: 84px; }
+  body { margin: 0; background: var(--ink); color: var(--cream); font: 400 16px/1.7 "Poppins", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--soft); text-underline-offset: 3px; }
+  a:hover { color: var(--orange); }
+  :focus-visible { outline: 2px solid var(--soft); outline-offset: 3px; border-radius: 6px; }
+
+  .top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; padding: 0 clamp(16px, 4vw, 40px); border-bottom: 1px solid var(--line); background: rgba(7, 6, 8, 0.86); backdrop-filter: blur(12px); }
+  .brand { display: flex; align-items: baseline; gap: 10px; color: var(--cream); text-decoration: none; }
+  .brand b { font: 700 26px/1 "Quicksand", system-ui, sans-serif; letter-spacing: -0.02em; color: var(--orange); }
+  .brand span { color: var(--muted); font-size: 14px; }
+  .top nav { display: flex; gap: 6px; }
+  .top nav a { padding: 8px 14px; border-radius: 999px; color: var(--cream); font-size: 14px; font-weight: 500; text-decoration: none; }
+  .top nav a:hover { background: var(--raised); color: var(--cream); }
+  .top nav a.go { background: var(--orange); color: var(--ink); }
+  .top nav a.go:hover { background: var(--soft); }
+
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 56px; max-width: 1180px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); }
+  .toc { position: sticky; top: 64px; align-self: start; max-height: calc(100vh - 64px); overflow-y: auto; padding: 36px 0 40px; }
+  .toc p { margin: 18px 0 6px; color: var(--faint); font-size: 11.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+  .toc p:first-child { margin-top: 0; }
+  .toc a { display: block; padding: 5px 12px; border-left: 2px solid var(--line); color: var(--muted); font-size: 14px; text-decoration: none; }
+  .toc a:hover { color: var(--cream); border-left-color: var(--soft); }
+  .toc a.here { color: var(--cream); border-left-color: var(--orange); }
+
+  main { min-width: 0; padding: 40px 0 96px; }
+  .hero { padding: 8px 0 28px; border-bottom: 1px solid var(--line); }
+  .eyebrow { margin: 0 0 10px; color: var(--orange); font-size: 12.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  h1 { margin: 0; font-size: clamp(34px, 5vw, 54px); font-weight: 800; line-height: 1.02; letter-spacing: -0.04em; }
+  .lede { max-width: 640px; margin: 18px 0 0; color: var(--muted); font-size: 18px; }
+  section { padding-top: 44px; }
+  h2 { margin: 0 0 6px; font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
+  h2 + .sub { margin: 0 0 18px; color: var(--muted); }
+  h3 { margin: 30px 0 8px; font-size: 18px; font-weight: 600; }
+  p, li { color: #ddd6cf; }
+  ul, ol { padding-left: 1.25rem; }
+  li { margin: 6px 0; }
+  strong { color: var(--cream); font-weight: 600; }
+  code { padding: 1px 6px; border-radius: 6px; background: var(--raised); color: var(--soft); font: 13.5px var(--mono); overflow-wrap: anywhere; }
+  pre { margin: 14px 0; padding: 16px 18px; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  pre code { padding: 0; background: none; color: var(--cream); font-size: 13.5px; line-height: 1.65; overflow-wrap: normal; }
+  pre .c { color: var(--faint); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 22px 0 0; }
+  .card { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(160deg, rgba(255, 122, 24, 0.07), transparent 60%), var(--surface); }
+  .card b { display: block; margin-bottom: 4px; color: var(--cream); font-weight: 600; }
+  .card span { color: var(--muted); font-size: 14.5px; line-height: 1.55; }
+  a.card { text-decoration: none; transition: border-color 0.2s; }
+  a.card:hover { border-color: var(--orange); }
+
+  .note { margin: 18px 0; padding: 14px 16px; border: 1px solid rgba(255, 160, 82, 0.32); border-radius: 14px; background: var(--tint); color: #eadfd5; font-size: 15px; }
+  .note strong { color: var(--soft); }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps li { position: relative; margin: 0; padding: 0 0 16px 44px; }
+  .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--tint); color: var(--orange); font-size: 13px; font-weight: 600; }
+
+  .table { margin: 14px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-size: 12.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: var(--surface); }
+  tr:last-child td { border-bottom: 0; }
+  td code { font-size: 12.5px; }
+  .yes { color: #7fdc9a; font-weight: 600; }
+  .part { color: var(--soft); font-weight: 600; }
+  .no { color: #ff8a7a; font-weight: 600; }
+
+  footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--faint); font-size: 14px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  footer a { color: var(--muted); }
+
+  .toc-toggle { display: none; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .toc { position: static; max-height: none; padding: 16px 0 0; display: none; }
+    .toc.open { display: block; }
+    .toc-toggle { display: block; width: 100%; margin-top: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--cream); font: 500 15px "Poppins", system-ui, sans-serif; text-align: left; }
+    .top nav a:not(.go) { display: none; }
+    main { padding-top: 24px; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><b>opaque</b><span>Docs</span></a>
+  <nav><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="go" href="/app">Open the wallet</a></nav>
+</header>
+
+<div class="layout">
+  <button class="toc-toggle" id="toc-toggle" type="button" aria-expanded="false" aria-controls="toc">Contents</button>
+  <aside class="toc" id="toc" aria-label="Contents">
+    <p>Start</p>
+    <a href="#overview">What Opaque is</a>
+    <a href="#start">Get started</a>
+    <p>Your wallet</p>
+    <a href="#phrase">Phrase and accounts</a>
+    <a href="#password">Password</a>
+    <a href="#passkey">Passkey backup</a>
+    <a href="#pay">Deposit, send, receive</a>
+    <a href="#swap">Swap</a>
+    <a href="#apps">Apps on the XRP Ledger</a>
+    <p>Build</p>
+    <a href="#contracts">Contracts (post-quantum)</a>
+    <a href="#deployers">Deployers</a>
+    <a href="#dapps">Connect a dapp</a>
+    <p>How it works</p>
+    <a href="#privacy">Privacy: who sees what</a>
+    <a href="#quantum">Post-quantum: what holds</a>
+    <a href="#fees">Fees</a>
+    <a href="#networks">Networks and addresses</a>
+    <a href="#faq">Questions</a>
+  </aside>
+
+  <main>
+    <div class="hero">
+      <p class="eyebrow">Opaque documentation</p>
+      <h1>Private payments, explained.</h1>
+      <p class="lede">How the wallet keeps what you pay apart from who you are, how to use it on Arc and the XRP Ledger, and how to build on it: dapps, deployers and contracts owned by a post-quantum key.</p>
+      <div class="cards">
+        <a class="card" href="#start"><b>Use the wallet →</b><span>Make a wallet, get test funds, send your first private payment.</span></a>
+        <a class="card" href="#contracts"><b>Deploy a contract →</b><span>From an account no classical key controls, funded so nothing ties it to you.</span></a>
+        <a class="card" href="#privacy"><b>Read the model →</b><span>Exactly what is hidden, what is public, and today's limits.</span></a>
+      </div>
+    </div>
+
+    <section id="overview">
+      <h2>What Opaque is</h2>
+      <p class="sub">A self-custodial wallet whose money moves through a shared pool.</p>
+      <p>When you <strong>deposit</strong>, your funds become <strong>notes</strong>: fixed-size pieces held by a pool contract (on Arc) or a pool account (on the XRP Ledger). A note is a commitment on chain and a secret only your wallet knows.</p>
+      <p>When you <strong>pay</strong>, your wallet proves it owns one of eight same-size notes in the pool without saying which one, and the pool pays the recipient from its own account. On chain, the payment comes from the pool, never from you. The proof is built in your browser and the note secret never leaves the page.</p>
+      <p>Requests travel through <strong>three relays</strong>, each of which only knows the hop before and after it, so the services that answer them don't learn your IP address.</p>
+      <div class="cards">
+        <div class="card"><b>Arc</b><span>Private USDC on Circle's chain, mainnet and testnet. Notes of 1, 2, 5, 10, 20, 50 and 100 USDC. Your account is a smart account signed by a hash-based, post-quantum key.</span></div>
+        <div class="card"><b>XRP Ledger</b><span>Private XRP, RLUSD, USDC and an MPT token on testnet, built on Batch and Credentials with no smart contracts. Every dapp gets a fresh account the pool funds.</span></div>
+      </div>
+    </section>
+
+    <section id="start">
+      <h2>Get started</h2>
+      <p class="sub">Three ways in, one wallet: the same recovery phrase opens all of them.</p>
+      <ul>
+        <li><strong>Website:</strong> <a href="/app">opaque.credit/app</a> (Arc mainnet), <a href="/testnet/app">/testnet/app</a> (Arc testnet), <a href="/testnet/xrpl">/testnet/xrpl</a> (XRP Ledger testnet).</li>
+        <li><strong>Browser extension:</strong> <a href="/opaque-extension.zip" download>download the zip</a>, open <code>chrome://extensions</code>, turn on Developer mode, and load the unzipped folder. One extension covers every network; it opens in Chrome's side panel.</li>
+        <li><strong>Phone:</strong> open the website and add it to your home screen.</li>
+      </ul>
+      <ol class="steps">
+        <li><strong>Create a wallet.</strong> Write down the 12-word recovery phrase it shows, then type three of the words back to prove it.</li>
+        <li><strong>Set a password.</strong> It encrypts everything the wallet stores in this browser. See <a href="#password">Password</a>.</li>
+        <li><strong>Back it up with a passkey</strong> (optional, recommended). Clearing the browser then costs you nothing. See <a href="#passkey">Passkey backup</a>.</li>
+        <li><strong>Get test funds.</strong> Arc testnet: USDC from <a href="https://faucet.circle.com" target="_blank" rel="noopener noreferrer">faucet.circle.com</a> to your address. XRP Ledger testnet: <strong>Get test XRP</strong> on Home gives 95 XRP straight into notes.</li>
+        <li><strong>Deposit, then send.</strong> Your funds become notes; a send pays from the pool.</li>
+      </ol>
+      <div class="note"><strong>Mainnet is real money on unaudited contracts.</strong> The Arc mainnet wallet warns on every visit. Start on testnet.</div>
+    </section>
+
+    <section id="phrase">
+      <h2>Recovery phrase and accounts</h2>
+      <p class="sub">One phrase, many accounts, every chain.</p>
+      <p>Your 12 words are the wallet. Every account, address, note and app account is drawn from them, so importing the phrase anywhere (another browser, the extension, a phone) finds the same accounts and looks up their notes on chain.</p>
+      <ul>
+        <li><strong>Accounts:</strong> <em>Accounts → Add account</em> makes Account 2, 3 and so on. Each has its own addresses and notes, and holds money on every chain.</li>
+        <li><strong>Account key:</strong> <em>Accounts → Show account key</em> gives one account alone, as <code>opq1…</code>. Import it with <em>Import account</em> in another Opaque wallet to bring just that account. Whoever holds it can spend that account.</li>
+        <li><strong>Rescan:</strong> <em>Rescan the ledger</em> looks for notes another device made.</li>
+      </ul>
+      <div class="note">The account key is <strong>not</strong> an Ethereum private key or an XRPL seed. Don't put it in a <code>.env</code>; use a <a href="#deployers">deployer</a> or the <a href="#contracts">Contracts</a> screen instead.</div>
+    </section>
+
+    <section id="password">
+      <h2>Password</h2>
+      <p class="sub">Everything secret in the browser is encrypted under it, as MetaMask's vault is.</p>
+      <ul>
+        <li>The phrase, account keys, notes, app accounts and Arc's signing keys are sealed with AES-256-GCM under a random key, and the password (PBKDF2-SHA256, 600,000 rounds) protects that key.</li>
+        <li>Opaque locks after 15 idle minutes, when the tab closes, or with <em>Lock now</em>. <em>Show recovery phrase</em>, <em>Show account key</em> and a deployer's key ask for the password again, even while unlocked.</li>
+        <li>A wallet made before passwords asks you to set one the next time it opens.</li>
+        <li><strong>Forgot it?</strong> Opaque can't recover it. <em>Forgot your password?</em> on the lock screen removes the wallet from this browser; your phrase or passkey brings it back.</li>
+      </ul>
+    </section>
+
+    <section id="passkey">
+      <h2>Passkey backup</h2>
+      <p class="sub">Clear your browser, lose your laptop, and still get everything back.</p>
+      <p>The wallet encrypts your phrase, imported account keys and browser-only notes on your device, under a key only your passkey (Touch ID, Windows Hello, a phone or a password manager) can produce. Opaque stores the ciphertext, and can't open it.</p>
+      <p>To restore, choose <em>Restore with a passkey</em> when Opaque opens. <em>Accounts → Remove backup</em> deletes Opaque's copy. The backup keeps itself current within a minute of new notes arriving, without asking for the passkey again.</p>
+    </section>
+
+    <section id="pay">
+      <h2>Deposit, send, receive</h2>
+      <h3>On Arc</h3>
+      <ul>
+        <li><strong>Deposit:</strong> USDC at your account's address becomes notes, in the fewest whole notes that make the amount. On testnet, auto-deposit does it for you. Each deposit keeps 0.2 USDC at the address for gas.</li>
+        <li><strong>Send:</strong> enter an Arc address and a whole amount. Each note is its own payment with its own proof. <em>Wait for privacy</em> holds the payment until its pool has fresh deposits around it, which makes it harder to match to yours by timing.</li>
+        <li><strong>Receive:</strong> share your address. What arrives is public until you deposit it.</li>
+      </ul>
+      <h3>On the XRP Ledger</h3>
+      <ul>
+        <li><strong>Receive privately:</strong> your account has a <strong>reusable address</strong> per asset (the pool's address plus a tag). Anything paid to it becomes notes in your wallet, and the payer sees only the pool.</li>
+        <li><strong>Deposit tags:</strong> under <em>Deposit</em>, a one-time tag for an exact amount.</li>
+        <li><strong>Send:</strong> to any XRPL address. The pool pays it in one Batch the attesters sign.</li>
+      </ul>
+    </section>
+
+    <section id="swap">
+      <h2>Swap</h2>
+      <ul>
+        <li><strong>Arc:</strong> USDC and EURC (cirBTC too on mainnet), routed by <a href="https://li.fi" target="_blank" rel="noopener noreferrer">LI.FI</a>. The quote is asked through the relays. The swap itself is <strong>public</strong>, at your account's address, signed by your post-quantum key. What you get becomes private once it is USDC in your notes.</li>
+        <li><strong>XRP Ledger:</strong> <strong>private</strong> pool-to-pool. Your notes in one pool pay out as another asset through the ledger's AMM. The attesters refuse a swap that settles far below the market.</li>
+      </ul>
+    </section>
+
+    <section id="apps">
+      <h2>Apps on the XRP Ledger</h2>
+      <p>Connecting to an XRPL dapp gives it a <strong>fresh account of its own</strong>, funded by the pool, so the dapp never sees your main account and two dapps can't link you. That account's master key is off, and its regular key signs once and is replaced. <em>Apps</em> lists each one; closing it returns what's left to the pool under your tag.</p>
+    </section>
+
+    <section id="contracts">
+      <h2>Contracts, owned by a post-quantum key</h2>
+      <p class="sub">Deploy and manage contracts on Arc with no classical key anywhere.</p>
+      <p>The <em>Contracts</em> screen on Arc deploys bytecode from your account through the standard CREATE2 factory (<code>0x4e59b44847b379578588920cA78FbF26c0B4956C</code>, live on Arc mainnet and testnet), and calls contracts from it. Your account signs each one with its hash-based FORS+C key, sent through the relays. Breaking classical signatures gives an attacker nothing.</p>
+      <ol class="steps">
+        <li><strong>Use an account for this alone.</strong> <em>Accounts → Add account</em>, then from another account <em>Send</em> it 2 USDC from your notes. On chain the pool paid it, so its contracts aren't tied to you. On testnet, turn auto-deposit off (the screen offers it) so the USDC stays as gas.</li>
+        <li><strong>Build the bytecode.</strong> Through the factory, a constructor's <code>msg.sender</code> is the factory, so pass the owner as a constructor argument: the account address the screen shows.
+<pre><code>BYTECODE=$(forge inspect MyContract bytecode)
+ARGS=$(cast abi-encode "constructor(address)" 0xYourOpaqueAccount)
+echo "$BYTECODE${ARGS#0x}"          <span class="c"># paste this into Contracts → Deploy</span></code></pre></li>
+        <li><strong>Deploy.</strong> The screen shows the address before you send. Each new salt gives a new address.</li>
+        <li><strong>Manage it.</strong> <em>Call a contract</em> takes the address and calldata, signed by the same key:
+<pre><code>cast calldata "setFee(uint256)" 5   <span class="c"># paste into Contracts → Calldata</span></code></pre></li>
+      </ol>
+      <div class="note">Bytecode up to the chain's limit (48 KB) works: a deploy too large for one relay message crosses in chunks and is reassembled.</div>
+    </section>
+
+    <section id="deployers">
+      <h2>Deployers</h2>
+      <p class="sub">Plain addresses for forge, hardhat and scripts, funded privately.</p>
+      <p><em>Accounts → Deployers → New deployer</em> derives a fresh Arc address from your account. <em>Fund privately</em> opens Send with it filled in; <em>Show key</em> (after your password) gives <code>PRIVATE_KEY=0x…</code> for a project's <code>.env</code>. Your phrase brings every deployer back.</p>
+<pre><code>forge create src/MyContract.sol:MyContract --rpc-url https://rpc.testnet.arc.io --private-key $PRIVATE_KEY</code></pre>
+      <p>A deployer is an ordinary secp256k1 key, so it is <strong>not</strong> post-quantum once it has signed. Keep only gas on it, use one per project, and don't send leftovers back to your account. For a contract that needs an owner, use <a href="#contracts">Contracts</a> instead, or pass that account as the owner.</p>
+    </section>
+
+    <section id="dapps">
+      <h2>Connect a dapp</h2>
+      <ul>
+        <li><strong>XRP Ledger, in the extension:</strong> Opaque answers as GemWallet and Crossmark, so dapps that support either work unchanged. Approvals open in the extension's own window.</li>
+        <li><strong>xrpl-connect:</strong> an adapter for <a href="https://github.com/XRPL-Commons/xrpl-connect" target="_blank" rel="noopener noreferrer">xrpl-connect</a> opens Opaque's connect page.</li>
+        <li><strong>WalletConnect:</strong> paste a dapp's <code>wc:</code> link, or scan its QR code, at <a href="/testnet/xrpl-connect">/testnet/xrpl-connect</a>. The relay socket goes through Opaque's service, so WalletConnect sees Opaque's server, not you.</li>
+      </ul>
+      <p>Supported: <code>signAndSubmit</code> (DEX offers, AMM deposits and more), sign-only for dapps that submit themselves, and <code>signMessage</code>. Opaque never connects to MetaMask or reads a browser wallet.</p>
+    </section>
+
+    <section id="privacy">
+      <h2>Privacy: who sees what</h2>
+      <p class="sub">What is hidden, what is public, and the limits of this build.</p>
+      <div class="table"><table>
+        <thead><tr><th>What</th><th>Who can see it</th></tr></thead>
+        <tbody>
+          <tr><td>Which note paid</td><td>Nobody: the proof shows one of eight same-size notes, not which</td></tr>
+          <tr><td>That you deposited, and how much</td><td>Everyone: a deposit is public, from your address</td></tr>
+          <tr><td>The recipient and amount of a payment</td><td>Everyone, on chain, as a payment from the pool</td></tr>
+          <tr><td>Your IP address</td><td>The first relay only. Services, the credential authority and LI.FI see the last relay</td></tr>
+          <tr><td>Your note secrets, phrase and keys</td><td>Only your device. The passkey backup is ciphertext</td></tr>
+          <tr><td>The opened payment (recipient and spend)</td><td>Arc: a Chainlink CRE workflow in a secure enclave. XRP Ledger testnet: an ordinary server process</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Limits today</h3>
+      <ul>
+        <li><strong>One relay operator.</strong> Opaque runs all six relays. They hide you from the services, but Opaque, running every hop, could link them.</li>
+        <li><strong>A ring of eight.</strong> On testnet many notes in a pool are test deposits. Keep <em>Wait for privacy</em> on, and don't send right after depositing the same amount.</li>
+        <li><strong>Outside the wallet.</strong> Your own RPC calls (forge, hardhat) reveal your IP to the RPC provider. Contract source and verification metadata can identify you.</li>
+        <li><strong>Linking by habit.</strong> Reusing a deployer across projects, or sending a deployer's leftovers back to your account, links them.</li>
+      </ul>
+    </section>
+
+    <section id="quantum">
+      <h2>Post-quantum: what holds</h2>
+      <div class="table"><table>
+        <thead><tr><th>Part</th><th>How</th><th>Quantum-safe</th></tr></thead>
+        <tbody>
+          <tr><td>Your Arc account</td><td>ERC-4337 account; FORS+C (hash-based) signatures checked on chain by <code>PQKeyRegistry</code>, keys rotated before they wear out</td><td class="yes">Yes</td></tr>
+          <tr><td>Contracts from the Contracts screen</td><td>Deployed and owned by that account</td><td class="yes">Yes</td></tr>
+          <tr><td>Notes and the ring proof</td><td>Hash commitments; a hash-based (MPC-in-the-head) proof</td><td class="yes">Yes</td></tr>
+          <tr><td>XRP Ledger pool and app accounts</td><td>Each key signs once and is replaced; only its hash is public before then</td><td class="part">By timing</td></tr>
+          <tr><td>Deployers</td><td>Ordinary secp256k1 keys</td><td class="no">Not after first use</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>By timing</strong> means an attacker with a quantum computer gets about one ledger close (a few seconds) to break a key before it's retired. That's a strong practical defense, not a mathematical guarantee.</p>
+    </section>
+
+    <section id="fees">
+      <h2>Fees</h2>
+      <div class="table"><table>
+        <thead><tr><th>Network</th><th>Paying from notes</th><th>Other costs</th></tr></thead>
+        <tbody>
+          <tr><td>Arc</td><td>None: the recipient gets the full note</td><td>Gas for deposits, swaps and contract calls, in USDC, from your account's address</td></tr>
+          <tr><td>XRP Ledger (XRP)</td><td>0.2001 XRP per note, kept by the pool for ledger costs</td><td>AMM fee on swaps; whole notes only, so a remainder under one unit is carried</td></tr>
+          <tr><td>XRP Ledger (tokens)</td><td>0.5 per note</td><td>Same as above</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="networks">
+      <h2>Networks and addresses</h2>
+      <div class="table"><table>
+        <thead><tr><th>Network</th><th>Chain</th><th>Explorer</th></tr></thead>
+        <tbody>
+          <tr><td>Arc Mainnet</td><td>5042, <code>https://rpc.mainnet.arc.io</code></td><td><a href="https://explorer.arc.io" target="_blank" rel="noopener noreferrer">explorer.arc.io</a></td></tr>
+          <tr><td>Arc Testnet</td><td>5042002, <code>https://rpc.testnet.arc.io</code></td><td><a href="https://testnet.arcscan.app" target="_blank" rel="noopener noreferrer">testnet.arcscan.app</a></td></tr>
+          <tr><td>XRP Ledger Testnet</td><td>network 1, <code>wss://s.altnet.rippletest.net:51233</code></td><td><a href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer">testnet.xrpl.org</a></td></tr>
+        </tbody>
+      </table></div>
+      <h3>Arc contracts</h3>
+      <div class="table"><table>
+        <thead><tr><th>Contract</th><th>Mainnet</th><th>Testnet</th></tr></thead>
+        <tbody>
+          <tr><td>USDC</td><td colspan="2"><code>0x3600000000000000000000000000000000000000</code> (6 decimals; also the 18-decimal gas token)</td></tr>
+          <tr><td>PQKeyRegistry</td><td><code>0x33a9d3e188835e8287f55a1a8cb7bd6554ed2faf</code></td><td><code>0x6eb5b42373191121d31dfc4b5c8571c4eaf58e8f</code></td></tr>
+          <tr><td>PQ account factory</td><td><code>0x5f8bd9531a08b6c06eeb41d9f617038e38d40206</code></td><td><code>0x13beaec42922e3f63fa0dbe5bba270edf46ab214</code></td></tr>
+          <tr><td>Pool, 1 USDC</td><td><code>0xb753058ec7a8cf29d96288a5e5ae5c01c23221ea</code></td><td><code>0x7e01b8a883b4dacc9063326a2e7d3eef0d679b63</code></td></tr>
+          <tr><td>Pool, 10 USDC</td><td><code>0xe3d1c899d2700559403341db5dc26577d2669026</code></td><td><code>0x2770e5c2f491fcf0c8a411f6c2c8064214e1e284</code></td></tr>
+          <tr><td>Pool, 100 USDC</td><td><code>0x91c5d56b77b2e1453647d37ca6350194a4c42bd4</code></td><td><code>0x0d8dff9b4903a1b550037bac773e9757f1f4d823</code></td></tr>
+          <tr><td>CREATE2 factory</td><td colspan="2"><code>0x4e59b44847b379578588920cA78FbF26c0B4956C</code></td></tr>
+        </tbody>
+      </table></div>
+      <h3>XRP Ledger testnet pools</h3>
+      <div class="table"><table>
+        <thead><tr><th>Asset</th><th>Pool account</th><th>Note sizes</th></tr></thead>
+        <tbody>
+          <tr><td>XRP</td><td><code>rw5r7pX37iAtLEh1VZdciHaFpduftUtjYe</code></td><td>1, 10, 100</td></tr>
+          <tr><td>RLUSD</td><td><code>rPNFdbacMgCk6diE8wtyBxh3ggro2QLWK5</code></td><td>1, 10, 100</td></tr>
+          <tr><td>USDC</td><td><code>rfyGTnEH8fLeucbBxxpy24dsgXoFQnHJMZ</code></td><td>1, 10, 100</td></tr>
+          <tr><td>tMPT</td><td><code>r9J16ivxW5WcED3u5rscm4AhW6W2fPo9L9</code></td><td>1, 10, 100</td></tr>
+        </tbody>
+      </table></div>
+      <p>Each XRPL pool's master key is off; three attesters sign its payouts, any two together.</p>
+    </section>
+
+    <section id="faq">
+      <h2>Questions</h2>
+      <h3>If I clear my browser, do I lose my money?</h3>
+      <p>No, if you have your recovery phrase or a passkey backup. Your notes are found again on chain from the phrase. Only an old <em>Browser account</em> (from before recovery phrases) lives solely in the browser: on the XRP Ledger the passkey backup holds its notes; on Arc, its backup file does.</p>
+      <h3>Why can I only send whole amounts?</h3>
+      <p>Each note is spent whole, with no change: change would need a new note, linking the payment to you. The wallet picks the fewest notes that make the amount exactly.</p>
+      <h3>Is my balance private?</h3>
+      <p>Your notes' total is known only to your wallet. What sits at your address, before you deposit it, is public like any address.</p>
+      <h3>Can Opaque freeze or take my funds?</h3>
+      <p>Opaque never holds your keys or note secrets. A payment needs a credential for its recipient; the credential authority could refuse one (for example, a sanctioned address) but can't spend your notes.</p>
+    </section>
+
+    <footer>
+      <span>© 2026 Opaque</span>
+      <a href="/">Home</a><a href="/app">Wallet</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a>
+    </footer>
+  </main>
+</div>
+
+<script>
+  // The contents button on a phone, and the section you're reading marked in the list.
+  const toc = document.getElementById('toc');
+  const toggle = document.getElementById('toc-toggle');
+  toggle.addEventListener('click', () => { const open = toc.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)); });
+  toc.addEventListener('click', (e) => { if (e.target instanceof HTMLAnchorElement && innerWidth <= 900) { toc.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); } });
+  const links = new Map([...toc.querySelectorAll('a')].map((a) => [a.getAttribute('href').slice(1), a]));
+  const seen = new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) { for (const a of links.values()) a.classList.remove('here'); links.get(entry.target.id)?.classList.add('here'); }
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  for (const id of links.keys()) { const s = document.getElementById(id); if (s) seen.observe(s); }
+</script>
+</body>
+</html>

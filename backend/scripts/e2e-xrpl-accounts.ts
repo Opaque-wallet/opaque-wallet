@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from 'xrpl';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { openWallet } from './xrpl-wallet-page.ts';
+import { openWallet, unlockIfAsked } from './xrpl-wallet-page.ts';
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -78,11 +78,11 @@ try {
   await wallet.click('#faucet-button');
   await wallet.waitForFunction(() => /^The faucet paid|^Faucet unavailable/.test(document.getElementById('receive-status')?.textContent ?? ''), null, { timeout: 150_000 });
   await wallet.click('#tab-home');
-  for (let i = 0; i < 30 && (await wallet.textContent('#balance-main')) !== '95'; i++) {
+  for (let i = 0; i < 30 && (await wallet.textContent('#balance-xrp')) !== '95'; i++) {
     await wallet.click('#refresh');
     await new Promise((r) => setTimeout(r, 4_000));
   }
-  check('one wallet: 95 private XRP in this browser', (await wallet.textContent('#balance-main')) === '95', String(await wallet.textContent('#note-count')));
+  check('one wallet: 95 private XRP in this browser', (await wallet.textContent('#balance-xrp')) === '95', String(await wallet.textContent('#note-count')));
 
   // A card on a page (the popup, or the wallet's connect page) approved once it shows `title`.
   const approve = async (page: any, title: RegExp) => {
@@ -103,6 +103,7 @@ try {
     await dapp.click(`#${button}`);
     const popup = await opened;
     police(popup);
+    await unlockIfAsked(popup);
     await approve(popup, title);
     const line = await lineOf(dapp, button, before);
     await popup.close();
@@ -122,6 +123,7 @@ try {
   const hub = await context.newPage();
   police(hub);
   await hub.goto(`${WALLET}/testnet/xrpl-connect.html`);
+  await unlockIfAsked(hub);
   await hub.waitForFunction(() => !document.getElementById('wc-form')!.hidden, null, { timeout: 90_000 });
   const before = await count(dappA);
   await dappA.click('#connect-wc');

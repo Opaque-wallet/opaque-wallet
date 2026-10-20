@@ -136,6 +136,14 @@ export function savePhrase(phrase: string, imported: boolean, active: ActiveAcco
   saveWalletState({ count: 1, active, imported, scanned: {} });
 }
 
+/** The imported accounts' keys as text, for the passkey backup (lib/passkey-backup.ts). */
+export const importedKeyTexts = (): string[] => read<string[]>(IMPORTED_KEY) ?? [];
+/** Brings back imported keys from a backup, after any already here. */
+export function restoreImportedKeys(texts: readonly string[]): void {
+  const here = importedKeyTexts();
+  localStorage.setItem(IMPORTED_KEY, JSON.stringify([...here, ...texts.filter((t) => !here.includes(t))]));
+}
+
 export const importedAccounts = (): AccountKeys[] => (read<string[]>(IMPORTED_KEY) ?? []).map((text, slot) => accountFromKeyText(text, slot));
 
 /** Keeps an account brought in by its key and makes it the one that opens; refuses one already here. */

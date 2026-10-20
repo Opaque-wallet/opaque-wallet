@@ -405,6 +405,30 @@ export function createPqAccountOps(options: {
     },
 
     /**
+     * A swap LI.FI quoted: approve its contract exactly `amount` of `token`,
+     * then its call, as ONE operation. The quote is checked by the caller.
+     */
+    swap(token: Address, amount: bigint, quote: { readonly approvalAddress: Address; readonly to: Address; readonly data: Hex }): Promise<TxHash> {
+      return this.execute([
+        { to: token, data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [quote.approvalAddress, amount] }) as Hex },
+        { to: quote.to, data: quote.data },
+      ], token.toLowerCase() === deployment.tokens.usdc.address.toLowerCase() ? amount : 0n);
+    },
+
+    /**
+     * Calls the account makes in one operation, paying its gas from the
+     * account's USDC. `spendsUsdc` is USDC the calls themselves take, so gas
+     * is checked on top of it.
+     */
+    async execute(calls: readonly Call[], spendsUsdc = 0n): Promise<TxHash> {
+      const op = await prepare(calls);
+      const have = await funds();
+      const need = spendsUsdc * WEI_PER_USDC6 + (prefundOf(op) > have.prepaidGas ? prefundOf(op) - have.prepaidGas : 0n);
+      if (have.usdc6 * WEI_PER_USDC6 < need) throw shortfall(need, have);
+      return submit(op);
+    },
+
+    /**
      * Everything the account holds, to `to`, less this operation's gas. What
      * the EntryPoint refunds afterwards lands in the account's deposit there,
      * a few cents that pay for its next operation.

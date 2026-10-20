@@ -128,6 +128,16 @@ wallet's own provider (MetaMask's RPC). They name that wallet on chain
 whatever route they take. A content blocker that blocks `rpc.testnet.arc.io`
 in the page no longer breaks anything.
 
+## Swap
+
+**Swap** trades tokens at the account's address on Arc (USDC and EURC; cirBTC too on mainnet) through [LI.FI](https://li.fi), which picks the best route across exchanges (KyberSwap on mainnet, Fly on testnet). It is **public**, like a deposit: the account swaps what its address holds, in one UserOperation its post-quantum key signs (approve LI.FI's contract exactly the amount, then its call). Arc's private pools hold only USDC, so a swap cannot pass through them; what you get becomes private once it is USDC in your notes.
+
+- Routes are asked through the mesh: the exit calls LI.FI (`SWAP_QUOTE`, chain/wallet-rpc.ts), so LI.FI sees Opaque's server, never the browser. Previews are quoted for a placeholder address; the account is named only when Swap is pressed.
+- The wallet checks every route before signing: it must call LI.FI's contract pinned in `deployments/` (`swap.router`), ask for no USDC on top, and pay the account itself.
+- On testnet, USDC at the address becomes notes by itself; switch that off on Home to keep USDC for a swap.
+- Nothing is left over on Arc: a swap is at the address, in any amount, and a deposit's fraction of a USDC stays there, paying gas and joining the next deposit (Home says how much).
+- e2e: `npm run arc:e2e:swap [-- <origin>] [--fund]` (a quote with no funds; with `--fund`, 1 USDC → EURC and back).
+
 ## Accounts and the recovery phrase
 
 One phrase holds every account on every chain: the account list on the Arc
@@ -157,6 +167,112 @@ as you like; the list shows it under each account, with a copy button. Code:
   signature, and two devices each count only their own.
 - **The browser account.** An Arc account from before phrases stays as
   **Browser account**, backed up by file, and opens first on the first visit.
+
+## The wallet password
+
+Everything secret the wallet stores is sealed under a password, as MetaMask's
+vault is. Code: [frontend/src/lib/lock.ts](../frontend/src/lib/lock.ts).
+
+- **Set once:** made in onboarding, right after the phrase (or an import, or a
+  passkey restore). A wallet from before passwords (a phrase, an imported key,
+  notes or Arc keys, and no password) opens on **Set a password** and goes no
+  further until it has one; setting it seals what is already there.
+- **Shown again only with it:** **Show recovery phrase** and **Show account
+  key** ask for the password first, even while unlocked.
+- **What is sealed:** a random data key seals, with AES-256-GCM, every
+  local-storage record that is secret or says what you hold or paid (the
+  `SECRET` pattern: phrase, imported keys, notes, app accounts, the passkey
+  backup's keys, balances, activity), and adds a keyed layer to each Arc
+  signing key's ciphertext in IndexedDB (the same length, so the signing
+  package's own checks pass). The password, through PBKDF2-SHA256 (600,000
+  rounds), only wraps the data key: **Change password** re-wraps one value.
+- **How:** lock.ts replaces localStorage's getItem and setItem, so every reader
+  stays as it was; locked, they throw for those records, and each page awaits
+  `unlockGate()` before it opens anything.
+- **Unlocked:** the data key stays for the tab (sessionStorage; in the
+  extension, `chrome.storage.session`, memory only), until 15 idle minutes, the
+  tab closing, or **Lock now**. A dapp's popup on the website is a tab of its
+  own, so it asks too.
+- **Forgotten:** the lock screen's Reset removes the wallet from this browser;
+  the phrase or the passkey brings it back. Another tab that still holds the
+  old key locks at once (the stored key's `id` changed).
+- **Test:** `npm run e2e:lock [-- <origin>]`: 20 checks, including a wallet
+  from before passwords and the reveal prompts. The origin can be a vite dev
+  server (`http://127.0.0.1:5199`, with `VITE_STACK_URL` and
+  `VITE_XRPL_STACK_URL` pointed at the hosted services). Every browser test gives its wallets the password
+  `PASSWORD` (scripts/xrpl-wallet-page.ts).
+
+## The passkey backup
+
+Clearing the browser deletes the phrase with everything else; a passkey backup
+brings it back without typing it. Code:
+[frontend/src/lib/passkey-backup.ts](../frontend/src/lib/passkey-backup.ts),
+store [backend/mesh/backup-store.ts](../backend/mesh/backup-store.ts).
+
+- **Offered once** right after a wallet is made or imported, then from a card
+  on Home and in **Accounts → Passkey backup**. Touch ID, Face ID, a phone or a
+  password manager makes the passkey; it syncs where that manager syncs.
+- **What it holds:** the phrase, imported account keys, and the XRPL Browser
+  account's unspent notes, tags and app accounts. Not Arc's Browser account: its
+  few-time key must never come back from a copy older than its last signature.
+- **How:** the passkey's PRF secret gives the backup's id, its write token and
+  the key that wraps the backup's own key. The page seals the backup, then it
+  crosses the relays (mesh query `BACKUP`); the store keeps ciphertext under an
+  id it cannot link to anyone. The data key stays in the browser, so changes are
+  re-sealed within a minute without the passkey.
+- **Restore:** on the first screen, **Restore with a passkey**. Works on the Arc
+  and XRPL pages alike: one store serves every chain.
+- **Remove backup** deletes Opaque's copy and asks the password manager to drop
+  the passkey (Chrome 132+).
+- **Test:** `npm run e2e:passkey [-- <origin>]` (Chrome's virtual authenticator,
+  with PRF): 9 checks.
+
+## Deployers (Arc)
+
+Accounts → **Deployers** gives a phrase account plain Arc addresses for
+contracts and scripts. Code: `deployerKey` in
+[frontend/src/lib/arc-keys.ts](../frontend/src/lib/arc-keys.ts).
+
+- **New deployer:** the i-th key is drawn from the account key
+  (`arc/<chain id>/deployer/<i>`), so the phrase brings every deployer back. One
+  another browser already funded is skipped.
+- **Fund privately:** opens Send with the deployer's address. It is an ordinary
+  private send, so on chain the pool paid the deployer. Arc pays gas in USDC,
+  so the deployer can deploy straight away.
+- **Show key:** asks for the password, then shows `PRIVATE_KEY=0x…` for a
+  project's `.env` (forge, hardhat, viem). That key only holds what you sent
+  it; the account key never leaves the wallet.
+- **Keep it unlinked:** use one deployer per project. Leftover USDC sent back
+  to your account would link the two, so leave it, or deposit it into the pool
+  from the deployer.
+- **Test:** `npm run arc:e2e:deployer [-- <origin>]`: 8 checks, no USDC needed,
+  including that the credential a send to it needs comes across the mesh.
+
+## Contracts (Arc)
+
+The **Contracts** tab deploys and calls contracts from the account itself, so
+its FORS+C key signs everything and no classical key ever controls them. Code:
+[frontend/src/lib/contracts.ts](../frontend/src/lib/contracts.ts).
+
+- **Deploy:** one call from the account to the CREATE2 factory
+  (`0x4e59b448…956C`, on Arc mainnet and testnet): salt ‖ initcode. The screen
+  shows the address before it is sent. A constructor's `msg.sender` is the
+  factory, so contracts take their owner as an argument: the account address.
+- **Call:** an address and calldata (`cast calldata …`), as one operation.
+- **Large bytecode:** a query too big for one mesh message (over 28 KB, which
+  a deploy with its 9 KB signature reaches at about 5 KB of bytecode) crosses
+  as chunks: the payment chunk upload, with a commit marked `query`
+  (mesh/client.ts, cre/executor-server.ts). Up to EIP-3860's 48 KB.
+- **Unlinked:** use an account funded only by private sends; turn testnet
+  auto-deposit off (the screen offers it), or its gas becomes notes.
+- **Test:** `npm run arc:e2e:contracts [-- <origin>] [--fund]`. Without
+  `--fund`, 5 checks and no USDC (the unfunded deploy stops at AA21, after its
+  chunked estimate). With it, send 2 testnet USDC to the printed address; it
+  deploys `contracts/test/fixtures/OwnedNote.sol` (17.8 KB with its blob) and
+  makes an owner-only call, checked on chain.
+
+The public docs are at [opaque.credit/docs](https://www.opaque.credit/docs)
+(`frontend/public/docs.html`).
 
 ## Your account's controls
 

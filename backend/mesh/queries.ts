@@ -22,6 +22,7 @@
 
 import {
   ProtocolFailure,
+  type Address,
   type GraphSelectionClient,
   type Hex,
   type IntentStatus,
@@ -29,6 +30,7 @@ import {
   type MeshQueryResult,
   type StatusHandle,
   type TxHash,
+  type BackupOperation,
   type WalletRpcOperation,
   type XrplOperation,
 } from '@opaque/protocol-types';
@@ -49,9 +51,12 @@ const ANSWERED = new Set<MeshQuery['kind']>([
   'POOL_RECEIPT',
   'WALLET_RPC',
   'XRPL',
+  'BACKUP',
+  'CREDENTIAL',
 ]);
-const WALLET_OPERATIONS = new Set<WalletRpcOperation>(['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE']);
+const WALLET_OPERATIONS = new Set<WalletRpcOperation>(['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE', 'SWAP_QUOTE']);
 const XRPL_OPERATIONS = new Set<XrplOperation>(['REGISTER_TAG', 'TAG_STATUS', 'NULLIFIER_SPENT', 'ONRAMP_URL', 'FAUCET', 'READ', 'SUBMIT']);
+export const BACKUP_OPERATIONS = new Set<BackupOperation>(['GET', 'PUT', 'DELETE']);
 
 const refuse = (message: string): never => {
   throw new ProtocolFailure('INVALID_INPUT', message);
@@ -98,6 +103,17 @@ export function decodeMeshQuery(raw: unknown): MeshQuery {
       assertHex(q['encodedRequest'], 'encodedRequest');
       return { kind: 'XRPL', operation: operation as XrplOperation, encodedRequest: q['encodedRequest'] as Hex };
     }
+    case 'BACKUP': {
+      const operation = q['operation'];
+      if (typeof operation !== 'string' || !BACKUP_OPERATIONS.has(operation as BackupOperation)) refuse(`no backup operation ${String(operation)}`);
+      assertHex(q['encodedRequest'], 'encodedRequest');
+      return { kind: 'BACKUP', operation: operation as BackupOperation, encodedRequest: q['encodedRequest'] as Hex };
+    }
+    case 'CREDENTIAL': {
+      const recipient = q['recipient'];
+      if (typeof recipient !== 'string' || !/^0x[0-9a-f]{40}$/.test(recipient)) refuse('recipient must be a lower-case address');
+      return { kind: 'CREDENTIAL', recipient: recipient as Address };
+    }
   }
   return refuse('unreachable');
 }
@@ -111,6 +127,10 @@ export interface QueryAnswererDeps {
   readonly walletRpc?: (operation: WalletRpcOperation, encodedRequest: Hex) => Promise<Hex>;
   /** Optional: xrpl/queries.ts createXrplAnswerer. Absent, XRPL is refused. */
   readonly xrpl?: (operation: XrplOperation, encodedRequest: Hex) => Promise<Hex>;
+  /** Optional: mesh/backup-store.ts. Absent, BACKUP is refused. */
+  readonly backup?: (operation: BackupOperation, encodedRequest: Hex) => Promise<Hex>;
+  /** Optional: the policy authority (cre/credential.ts credentialJson). Absent, CREDENTIAL is refused. */
+  readonly credential?: (recipient: Address) => Promise<Hex>;
 }
 
 export function createQueryAnswerer(deps: QueryAnswererDeps): (query: MeshQuery) => Promise<MeshQueryResult> {
@@ -137,6 +157,14 @@ export function createQueryAnswerer(deps: QueryAnswererDeps): (query: MeshQuery)
       case 'XRPL': {
         if (deps.xrpl === undefined) refuse('this exit does not answer XRPL');
         return { kind: 'XRPL', value: await deps.xrpl!(query.operation, query.encodedRequest) };
+      }
+      case 'BACKUP': {
+        if (deps.backup === undefined) refuse('this exit does not answer BACKUP');
+        return { kind: 'BACKUP', value: await deps.backup!(query.operation, query.encodedRequest) };
+      }
+      case 'CREDENTIAL': {
+        if (deps.credential === undefined) refuse('this exit does not answer CREDENTIAL');
+        return { kind: 'CREDENTIAL', value: await deps.credential!(query.recipient) };
       }
       default:
         return refuse(`this exit does not answer ${query.kind}`);

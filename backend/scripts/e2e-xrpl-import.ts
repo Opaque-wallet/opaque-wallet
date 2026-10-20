@@ -39,7 +39,7 @@ const executablePath = process.env['CHROMIUM']
 const browser = await chromium.launch({ ...(executablePath ? { executablePath } : { channel: 'chromium' }), headless: true });
 const client = new Client(xrplDeployment.network.wss);
 
-const balance = async (page: any) => Number(await page.textContent('#balance-main'));
+const balance = async (page: any) => Number(await page.textContent('#balance-xrp'));
 /** Refreshes until the balance reaches `want`, or a minute and a half passes. */
 async function settleTo(page: any, want: (n: number) => boolean): Promise<number> {
   for (let i = 0; i < 22 && !want(await balance(page)); i++) {

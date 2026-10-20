@@ -100,6 +100,15 @@ Things to know:
 - **Railway logs requests at its own edge,** so on Railway it sees what you
   see.
 
+**Passkey backups** (mesh/backup-store.ts) are kept in one store for every
+chain, on `opaque-mainnet`'s volume `opaque-mainnet-volume`, mounted at
+`/app/backend/.backups`: a service that has that directory keeps the store and
+serves `/v1/backup`; the others forward their `BACKUP` queries there
+(`STORE_URL`). The first backups (20 October 2026) were kept on
+`opaque-xrpl-testnet`'s volume, which still serves them at `/v1/backup`; the
+mainnet store reads through to it on a miss (`movingFrom`), and each wallet
+sends its backup again once. `BACKUP_DIR` and `BACKUP_URL` override all this.
+
 Six relays across six Railway services buy nothing over one: a single
 provider still sees every hop. Six hosts only help on six different
 providers, as below.

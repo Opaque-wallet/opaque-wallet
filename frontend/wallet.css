@@ -194,20 +194,55 @@ button.intent:hover { background: var(--surface); }
 .mono { font-family: var(--mono) !important; font-size: 13.5px !important; }
 
 /* The amount, large and centred, as wallets show what is about to leave. */
-.amount { display: grid; justify-items: center; gap: 4px; padding: 18px 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); text-align: center; }
-.amount > span { color: var(--muted); font-size: 13px; font-weight: 500; }
-.amount strong { display: flex; align-items: baseline; justify-content: center; gap: 8px; font-weight: 600; }
-.amount input { width: 4.2ch; padding: 0; border: 0; outline: 0; background: none; font: 600 44px/1.1 var(--display); letter-spacing: -0.02em; text-align: right; }
-.amount strong small { color: var(--muted); font-size: 18px; font-weight: 500; }
-.amount p { max-width: 34em; color: var(--faint); font-size: 12px; line-height: 1.5; }
+.amount {
+  display: grid; gap: 6px; padding: 16px 16px 18px; border: 1px solid var(--line); border-radius: 24px; text-align: center;
+  background: radial-gradient(560px 150px at 50% -40px, rgba(255, 122, 24, 0.16), transparent 70%), var(--surface);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.amount:focus-within { border-color: rgba(255, 122, 24, 0.45); box-shadow: 0 0 0 4px var(--tint); }
+.amount-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.amount-head b { color: var(--text); font-weight: 600; }
+.amount-head .link { color: var(--muted); font-size: 13px; }
+.amount strong { display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 18px 0 8px; font-weight: 600; }
+.amount input { width: 4.2ch; padding: 0; border: 0; outline: 0; background: none; font: 600 56px/1.05 var(--display); letter-spacing: -0.03em; text-align: right; }
+@supports (field-sizing: content) { .amount input { width: auto; min-width: 1ch; field-sizing: content; } }
+.amount strong small { color: var(--muted); font-size: 22px; font-weight: 500; }
+.amount p { justify-self: center; max-width: 36em; padding: 10px 14px; border-radius: 14px; background: var(--bg); color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+.amount p:empty { display: none; }
 
-.privacy-choice { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+/* A token picker: its badge, then a pill-shaped select over the whole of it. */
+.tok-pick { position: relative; flex: none; display: inline-flex; }
+.tok-pick .tok { position: absolute; left: 5px; top: 50%; width: 30px; height: 30px; font-size: 12.5px; transform: translateY(-50%); pointer-events: none; }
+.tok-pick select {
+  appearance: none; height: 42px; padding: 0 34px 0 43px; border: 1px solid var(--line); border-radius: 999px; outline: 0; color: var(--text); font: 600 15px var(--display); cursor: pointer;
+  background: var(--raised) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a39a94' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.tok-pick select:hover, .tok-pick select:focus-visible { border-color: rgba(255, 122, 24, 0.5); background-color: #241e25; }
+.tok-pick.static { align-items: center; height: 42px; padding: 0 16px 0 43px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--text); font-weight: 600; }
+
+/* Who it goes to: the address and its tag side by side when there is room. */
+.to-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); }
+@media (min-width: 560px) { .to-card:not(.one) { grid-template-columns: minmax(0, 1fr) 190px; } }
+.to-card .field input { background: var(--bg); }
+
+.privacy-choice { display: grid; gap: 10px; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); }
 .privacy-toggle { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
 .privacy-toggle input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--orange); }
 .privacy-toggle span { display: grid; gap: 2px; }
 .privacy-toggle b { font-size: 14px; font-weight: 600; }
 .privacy-toggle small { color: var(--muted); font-size: 12px; line-height: 1.45; }
 .immediate-note { color: var(--faint); font-size: 12px; }
+/* A switch, on the right, for a choice that changes how a payment settles. */
+.switch { align-items: center; gap: 16px; }
+.switch span { flex: 1; }
+.switch input {
+  order: 2; appearance: none; position: relative; width: 44px; height: 26px; margin: 0; border-radius: 999px; cursor: pointer;
+  background: var(--raised); box-shadow: inset 0 0 0 1px rgba(244, 239, 233, 0.14); transition: background-color 0.2s, box-shadow 0.2s;
+}
+.switch input::after { content: ""; position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: transform 0.25s var(--ease), background-color 0.2s; }
+.switch input:checked { background: var(--orange); box-shadow: 0 0 0 4px var(--tint); }
+.switch input:checked::after { transform: translateX(18px); background: var(--ink); }
 
 .primary, .secondary {
   display: inline-grid; place-items: center; min-height: 48px; padding: 0 20px; border-radius: 999px;
@@ -282,7 +317,22 @@ dialog > .address { margin-top: 12px; }
 /* ── onboarding: welcome, the phrase, three of its words back, or an import ── */
 .onboarding .bar, .onboarding .tabbar { display: none; }
 .ob-step { display: grid; gap: 16px; padding-top: 6px; }
-#ob-welcome { min-height: calc(100svh - 40px); align-content: center; justify-items: center; gap: 18px; text-align: center; }
+#ob-welcome, #ob-passkey, #ob-password { min-height: calc(100svh - 40px); align-content: center; justify-items: center; gap: 18px; text-align: center; }
+#ob-password .lede { max-width: 30em; margin: 0; }
+#ob-password .field, #ob-password .primary { width: min(100%, 380px); text-align: left; }
+/* The lock screen, over everything until the password opens the wallet. */
+.lock { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px 16px; overflow-y: auto; background: radial-gradient(900px 480px at 50% -10%, rgba(255, 122, 24, 0.1), transparent 60%), var(--bg); animation: in 0.35s var(--ease); }
+.lock-card { display: grid; justify-items: center; gap: 16px; width: min(100%, 380px); text-align: center; }
+.lock-card .lede { margin: 0; }
+.lock-card .field, .lock-card .primary, .lock-card .dialog-actions { width: 100%; text-align: left; }
+.lock-card .primary { text-align: center; }
+.lock-forgot { margin-top: 4px; }
+.lock-reset { display: grid; gap: 12px; padding: 14px; border: 1px solid rgba(255, 178, 122, 0.3); border-radius: 16px; background: rgba(255, 178, 122, 0.06); color: var(--muted); font-size: 13px; line-height: 1.55; text-align: left; }
+#password-change-form { margin-top: 12px; }
+#ob-passkey .lede { max-width: 30em; margin: 0; }
+.ob-mark.still svg { width: 64px; height: 64px; animation: none; }
+.ob-passkey-link { justify-self: center; margin-top: 2px; font-size: 14px; }
+#passkey-card .promo-go svg { padding: 9px; }
 .ob-mark { display: grid; place-items: center; width: 112px; height: 112px; margin-bottom: 8px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 10px var(--tint), 0 30px 80px rgba(255, 122, 24, 0.25); }
 .ob-mark svg { width: 80px; height: 80px; animation: turn 30s linear infinite; }
 .ob-title { font: 600 32px/1.1 var(--display); letter-spacing: -0.02em; }
@@ -314,8 +364,8 @@ dialog > .address { margin-top: 12px; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .ob-check { padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .ob-check:has(input:disabled) { opacity: 0.5; cursor: default; }
-#ob-phrase { width: 100%; min-height: 120px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; outline: 0; background: var(--surface); color: var(--text); line-height: 1.6; resize: vertical; }
-#ob-phrase:focus { border-color: var(--orange); box-shadow: 0 0 0 3px var(--tint); }
+.field textarea { width: 100%; min-height: 120px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; outline: 0; background: var(--surface); color: var(--text); line-height: 1.6; resize: vertical; }
+.field textarea:focus { border-color: var(--orange); box-shadow: 0 0 0 3px var(--tint); }
 
 /* ── the account list ────────────────────────────────────────────────── */
 .account-list { display: grid; gap: 2px; margin: 0 -8px; }
@@ -334,6 +384,17 @@ dialog > .address { margin-top: 12px; }
 .account-links { display: flex; flex-wrap: wrap; gap: 6px; }
 .list-label { margin: 10px 8px 2px; }
 .account-row.imported .mark, .mark.imported { background: var(--soft); }
+.contracts-list { display: grid; gap: 8px; margin-top: 10px; }
+.contracts-list a { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; color: inherit; text-decoration: none; font-size: 13.5px; }
+.contracts-list a:hover { border-color: var(--orange); }
+.contracts-list small { color: var(--muted); }
+.flow-side code, .steps code { font: 12px var(--mono); color: var(--soft); overflow-wrap: anywhere; }
+#view-contracts .ticket { display: grid; gap: 14px; }
+#view-contracts .ticket + .ticket { margin-top: 14px; }
+.deployers { display: grid; gap: 10px; margin-top: 12px; }
+.deployer { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; }
+.deployer .detail { margin: 0; }
+.deployer .dialog-actions { margin-top: 0; }
 .key-text { display: block; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--ink); color: var(--soft); font: 12.5px/1.6 var(--mono); overflow-wrap: anywhere; user-select: all; }
 .sweep-card { display: flex; align-items: center; gap: 14px; margin-top: 18px; padding: 14px; border: 1px dashed rgba(255, 122, 24, 0.35); border-radius: 16px; }
 .sweep-card > span { display: grid; gap: 2px; }
@@ -378,6 +439,17 @@ dialog > .address { margin-top: 12px; }
   .view, #boot-error { grid-column: 2; }
   .view { padding: 4px 40px 48px; }
   .view:not(#view-home) { justify-self: center; width: min(100%, 680px); }
+  .view.flow-view:not(#view-home) { width: min(100%, 1120px); }
+  .flow { grid-template-columns: minmax(0, 1fr) 340px; gap: 28px; align-items: start; }
+  .flow-side { position: sticky; top: 92px; padding: 24px; }
+  /* The sidebar is the way back: a title, left, the size of a page's. */
+  .screen-head { grid-template-columns: 1fr; padding: 10px 0 18px; text-align: left; }
+  .screen-head .back, .screen-head > span { display: none; }
+  .screen-head h1 { font-size: 28px; letter-spacing: -0.02em; }
+  .screen-head + .lede { margin-top: -8px; text-align: left; }
+  .swap-line input, .swap-line output { font-size: 44px; }
+  .amount strong { padding: 26px 0 14px; }
+  .amount input { font-size: 68px; }
   .tabbar {
     grid-column: 1; grid-row: 1 / span 3; position: sticky; top: 0; align-self: start;
     display: flex; flex-direction: column; gap: 4px; height: 100svh; padding: 26px 14px 20px;
@@ -510,4 +582,66 @@ dialog > .address { margin-top: 12px; }
 .addr-chip code { font: 11.5px var(--mono); }
 .addr-chip svg { width: 13px; height: 13px; }
 .addr-chip:hover { border-color: rgba(255, 122, 24, 0.5); color: var(--soft); }
+.addr-chip.pending { cursor: default; border-style: dashed; }
+.addr-chip.pending:hover { border-color: var(--line); color: var(--muted); }
 .account-item.has-address .account-row { padding-bottom: 14px; }
+
+/* ── the Terms of Use, accepted before anything opens ── */
+dialog.terms { display: grid; gap: 14px; }
+dialog.terms:not([open]) { display: none; }
+.terms-points { margin: 0; padding-left: 1.1rem; display: grid; gap: 8px; color: var(--text); font-size: 14px; line-height: 1.5; }
+.terms-points li::marker { color: var(--orange); }
+.terms-links { margin: 0; color: var(--muted); font-size: 14px; }
+.terms-links a { color: var(--orange); }
+
+/* ── swap: tokens at the address, through LI.FI ── */
+.tok-eurc { background: var(--raised); color: var(--text); box-shadow: inset 0 0 0 1.5px var(--soft); }
+.tok-cirbtc { background: var(--soft); color: var(--ink); }
+.swap { position: relative; display: grid; gap: 6px; min-width: 0; }
+#swap-go { width: 100%; }
+/* The ticket: what you pay, what you get, the quote and the button, on one raised card. */
+.ticket {
+  display: grid; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 28px;
+  background: radial-gradient(640px 170px at 50% -50px, rgba(255, 122, 24, 0.15), transparent 70%), var(--surface);
+  box-shadow: 0 34px 80px -46px rgba(255, 122, 24, 0.45);
+}
+.swap-side { display: grid; min-width: 0; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 20px; background: var(--bg); transition: border-color 0.2s, box-shadow 0.2s; }
+.swap-side:focus-within { border-color: rgba(255, 122, 24, 0.45); box-shadow: 0 0 0 4px var(--tint); }
+.swap-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.swap-head .link { font-size: 13px; color: var(--muted); }
+.swap-head b { color: var(--text); font-weight: 600; }
+.swap-line { display: flex; align-items: center; gap: 12px; }
+.swap-line input, .swap-line output { flex: 1; width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: none; color: var(--text); font: 600 38px/1.15 var(--display); letter-spacing: -0.025em; overflow: hidden; text-overflow: ellipsis; }
+.swap-line input::placeholder { color: var(--faint); }
+.swap-line output { color: var(--soft); }
+.swap-flip { position: absolute; left: 50%; top: 50%; z-index: 1; width: 42px; height: 42px; border: 5px solid var(--surface); border-radius: 14px; background: var(--raised); color: var(--soft); transform: translate(-50%, -50%); transition: transform 0.3s var(--ease), background-color 0.2s, color 0.2s; }
+.swap-flip:hover { background: var(--orange); color: var(--ink); transform: translate(-50%, -50%) rotate(180deg); }
+.swap-quote { display: grid; gap: 9px; margin: 0; padding: 12px 10px 4px; }
+.swap-quote div { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.swap-quote dt { color: var(--muted); }
+.swap-quote dd { margin: 0; font-weight: 500; text-align: right; }
+#swap-min { color: var(--soft); font-weight: 600; }
+.ticket > .privacy-toggle { padding: 14px 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--bg); }
+.auto-toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; cursor: pointer; }
+.auto-toggle input { accent-color: var(--orange); }
+/* Send and Swap: the form, then how it stays private; side by side on a desktop. */
+.flow { display: grid; gap: 18px; margin-top: 4px; }
+.flow-main { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.flow-side { display: grid; gap: 14px; align-content: start; padding: 20px; border: 1px solid var(--line); border-radius: 24px; background: linear-gradient(160deg, rgba(255, 122, 24, 0.08), transparent 55%), var(--surface); }
+.steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.steps li { position: relative; display: grid; gap: 3px; padding: 0 0 18px 44px; counter-increment: step; }
+.steps li:last-child { padding-bottom: 0; }
+.steps li::before { content: counter(step); position: absolute; left: 0; top: -2px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--tint); color: var(--orange); font: 700 13px/1 var(--mark); box-shadow: inset 0 0 0 1px rgba(255, 122, 24, 0.35); }
+.steps li:not(:last-child)::after { content: ""; position: absolute; left: 13.5px; top: 30px; bottom: 2px; width: 1px; background: linear-gradient(var(--orange), transparent); opacity: 0.45; }
+.steps b { font-size: 14.5px; font-weight: 600; }
+.steps small { color: var(--muted); font-size: 13px; line-height: 1.55; }
+
+/* A swap under way: seconds left, and how far along. */
+.swap-progress { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid rgba(255, 122, 24, 0.35); border-radius: 16px; background: var(--tint); }
+.swap-eta { display: flex; align-items: baseline; gap: 8px; }
+.swap-eta b { font: 600 34px/1 var(--display); color: var(--soft); font-variant-numeric: tabular-nums; }
+.swap-eta small { color: var(--muted); font-size: 13px; }
+.swap-bar { height: 6px; border-radius: 999px; background: var(--raised); overflow: hidden; }
+.swap-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--orange); transition: width 1s linear; }
+.swap-progress p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+

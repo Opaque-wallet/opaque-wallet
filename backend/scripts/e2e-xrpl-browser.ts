@@ -94,9 +94,9 @@ try {
   log(`  Node paid 3 XRP to the tag: ${paid.result.hash}`);
   await page.click('#tab-home');
   await page.click('#refresh');
-  await page.waitForFunction(() => document.getElementById('balance-main')?.textContent === '3', null, { timeout: 120_000, polling: 2_000 }).catch(async () => {
+  await page.waitForFunction(() => document.getElementById('balance-xrp')?.textContent === '3', null, { timeout: 120_000, polling: 2_000 }).catch(async () => {
     await page.click('#refresh');
-    await page.waitForFunction(() => document.getElementById('balance-main')?.textContent === '3', null, { timeout: 60_000, polling: 2_000 });
+    await page.waitForFunction(() => document.getElementById('balance-xrp')?.textContent === '3', null, { timeout: 60_000, polling: 2_000 });
   });
   check('the payment became 3 private XRP notes in the page', true, `${await page.textContent('#note-count')}`);
 

@@ -27,10 +27,12 @@
 //                could name the pools could take the deposits.
 
 import type {
+  Address,
   CredentialHandle,
   Hex,
   IntentRef,
   IntentStatus,
+  MeshQuery,
   PoolScope,
   PrivacyConditions,
   RelayPath,
@@ -41,6 +43,7 @@ import type {
 } from '@opaque/protocol-types';
 
 import { createMeshBootstrap } from '../../../backend/mesh/bootstrap.ts';
+import type { BackupTransport } from './passkey-backup.ts';
 import { chainTo } from '../../../backend/mesh/directory.ts';
 import { createGraphHealth } from '../../../backend/mesh/graph-health.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from '../../../backend/mesh/contracts.ts';
@@ -48,13 +51,13 @@ import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
 import { ARC_AUTHORITY, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../../backend/chain/pq-wallet-chain.ts';
 import { browserPayer, createBrowserPool, createMeshChainObserver, type DepositMany } from '../../../backend/chain/wallet-chain.ts';
 import { capabilitiesOf } from '../../../backend/chain/pool.ts';
-import { readOne, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
+import { readOne, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient } from '../../../packages/ring-client/src/index.ts';
-import { IndexedDbSignerStore } from '../../../packages/pq-wallet/src/indexeddb-store.ts';
+import { SealedSignerStore } from './lock.ts';
 import { adoptWallet, createPqWallet } from '../../../packages/pq-wallet/src/wallet.ts';
-import { toHex } from '@opaque/protocol-types/codecs.js';
-import { deployment, meshTrustRoot, requireService } from '../../../deployments/index.ts';
+import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
+import { deployment, meshTrustRoot, requireService, type SwapToken } from '../../../deployments/index.ts';
 import { exportBackup, keyStoreName, NOTES_KEY, restoreBackup, WALLET_ID } from './backup.ts';
 import { arcState, arcStorageOf, findNotes, forsSeed, noteCounters, noteSecret, saveArcState } from './arc-keys.ts';
 import type { AccountKeys } from './xrpl-keys.ts';
@@ -70,7 +73,6 @@ export interface StackConfig {
   /** A dev server's root, for its random mesh. A built wallet never reads it. */
   readonly trustRoot: DirectoryTrustRoot;
   readonly cre: { readonly publicKey: `0x${string}`; readonly encryptionKeyId: string; readonly policyVersion: string };
-  readonly credentialUrl: string;
   readonly capabilities: { readonly pqWallet: 'MOCK' | 'LIVE'; readonly graph: 'LIVE' | 'FIXTURE'; readonly confidentialExecution: 'ATTESTED' | 'SIMULATED'; readonly policyScope: 'CRE_WORKFLOW_ONLY' };
 }
 
@@ -132,6 +134,8 @@ export interface WalletRuntime {
   accountFunds(address: `0x${string}`): Promise<{ readonly usdc: number; readonly prepaidGas: number }>;
   /** Everything the account holds, less this operation's gas, to `to`. */
   withdraw(address: `0x${string}`, to: `0x${string}`): Promise<TxHash>;
+  /** Calls the account makes in one operation its PQ key signs, gas from its USDC: a contract deploy, or a call to one. */
+  execute(address: `0x${string}`, calls: readonly { readonly to: `0x${string}`; readonly data: `0x${string}` }[]): Promise<TxHash>;
   /** The account open: one of the recovery phrase's, or this browser's own from before phrases. */
   readonly account: AccountKeys | 'browser';
   /** Where this account's sent payments are kept. */
@@ -148,6 +152,12 @@ export interface WalletRuntime {
   inUse(address: `0x${string}`): Promise<boolean>;
   /** Drops this browser's copy of a phrase account's keys; the next open rebuilds them from the chain. */
   forgetKeys(): void;
+  /** Each swap token at an address, in its smallest units, by symbol. */
+  tokenBalances(address: `0x${string}`): Promise<Record<string, bigint>>;
+  /** LI.FI's best route for `amount` of `from` into `to`, asked through the mesh and checked here. */
+  swapQuote(address: `0x${string}`, from: SwapToken, to: SwapToken, amount: bigint): Promise<SwapQuote>;
+  /** The quoted swap, as one operation the account's PQ key signs: approve LI.FI exactly `amount`, then its call. */
+  swap(address: `0x${string}`, from: SwapToken, amount: bigint, quote: SwapQuote): Promise<TxHash>;
   exportBackup(passphrase: string): Promise<Blob>;
   /** Into a new key store; reload the page to open it. Returns the notes it added. */
   restoreBackup(file: Blob, passphrase: string): Promise<number>;
@@ -156,21 +166,16 @@ export interface WalletRuntime {
 /** Whether this browser holds an Arc account from before recovery phrases: keys in IndexedDB, or notes. */
 export async function hasBrowserAccount(): Promise<boolean> {
   try { if (Object.keys(JSON.parse(localStorage.getItem(NOTES_KEY) ?? '{}') as object).length > 0) return true; } catch { return true; }
-  const store = new IndexedDbSignerStore(keyStoreName());
+  const store = new SealedSignerStore(keyStoreName());
   try { return (await store.readWallet(WALLET_ID)) !== undefined; } catch { return false; } finally { await store.close(); }
 }
 
-export async function startWallet(config?: StackConfig, account: AccountKeys | 'browser' = 'browser'): Promise<WalletRuntime> {
-  const cfg = config ?? (await loadStack());
-  const scopes: readonly PoolScope[] = deployment.pools
-    .filter((p) => p.proofMode === 'RING_8')
-    .sort((a, b) => b.denomination - a.denomination)
-    .map((p) => ({
-      chainId: BigInt(deployment.network.chainId) as PoolScope['chainId'],
-      pool: p.address as PoolScope['pool'],
-      denomination: p.denomination as PoolScope['denomination'],
-    }));
-
+/**
+ * This page's mesh: the directory checked against the pinned root first, then
+ * every query through three relays. One per page, shared by the wallet and the
+ * passkey backup, which may need it before any account opens.
+ */
+function meshOf(cfg: StackConfig) {
   // §8.2 health from the Graph, asked through the mesh (the exit queries the
   // subgraph) and clamped: it weighs the directory's relays, never adds one.
   const relayHealth = createGraphHealth({
@@ -184,6 +189,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
   // server sends, for the random mesh a local stack makes.
   const devRoot = import.meta.env.DEV ? cfg.trustRoot : undefined;
   const { signed, root } = chainTo(cfg.directoryChain ?? [cfg.signedDirectory], devRoot ?? pinnedRoot());
+  if (devRoot === undefined) savePinnedRoot(root);
   const bootstrap = createMeshBootstrap({
     root,
     signed,
@@ -192,8 +198,35 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
     // Big uploads (a ring intent is ~35 chunks) outlast the default poll.
     client: { pollIntervalMs: 250, pollTimeoutMs: 120_000 },
   });
+  const query = async <T>(request: Parameters<typeof bootstrap.transport.query>[0]) =>
+    (await bootstrap.transport.query(request, await bootstrap.pathFor())) as unknown as { value: T };
+  // Until the first answer, every relay weighs the same. The polls double as
+  // cover traffic (§7.5).
+  void relayHealth.refresh();
+  setInterval(() => void relayHealth.refresh(), 120_000);
+  return { bootstrap, query };
+}
+let pageQuery: (<T>(request: MeshQuery) => Promise<{ value: T }>) | undefined;
+let pageMesh: Promise<<T>(request: MeshQuery) => Promise<{ value: T }>> | undefined;
+/** The passkey backup's way to its store (lib/passkey-backup.ts): through this page's mesh, an account open or not. */
+export const backupTransport = (): BackupTransport => async (operation, encodedRequest) => {
+  const query = pageQuery ?? await (pageMesh ??= loadStack().then((cfg) => meshOf(cfg).query));
+  return (await query<Hex>({ kind: 'BACKUP', operation, encodedRequest })).value;
+};
 
-  if (devRoot === undefined) savePinnedRoot(root);
+export async function startWallet(config?: StackConfig, account: AccountKeys | 'browser' = 'browser'): Promise<WalletRuntime> {
+  const cfg = config ?? (await loadStack());
+  const scopes: readonly PoolScope[] = deployment.pools
+    .filter((p) => p.proofMode === 'RING_8')
+    .sort((a, b) => b.denomination - a.denomination)
+    .map((p) => ({
+      chainId: BigInt(deployment.network.chainId) as PoolScope['chainId'],
+      pool: p.address as PoolScope['pool'],
+      denomination: p.denomination as PoolScope['denomination'],
+    }));
+
+  const { bootstrap, query } = meshOf(cfg);
+  pageQuery = query;
 
   // Opaque is a wallet of its own: it never reads or asks a browser wallet
   // such as MetaMask. Reads cross the mesh; the account's PQ key signs.
@@ -208,7 +241,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
   // A phrase account's keys are drawn from the phrase, so this store is only
   // their copy and signing log here; the browser account's exist nowhere else.
   const names = arcStorageOf(account, keyStoreName());
-  const keys = new IndexedDbSignerStore(names.keys);
+  const keys = new SealedSignerStore(names.keys);
   const walletOptions = livePqWalletOptions({
     signerStore: keys, walletStore: keys, publicClient: browserPool.publicClient, payer: browserPayer(undefined), walletRpc,
     ...(account === 'browser' ? {} : { seedFor: (epoch: bigint) => forsSeed(account, epoch) }),
@@ -261,12 +294,6 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
     },
   });
 
-  const query = async <T>(request: Parameters<typeof bootstrap.transport.query>[0]) =>
-    (await bootstrap.transport.query(request, await bootstrap.pathFor())) as unknown as { value: T };
-  // Until the first answer, every relay weighs the same. The polls double as
-  // cover traffic (§7.5).
-  void relayHealth.refresh();
-  setInterval(() => void relayHealth.refresh(), 120_000);
 
   const ports: AdapterPorts = {
     wallet,
@@ -324,13 +351,11 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
     config: cfg,
     pathFor: () => bootstrap.pathFor(),
     async obtainCredential(recipient) {
-      const response = await fetch(cfg.credentialUrl, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ recipient: recipient.toLowerCase() }),
-      });
-      if (!response.ok) throw new Error(`the credential authority refused: ${response.status}`);
-      credentials.set(recipient.toLowerCase(), await response.text());
-      return recipient.toLowerCase() as CredentialHandle;
+      // Across the mesh like every read: the authority learns a recipient, never who asked.
+      const to = recipient.toLowerCase() as Address;
+      const value = (await query<Hex>({ kind: 'CREDENTIAL', recipient: to })).value;
+      credentials.set(to, new TextDecoder().decode(fromHex(value)));
+      return to as unknown as CredentialHandle;
     },
     readRing: async (scope) => (await query<RingSnapshot>({ kind: 'RING_SNAPSHOT', scope })).value,
     readPrivacy: async (scope) => (await query<PrivacyConditions>({ kind: 'PRIVACY_CONDITIONS', scope })).value,
@@ -340,6 +365,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       return { usdc: Number(f.usdc6) / 1e6, prepaidGas: Number(f.prepaidGas) / 1e18 };
     },
     withdraw: (address, to) => opsFor(address).withdraw(to.toLowerCase() as never),
+    execute: (address, calls) => opsFor(address).execute(calls.map((c) => ({ to: c.to.toLowerCase() as never, data: c.data }))),
     account,
     sentKey: names.sent,
     async open() {
@@ -360,6 +386,23 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       const { generations } = arcState();
       saveArcState({ generations: { ...generations, [account.id]: (generations[account.id] ?? 0) + 1 } });
     },
+    async tokenBalances(address) {
+      const amounts = await tokenBalances(walletRpc, address as never, deployment.swap.tokens.map((t) => t.address as never));
+      return Object.fromEntries(deployment.swap.tokens.map((t, i) => [t.symbol, amounts[i]!]));
+    },
+    async swapQuote(address, from, to, amount) {
+      const quote = await swapQuote(walletRpc, { from: from.address as never, to: to.address as never, amount, account: address as never });
+      // The exit relayed this; the account signs it. So it is checked here: only
+      // LI.FI's pinned contract, nothing paid in gas currency, and the account
+      // itself as the receiver.
+      const router = deployment.swap.router.toLowerCase();
+      if (quote.to !== router || quote.approvalAddress !== router) throw new Error('the quote calls a contract other than LI.FI\'s');
+      if (BigInt(quote.value) !== 0n) throw new Error('the quote asks for USDC on top of the swap');
+      if (!quote.data.toLowerCase().includes(address.slice(2).toLowerCase())) throw new Error('the quote does not pay this account');
+      if (!(BigInt(quote.toAmountMin) > 0n)) throw new Error('the quote delivers nothing');
+      return quote;
+    },
+    swap: (address, from, amount, quote) => opsFor(address).swap(from.address as never, amount, quote),
     exportBackup: (passphrase) => exportBackup(keys, passphrase),
     restoreBackup,
   };

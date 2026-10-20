@@ -14,7 +14,7 @@
 // Batch that showed its signers' public keys without rotating them is followed
 // at once by the rotation alone (retireIfListed).
 
-import { decode, hashes, multisign, type Batch, type Client } from 'xrpl';
+import { decode, GlobalFlags, hashes, multisign, type Batch, type Client } from 'xrpl';
 
 import { ProtocolFailure, type ApprovedRelease, type PrivateSpend, type TxHash } from '@opaque/protocol-types';
 import { spendHash } from '@opaque/protocol-types/codecs.js';
@@ -22,9 +22,11 @@ import { spendHash } from '@opaque/protocol-types/codecs.js';
 import type { SettlementEvidence } from '../cre/intent-store.ts';
 import { payoutBatch, rotationOf } from './batch.ts';
 import { nextSignersOf, signerListOf, type Attester, type SignerList, type XrplPool, type XrplSpend } from './attester.ts';
-import { accountOf, asDestination } from './protocol.ts';
+import { accountOf, asDestination, type XrplAsset } from './protocol.ts';
+import { swapInto } from './swap.ts';
 
 export const toTxHash = (hash: string): TxHash => `0x${hash.toLowerCase()}` as TxHash;
+
 export const fromTxHash = (hash: TxHash): string => hash.slice(2).toUpperCase();
 
 /** An attester's refusals that no retry can fix: the settler fails the intent on these. */
@@ -56,13 +58,18 @@ export function createXrplSettlement(options: {
     return { account, pool };
   };
 
+  /** A payment into another pool of another asset is a swap, and must name the least it delivers. */
+  const swapOf = (asset: XrplAsset, destination: string, spend: XrplSpend) => swapInto(options.pools, asset, destination, spend);
+
   async function payout(spends: readonly XrplSpend[]): Promise<string> {
     const { account, pool } = poolOf(spends[0]!);
     const list = await signerListOf(client, account);
     const units = spends.reduce((n, s) => n + BigInt(s.scope.denomination), 0n) - pool.spendFee * BigInt(spends.length);
+    const destination = asDestination(spends[0]!.destination);
+    const deliver = swapOf(pool.source.config.asset, destination.account, spends[0]!);
     const batch = payoutBatch({
       pool: account, asset: pool.source.config.asset, nullifiers: spends.map((s) => s.nullifier),
-      destination: asDestination(spends[0]!.destination), units,
+      destination, units, ...(deliver === undefined ? {} : { deliver }),
       nextSigners: nextSignersOf(account, list.signers, options.attesters), quorum: list.quorum,
     });
     // A payment the destination can never take — no trust line, under the
@@ -70,7 +77,10 @@ export function createXrplSettlement(options: {
     // every retry while the note sat reserved. Ask the ledger first, and fail
     // the intent for good if it says no; the wallet then frees the note.
     const payment = batch.RawTransactions.find((r) => r.RawTransaction.TransactionType === 'Payment')!.RawTransaction;
-    const { Flags: _inner, ...alone } = payment as unknown as Record<string, unknown>;
+    // Simulated on its own, so without the inner-batch flag; a swap keeps its partial-payment one.
+    const { Flags: flags, ...rest } = payment as unknown as Record<string, unknown>;
+    const outer = Number(flags ?? 0) & ~GlobalFlags.tfInnerBatchTxn;
+    const alone = outer === 0 ? rest : { ...rest, Flags: outer };
     const dry = await client.simulate(alone as never).then((r) => r.result.engine_result, () => 'unknown');
     if (dry.startsWith('tec')) {
       throw new ProtocolFailure('SETTLEMENT_REVERTED', `the destination cannot take this payment (${dry})`, false);

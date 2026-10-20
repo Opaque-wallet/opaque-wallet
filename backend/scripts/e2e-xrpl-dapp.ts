@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { BatchFlags, Client, GlobalFlags, NFTokenCreateOfferFlags, NFTokenMintFlags, Wallet, type Batch, type SubmittableTransaction } from 'xrpl';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { openWallet } from './xrpl-wallet-page.ts';
+import { openWallet, unlockIfAsked } from './xrpl-wallet-page.ts';
 import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
 import { createNoteSecret, deriveCommitment } from '../zk/index.ts';
 import { startXrpl, XRPL_STATE } from '../xrpl/node.ts';
@@ -143,11 +143,11 @@ try {
   const { wallet: payer } = await client.fundWallet();
   await send({ TransactionType: 'Payment', Account: payer.address, Destination: xrpPool.account, Amount: '20000000', DestinationTag: Number(await wallet.textContent('#receive-tag')) }, payer);
   await wallet.click('#tab-home');
-  for (let i = 0; i < 20 && (await wallet.textContent('#balance-main')) !== '20'; i++) {
+  for (let i = 0; i < 20 && (await wallet.textContent('#balance-xrp')) !== '20'; i++) {
     await wallet.click('#refresh');
     await new Promise((r) => setTimeout(r, 4_000));
   }
-  check('the wallet holds 20 private XRP', (await wallet.textContent('#balance-main')) === '20', String(await wallet.textContent('#note-count')));
+  check('the wallet holds 20 private XRP', (await wallet.textContent('#balance-xrp')) === '20', String(await wallet.textContent('#note-count')));
 
   // ── the dapp ─────────────────────────────────────────────────────────────
   const dapp = await context.newPage();
@@ -158,6 +158,7 @@ try {
     popup = await context.newPage();
     police(popup);
     await popup.goto(`${WALLET}/xrpl-connect.html`);
+    await unlockIfAsked(popup);
     await popup.waitForFunction(() => !(document.getElementById('wc-form') as HTMLElement).hidden, null, { timeout: 90_000 });
   }
   const logged = (id: string) => dapp.waitForFunction((k: string) => new RegExp(`^${k}( failed)?:`, 'm').test(document.getElementById('log')?.textContent ?? ''), id, { timeout: 300_000, polling: 1_000 });
@@ -169,6 +170,7 @@ try {
     if (opened !== undefined) {
       popup = await opened;
       police(popup);
+      await unlockIfAsked(popup);
     }
     if (id === 'connect-wc') {
       // The link the dapp shows, pasted into Opaque, as a person would.
@@ -247,7 +249,7 @@ try {
     const sequence = (await client.request({ command: 'account_info', account: site2, ledger_index: 'validated' })).result.account_data.Sequence;
     log(`  waiting for ledger ${sequence + 270} before closing (now ${await client.getLedgerIndex()}, ~${Math.round((sequence + 270 - await client.getLedgerIndex()) * 3.8 / 60)} min)…`);
     while (await client.getLedgerIndex() < sequence + 270) await new Promise((r) => setTimeout(r, 15_000));
-    const before = Number(await wallet.textContent('#balance-main'));
+    const before = Number(await wallet.textContent('#balance-xrp'));
     const closed = await closeIn(second);
     check('the app\'s account closes into the pools', /^Closed/.test(closed), closed);
     const gone = await client.request({ command: 'account_info', account: site2, ledger_index: 'validated' }).then(() => false, (e: { data?: { error?: string } }) => e.data?.error === 'actNotFound');
@@ -257,7 +259,7 @@ try {
       await wallet.click('#tab-home');
       await wallet.click('#refresh');
       await new Promise((r) => setTimeout(r, 5_000));
-      after = Number(await wallet.textContent('#balance-main'));
+      after = Number(await wallet.textContent('#balance-xrp'));
     }
     check('its reserve and the rest came back as notes', after > before, `${before} → ${after} private XRP`);
   }

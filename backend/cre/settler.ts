@@ -192,7 +192,7 @@ export function createSettler(options: SettlerOptions): Settler {
       // Open with the released key, and hold CRE's approval to exactly this
       // spend: the committed hash, the approved recipient, the intent's pool.
       let spend: PrivateSpend;
-      let beside: { readonly destination?: unknown } = {};
+      let beside: { readonly destination?: unknown; readonly deliverMin?: unknown } = {};
       try {
         const opened = decodeIntentPlaintext(openBulk(fromHex(decision.k as never), record.intent.spendHash, record.intent.encryptedPayload)).spend;
         spend = asPrivateSpend(opened);
@@ -200,6 +200,9 @@ export function createSettler(options: SettlerOptions): Settler {
         // trusted here: the spend's recipient binds both, and every XRPL
         // attester recomputes that binding before it signs.
         if (opened['destination'] !== undefined) beside = { destination: opened['destination'] };
+        // A swap into another pool also names the least it must deliver there.
+        // Checked by the attesters against the AMM before they sign.
+        if (opened['deliverMin'] !== undefined) beside = { ...beside, deliverMin: opened['deliverMin'] };
       } catch {
         refuse(intentId, 'INVALID_INPUT', 'the released key does not open this payment');
         return;

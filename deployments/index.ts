@@ -92,7 +92,11 @@ export interface Deployment {
     readonly trustRoot: { readonly signerCommitment: `0x${string}`; readonly minVersion: number };
   };
   readonly services: Readonly<Record<ServiceName, string | null>>;
+  /** Swaps at the account's address through LI.FI: its contract here, and the tokens offered. */
+  readonly swap: { readonly router: Address; readonly tokens: readonly SwapToken[] };
 }
+
+export interface SwapToken { readonly symbol: string; readonly address: Address; readonly decimals: number }
 
 // Lower-case, like every other address in this repo: codecs.ts treats
 // upper-case as a different value for hashing, so the config must not
@@ -123,6 +127,8 @@ function validate(d: typeof raw): Deployment {
   });
   for (const [v, a] of Object.entries(d.erc4337.entryPoints)) address(a, `erc4337.entryPoints.${v}`);
   address(d.accounts.attester, 'accounts.attester');
+  address(d.swap.router, 'swap.router');
+  d.swap.tokens.forEach((t, i) => address(t.address, `swap.tokens[${i}].address`));
   if (!Number.isSafeInteger(d.mesh.genesis) || d.mesh.genesis <= 0) bad('mesh.genesis', 'must be unix seconds');
   if (!/^0x[0-9a-f]{64}$/.test(d.mesh.trustRoot.signerCommitment)) bad('mesh.trustRoot.signerCommitment', 'must be 32 lower-case hex bytes');
   if (!Number.isSafeInteger(d.mesh.trustRoot.minVersion) || d.mesh.trustRoot.minVersion < 0) bad('mesh.trustRoot.minVersion', 'must be a version');

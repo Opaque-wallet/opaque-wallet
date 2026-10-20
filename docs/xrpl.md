@@ -107,7 +107,7 @@ The same split as Arc: the wallet on Vercel, the backend on Railway.
 - Wallet pages are served with `frame-ancestors 'none'`, so the approval popup can't be framed and clicked through. The page talks to its own origin and the service only.
 - **Demo dapp: `https://opaque-xrpl-demo.vercel.app`**, the Vercel project `opaque-xrpl-demo`: the X3 dapp, trading against the testnet RLUSD AMM and minting its own NFT, with buttons for Opaque's adapter and for xrpl-connect's stock GemWallet and Crossmark adapters.
 - **Still one operator.** Six relays, three attesters and the CRE stand-in run in one process on one provider, and its credential authority issues to anyone. Testnet only.
-- **Two operators share the pools.** A laptop's `xrpl:*` e2e scripts use the same seeds as the hosted service. Both can pay out, and a race costs only a retry. A laptop that falls more than 64 rotations behind won't find its keys (the search window).
+- **Two operators share the pools.** A laptop's `xrpl:*` e2e scripts use the same seeds as the hosted service. Both can pay out, and a race costs only a retry. An operator that falls behind searches on from its last position for its listed key (up to 10,000 rotations, about 13 s of key derivation, once), so a laptop catches up after the hosted service has moved on.
 
 Set up, from the repo root; secrets go over stdin, never argv:
 
@@ -149,6 +149,17 @@ Each phrase account has one deposit address per asset, as a MetaMask account has
 - **What it reveals.** Payments into one address can be linked to each other on the ledger, as with any reusable address; what is spent from it can't, since a spend proves one note of a ring. `TAG_STATUS` answers counts per size and the chain's depth, never which commitments a tag holds. For a deposit unlinkable to the others, Deposit still makes a **one-time address**.
 - The browser account from before phrases has no address: it has no phrase to find it again with.
 - Tested by `cd backend && npm run xrpl:e2e:address`: one address paid three times by the faucet (the third fits only because the wallet topped it up), and a second browser with only the phrase finds the same address and every note.
+
+## Private swaps
+
+**Swap** trades one pool's notes for another's (XRP, RLUSD, USDC; not MPTs yet) on the ledger's own exchange, and stays private: the notes are spent through rings like any payment, and what they buy lands in a fresh one-time tag of the other pool. Code: [backend/xrpl/swap.ts](../backend/xrpl/swap.ts).
+
+- **The payout is the swap.** A payment whose destination is another Opaque pool of another asset becomes a cross-currency `Payment` inside the payout `Batch`: `SendMax` the note's value after the fee, `DeliverMin` the least the wallet accepts, `tfPartialPayment` so everything the note buys arrives, and `Paths` through XRP for token to token. The other pool credits the tag with what was delivered. Proven on testnet by `xrpl/spike-swap.ts` (an inner partial cross-currency Payment applies; a DeliverMin the AMM cannot meet applies nothing).
+- **Quotes.** The wallet reads `amm_info` through the relays and prices each note as if it settled last, after every other note has moved the price; DeliverMin is that less 2%. It travels sealed beside the spend, and every attester prices the swap again and refuses a DeliverMin under half its own quote, so a coordinator cannot settle far below the market. A payment into another pool without a DeliverMin is refused for good: that pool would ignore it.
+- **The tag is sized for the payments.** One payment arrives per note spent, and the pool credits each greedily, so the wallet registers notes for every order they might land in, 5% over the quotes (`notesForPayments`).
+- **Leftovers.** Notes are whole units, so what arrives under one note stays carried on the tag. On a one-time tag nothing else arrives, and it stays in the pool. **Carry leftovers to my next swap** (off by default, phrase accounts only) sends swaps into an asset to the account's own **swap tag** for that pool instead: an owned tag like the reusable address (hash-chain owner, notes drawn from the phrase under `swaps/<network>/<pool>/<i>`, found again on import), topped up before each swap so every payment finds a note. Its carried amount joins the next swap's and becomes a note once it reaches one. The cost: those swaps share a tag, so they can be linked to each other on the ledger, still not to the account or to the notes spent.
+- **Liquidity.** The test tokens are Opaque's own, so `node --use-system-ca xrpl/setup-amm.ts` gives each an AMM against XRP (900 XRP deep, 0.3% fee for USDC; the existing XRP/RLUSD AMM was deepened at its own price). `--check` only reads.
+- e2e: `npm run xrpl:e2e:swap` (faucet XRP, 15 XRP → USDC, 10 USDC → RLUSD through XRP, both arriving as private notes).
 
 ## The extension
 

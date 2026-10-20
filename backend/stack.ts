@@ -50,12 +50,13 @@ import { ARC_AUTHORITY } from './chain/pq-wallet-chain.ts';
 import { relayDirectoryReporter } from './chain/relay-directory.ts';
 import { createChainRingSource } from './chain/ring-source.ts';
 import { createWalletRpcAnswerer } from './chain/wallet-rpc.ts';
-import { issueCredential } from './cre/credential.ts';
+import { credentialJson } from './cre/credential.ts';
 import { createExecutorServer } from './cre/executor-server.ts';
 import { generateIntentKeypair } from './cre/seal-client.ts';
 import { createSettler, type Settler, type SettlerOptions } from './cre/settler.ts';
 import { createCreSimulator } from './cre/simulator.ts';
 import { createEgress } from './mesh/egress.ts';
+import { backupFromEnv, backupHttpHandler } from './mesh/backup-store.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from './mesh/contracts.ts';
 import { chainTo, verify } from './mesh/directory.ts';
 import { createGraphHealth } from './mesh/graph-health.ts';
@@ -227,7 +228,13 @@ await egress.listen(PORTS.egress, LOOPBACK);
 // WALLET_RPC (§7.5): the wallet's account and note reads, and its account's
 // UserOperations, so the RPC and the bundler see this box and not the wallet.
 let settler: Settler | undefined;
+// Passkey backups: one store for every chain (mesh/backup-store.ts). The service
+// with the backup volume keeps it; the others ask it; a laptop keeps its own.
+const backup = backupFromEnv(join(STATE, 'backups'), PUBLIC_URL !== undefined);
 const exit = createExecutorServer({
+  backup: backup.send,
+  // Asked across the mesh, so the authority never sees who asked; the HTTP route stays for old clients.
+  credential: async (recipient) => toHex(new TextEncoder().encode(credentialJson(recipient, POLICY, credentialMac, nowS()))),
   graph: ringSource,
   ...(CRE_MODE === 'workflow' ? { cre: { accept: (decisions) => settler!.accept(decisions) }, requireCreEnvelope: true } : {}),
   walletRpc: createWalletRpcAnswerer({
@@ -236,6 +243,7 @@ const exit = createExecutorServer({
     // Pays for ROTATE, as it already pays for settlement and the attester's own
     // rotations. An account cannot pay for its own: see chain/wallet-rpc.ts.
     payer: privateKeyToAccount(env('EGRESS_PRIVATE_KEY') as `0x${string}`, { nonceManager }),
+    ...(process.env['LIFI_API_KEY'] ? { lifiApiKey: process.env['LIFI_API_KEY'] } : {}),
   }),
 });
 await exit.listen(PORTS.exit, LOOPBACK);
@@ -352,10 +360,9 @@ const credentialHandler: RequestListener = (req, res) => {
   req.on('end', () => {
     try {
       const { recipient } = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { recipient?: string };
-      if (typeof recipient !== 'string' || !/^0x[0-9a-f]{40}$/.test(recipient)) throw new Error('recipient must be a lower-case address');
-      const credential = issueCredential({ recipient: recipient as never, policyVersion: POLICY, expiresAt: (nowS() + 86_400n) as UnixSeconds }, credentialMac);
+      const credential = credentialJson(String(recipient), POLICY, credentialMac, nowS());
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(credential, (_k, v) => (typeof v === 'bigint' ? v.toString(10) : v)));
+      res.end(credential);
     } catch (e) {
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ message: (e as Error).message }));
@@ -397,6 +404,7 @@ const router = PORT === undefined ? undefined : createServer((req, res) => {
   if (hop && relay) { req.url = hop[2]; relay.handler(req, res); return; }
   if (url.startsWith('/v1/mesh/') || url.startsWith('/v1/cre/')) { exit.handler(req, res); return; }
   if (url === '/v1/credential') { credentialHandler(req, res); return; }
+  if (url === '/v1/backup' && backup.kept) { backupHttpHandler(backup.send)(req, res); return; }
   if (url === '/stack.json') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
     res.end(walletConfig);

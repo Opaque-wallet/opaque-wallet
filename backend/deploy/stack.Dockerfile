@@ -6,7 +6,7 @@
 # operator: the wallet's footer says so.
 FROM node:22-alpine
 
-RUN addgroup -S opaque && adduser -S -G opaque opaque
+RUN apk add --no-cache su-exec && addgroup -S opaque && adduser -S -G opaque opaque
 WORKDIR /app
 
 # .dockerignore keeps .env, .stack and every .key out of this COPY. Secrets
@@ -20,6 +20,8 @@ RUN for d in packages/protocol-types packages/pq-wallet packages/ring-client gra
  && mkdir -p backend/.stack frontend/public \
  && chown opaque:opaque backend/.stack frontend/public
 
-USER opaque
 WORKDIR /app/backend
-CMD ["node", "stack.ts"]
+# backend/.backups is opaque-mainnet's volume: the passkey backups
+# (mesh/backup-store.ts). Railway mounts it owned by root, so hand it to the
+# service's user, then drop root for good. A service without it skips that.
+CMD ["sh", "-c", "if [ -d /app/backend/.backups ]; then chown -R opaque:opaque /app/backend/.backups; fi && exec su-exec opaque node stack.ts"]

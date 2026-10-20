@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { arcAddressOf } from '../../frontend/src/lib/arc-keys.ts';
 import { accountKeys } from '../../frontend/src/lib/xrpl-keys.ts';
-import { ARC_READY, createWallet } from './xrpl-wallet-page.ts';
+import { ARC_READY, acceptTerms, createWallet, passkeyOffer } from './xrpl-wallet-page.ts';
 
 const args = process.argv.slice(2);
 const ORIGIN = args.find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit';
@@ -69,10 +69,10 @@ try {
 
   // ── 2. the account list ────────────────────────────────────────────────────
   await walletA.click('#account-button');
-  await walletA.waitForSelector('.account-item .addr-chip', { timeout: 60_000 });
-  const chip = String(await walletA.textContent('.account-item .addr-chip code'));
+  await walletA.waitForSelector('.account-item .addr-chip:not(.pending)', { timeout: 60_000 });
+  const chip = String(await walletA.textContent('.account-item .addr-chip:not(.pending) code'));
   check('the account list shows the address under Account 1', address.startsWith(chip.split('…')[0]!) && address.endsWith(chip.split('…')[1]!), chip);
-  await walletA.click('.account-item .addr-chip');
+  await walletA.click('.account-item .addr-chip:not(.pending)');
   const copied = await walletA.evaluate(() => navigator.clipboard.readText());
   check('its chip copies exactly that address', copied.toLowerCase() === address, copied);
   check('a phrase account offers no backup file to download', await walletA.isHidden('#backup-export'), 'hidden');
@@ -83,7 +83,7 @@ try {
   const second = await addressOf(walletA);
   check('Add account opens Account 2 at its own address', (await nameOf(walletA)) === 'Account 2' && second === arcAddressOf(accountKeys(phrase, 1)) && second !== address, second);
   await walletA.click('#account-button');
-  await walletA.waitForSelector('.account-item:nth-child(2) .addr-chip', { timeout: 60_000 });
+  await walletA.waitForSelector('.account-item:nth-child(2) .addr-chip:not(.pending)', { timeout: 60_000 });
   await walletA.click('.account-item:first-child .account-row');
   await walletA.waitForLoadState('domcontentloaded');
   check('and Account 1 opens again from the list', (await addressOf(walletA)) === address && (await nameOf(walletA)) === 'Account 1', await nameOf(walletA));
@@ -102,9 +102,11 @@ try {
   const b = await browser.newContext();
   const walletB = await b.newPage();
   await walletB.goto(ARC);
+  await acceptTerms(walletB);
   await walletB.click('#ob-import');
   await walletB.fill('#ob-phrase', phrase);
   await walletB.click('#ob-restore-go');
+  await passkeyOffer(walletB);
   check('the phrase alone brings Account 1 back at the same address', (await addressOf(walletB)) === address, address);
   await walletB.waitForFunction(() => /^Found \d+ note/.test(document.getElementById('home-status')?.textContent ?? ''), null, { timeout: 180_000 });
   check('and looks for its notes on Arc', true, String(await walletB.textContent('#home-status')));
@@ -123,9 +125,11 @@ try {
     const c = await browser.newContext();
     const walletC = await c.newPage();
     await walletC.goto(ARC);
+    await acceptTerms(walletC);
     await walletC.click('#ob-import');
     await walletC.fill('#ob-phrase', phrase);
     await walletC.click('#ob-restore-go');
+    await passkeyOffer(walletC);
     await addressOf(walletC);
     await walletC.waitForFunction(() => /^Found \d+ note/.test(document.getElementById('home-status')?.textContent ?? ''), null, { timeout: 300_000 });
     await walletC.waitForFunction((want: number) => Number(document.getElementById('balance')?.textContent) === want, balance, { timeout: 180_000, polling: 3_000 }).catch(() => undefined);

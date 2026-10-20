@@ -19,7 +19,8 @@
     "128": "icons/128.png"
   },
   "permissions": [
-    "sidePanel"
+    "sidePanel",
+    "storage"
   ],
   "content_scripts": [
     {

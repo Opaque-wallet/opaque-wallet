@@ -6,9 +6,12 @@
 // The same page takes WalletConnect sessions (lib/walletconnect.ts), for dapps
 // on other wallet SDKs: paste the link, and their requests join the same queue.
 
+// First: it seals and opens what the wallet stores, so nothing reads storage before it.
+import { unlockGate } from './lib/lock.ts';
 import { xrplDeployment } from '../../deployments/xrpl.ts';
 import { hasBrowserWallet, startXrplWallet, type XrplWallet } from './lib/xrpl-runtime.ts';
 import { accountLabel, activeAccount } from './lib/xrpl-keys.ts';
+import { termsAccepted } from './lib/wallet-ui.ts';
 import { startWalletConnect } from './lib/walletconnect.ts';
 
 type Method = 'connect' | 'sign' | 'signAndSubmit' | 'signMessage';
@@ -245,11 +248,15 @@ el('network').textContent = xrplDeployment.network.displayName;
 // Opened as a page of its own (the installed app), not as a dapp's popup: a way back.
 el('to-wallet').hidden = window.opener !== null;
 // The account open in the wallet answers: each account has apps of its own.
-const account = activeAccount(hasBrowserWallet());
+// No app is answered before this browser has accepted the Terms of Use, in the wallet.
+const accepted = termsAccepted();
+// A locked wallet answers no app until its password is given, here.
+if (accepted) await unlockGate();
+const account = accepted ? activeAccount(hasBrowserWallet()) : null;
 if (account === null) {
-  unavailable = 'Opaque has no wallet yet: open it, then create or import one';
-  el('idle-title').textContent = 'No wallet yet';
-  el('idle-status').textContent = 'Open Opaque, then create a wallet or import your recovery phrase.';
+  unavailable = accepted ? 'Opaque has no wallet yet: open it, then create or import one' : 'Open Opaque and accept its Terms of Use first';
+  el('idle-title').textContent = accepted ? 'No wallet yet' : 'Terms not accepted yet';
+  el('idle-status').textContent = accepted ? 'Open Opaque, then create a wallet or import your recovery phrase.' : 'Open Opaque and accept its Terms of Use and Privacy Policy, then connect again.';
   el('to-wallet').hidden = false;
   window.opener?.postMessage({ type: 'opaque:ready' }, '*');
 } else {

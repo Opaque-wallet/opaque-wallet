@@ -166,5 +166,26 @@
     "creTriggerUrl": null,
     "relayDirectoryUrl": null
   },
-  "deployer": "0x54d303b3a5c4586b67a94ce205e5108058cb4e23"
+  "deployer": "0x54d303b3a5c4586b67a94ce205e5108058cb4e23",
+  "swap": {
+    "$comment": "Swaps at the account's address through LI.FI, which picks the best route. router is LI.FI's contract on this chain (li.quest/v1/quote's transactionRequest.to and approvalAddress, checked live 2026-10-19): the wallet refuses a quote that calls anything else. Only these tokens are offered.",
+    "router": "0xa4072583658fae592a3506a42431cb6316a8d40b",
+    "tokens": [
+      {
+        "symbol": "USDC",
+        "address": "0x3600000000000000000000000000000000000000",
+        "decimals": 6
+      },
+      {
+        "symbol": "EURC",
+        "address": "0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1",
+        "decimals": 6
+      },
+      {
+        "symbol": "cirBTC",
+        "address": "0x171a4217b86a807a64eb94757db6849fb4bdbaa0",
+        "decimals": 8
+      }
+    ]
+  }
 }

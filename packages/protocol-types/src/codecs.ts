@@ -449,6 +449,8 @@ export function asMeshQueryResult(request: MeshQuery, value: unknown): MeshQuery
     case 'INTENT_STATUS': return { kind: 'INTENT_STATUS', value: asIntentStatus(v) };
     case 'WALLET_RPC':
     case 'XRPL':
+    case 'BACKUP':
+    case 'CREDENTIAL':
     case 'POOL_RECEIPT': {
       assertHex(v, `${request.kind} value`);
       return { kind: request.kind, value: v } as MeshQueryResult;

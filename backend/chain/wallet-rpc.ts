@@ -12,6 +12,11 @@
 //   USER_OPERATION_RECEIPT  eth_getUserOperationReceipt
 //   ROTATE                  PQKeyRegistry.rotate, signed by the account's
 //                           current key and PAID FOR BY THIS EXIT
+//   SWAP_QUOTE              LI.FI's best route between two of this network's
+//                           swap tokens, for the account's own address. Asked
+//                           from here, so LI.FI sees the exit, not the wallet;
+//                           the wallet checks the answer calls only LI.FI's
+//                           pinned contract (deployments/: swap.router)
 //
 // Bundler calls must name the pinned v0.7 EntryPoint and come from a PQ
 // account clone, or deploy one: an initCode is accepted only as the pinned
@@ -40,7 +45,7 @@ import { deployment, entryPoint, requireContract } from '../../deployments/index
 /** The one thing the page hands the mesh: an operation and its JSON, as hex. */
 export type WalletRpcSend = (operation: WalletRpcOperation, encodedRequest: Hex) => Promise<Hex>;
 
-export const WALLET_RPC_OPERATIONS: readonly WalletRpcOperation[] = ['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE'];
+export const WALLET_RPC_OPERATIONS: readonly WalletRpcOperation[] = ['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE', 'SWAP_QUOTE'];
 
 const BUNDLER_METHODS: Readonly<Record<string, readonly string[]>> = {
   ESTIMATE: ['eth_estimateUserOperationGas', 'pimlico_getUserOperationGasPrice'],
@@ -66,6 +71,7 @@ export function walletRpcAllowlist(): ReadonlyMap<string, ReadonlySet<string>> {
   add(requireContract('pqKeyRegistry'), 'stateOf(address)');
   for (const pool of deployment.pools) add(pool.address, 'isNullifierSpent(bytes32)', 'isCommitmentKnown(bytes32)', 'capabilities()');
   add(deployment.tokens.usdc.address, 'balanceOf(address)');
+  for (const token of deployment.swap.tokens) add(token.address, 'balanceOf(address)');
   add(entryPoint(), 'balanceOf(address)', 'getNonce(address,uint192)');
   return allow;
 }
@@ -83,7 +89,8 @@ const ROTATE_COOLDOWN_MS = 60_000;
 
 const MAX_CALLS = 8;
 const CREATE_ACCOUNT = toFunctionSelector('createAccount(bytes32,bytes32,uint64,uint64)');
-const MAX_REQUEST_BYTES = 60_000;
+// Room for the largest contract a chain takes (EIP-3860: 49,152 bytes of initcode) beside a 9 KB FORS signature.
+const MAX_REQUEST_BYTES = 64_000;
 const utf8 = (s: string) => new TextEncoder().encode(s);
 const json = (value: unknown): Hex => toHex(utf8(JSON.stringify(value))) as Hex;
 
@@ -99,6 +106,8 @@ export function createWalletRpcAnswerer(options: {
   readonly payer?: Account;
   readonly allowlist?: ReadonlyMap<string, ReadonlySet<string>>;
   readonly fetch?: typeof globalThis.fetch;
+  /** LI.FI's API key, for its higher rate limit; without one, quotes share the public limit. */
+  readonly lifiApiKey?: string;
 }): WalletRpcSend {
   const { publicClient } = options;
   const allowlist = options.allowlist ?? walletRpcAllowlist();
@@ -243,6 +252,36 @@ export function createWalletRpcAnswerer(options: {
     };
   }
 
+  /** LI.FI's quote, trimmed to what the wallet needs. Only this network's swap tokens, only to and from the account itself. */
+  async function swapQuote(request: { from?: unknown; to?: unknown; amount?: unknown; account?: unknown }): Promise<SwapQuote> {
+    const offered = new Set(deployment.swap.tokens.map((t) => t.address.toLowerCase()));
+    const { from, to, amount, account } = request;
+    if (typeof from !== 'string' || typeof to !== 'string' || !offered.has(from) || !offered.has(to) || from === to) refuse('a swap is between two of this network\'s swap tokens');
+    if (typeof amount !== 'string' || !/^[1-9][0-9]{0,30}$/.test(amount)) refuse('a swap amount is a whole number of the token\'s smallest units');
+    if (typeof account !== 'string' || !/^0x[0-9a-f]{40}$/.test(account)) refuse('a swap names its account');
+    const chain = String(deployment.network.chainId);
+    const query = new URLSearchParams({
+      fromChain: chain, toChain: chain, fromToken: from as string, toToken: to as string, fromAmount: amount as string,
+      fromAddress: account as string, toAddress: account as string, integrator: 'opaque', slippage: '0.005',
+    });
+    const response = await doFetch(`https://li.quest/v1/quote?${query}`, {
+      signal: AbortSignal.timeout(20_000), ...(options.lifiApiKey ? { headers: { 'x-lifi-api-key': options.lifiApiKey } } : {}),
+    });
+    const body = await response.json().catch(() => ({})) as { message?: string; tool?: string; toolDetails?: { name?: string };
+      estimate?: { toAmount?: string; toAmountMin?: string; approvalAddress?: string; feeCosts?: { amountUSD?: string }[] };
+      transactionRequest?: { to?: string; data?: string; value?: string } };
+    if (!response.ok || body.estimate === undefined || body.transactionRequest === undefined) {
+      throw new ProtocolFailure('SETTLEMENT_REVERTED', `LI.FI has no route: ${String(body.message ?? response.status).slice(0, 200)}`, true);
+    }
+    const { estimate: e, transactionRequest: tx } = body;
+    return {
+      tool: String(body.toolDetails?.name ?? body.tool), toAmount: String(e.toAmount), toAmountMin: String(e.toAmountMin),
+      approvalAddress: String(e.approvalAddress).toLowerCase() as Address, to: String(tx.to).toLowerCase() as Address,
+      data: String(tx.data) as Hex, value: String(tx.value ?? '0x0'),
+      feeUsd: (e.feeCosts ?? []).reduce((n, f) => n + Number(f.amountUSD ?? 0), 0),
+    };
+  }
+
   return async (operation, encodedRequest) => {
     try {
       if (!WALLET_RPC_OPERATIONS.includes(operation)) refuse(`unknown operation ${operation}`);
@@ -252,7 +291,8 @@ export function createWalletRpcAnswerer(options: {
       const request: Record<string, unknown> = bytes[0] === 0x7b ? JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown> : unpack(encodedRequest);
       const result = operation === 'STATE' ? await state(request)
         : operation === 'ROTATE' ? await rotate(request)
-          : await bundler(operation, request);
+          : operation === 'SWAP_QUOTE' ? await swapQuote(request)
+            : await bundler(operation, request);
       return json({ result });
     } catch (error) {
       // Public messages only: nothing here carries a secret.
@@ -263,6 +303,30 @@ export function createWalletRpcAnswerer(options: {
 }
 
 // ── the wallet's side ─────────────────────────────────────────────────────
+
+/** A swap as LI.FI routes it: what to approve, the call to make, and what it should deliver. */
+export interface SwapQuote {
+  /** The exchange LI.FI picked: "KyberSwap", "Fly"… */
+  readonly tool: string;
+  /** In the token's smallest units, as decimal strings. */
+  readonly toAmount: string;
+  readonly toAmountMin: string;
+  readonly approvalAddress: Address;
+  readonly to: Address;
+  readonly data: Hex;
+  readonly value: string;
+  readonly feeUsd: number;
+}
+
+/** Each token's balance at `account`, at one block, through the mesh. */
+export async function tokenBalances(send: WalletRpcSend, account: Address, tokens: readonly Address[]): Promise<bigint[]> {
+  const { results } = await readState(send, tokens.map((to) => ({ to, data: encodeFunctionData({ abi: STATE_ABI, functionName: 'balanceOf', args: [account] }) as Hex })));
+  return results.map((r) => BigInt(r));
+}
+
+/** LI.FI's best route, asked through the mesh. */
+export const swapQuote = (send: WalletRpcSend, request: { from: Address; to: Address; amount: bigint; account: Address }): Promise<SwapQuote> =>
+  call(send, 'SWAP_QUOTE', { from: request.from.toLowerCase(), to: request.to.toLowerCase(), amount: request.amount.toString(), account: request.account.toLowerCase() }) as Promise<SwapQuote>;
 
 async function call(send: WalletRpcSend, operation: WalletRpcOperation, request: unknown): Promise<unknown> {
   return answerOf(await send(operation, json(request)));

@@ -55,11 +55,11 @@ try {
   await page.click('#faucet-button');
   await page.waitForFunction(() => /^The faucet paid|^Faucet unavailable/.test(document.getElementById('receive-status')?.textContent ?? ''), null, { timeout: 150_000 });
   await page.click('#tab-home');
-  for (let i = 0; i < 30 && (await page.textContent('#balance-main')) !== '95'; i++) {
+  for (let i = 0; i < 30 && (await page.textContent('#balance-xrp')) !== '95'; i++) {
     await page.click('#refresh');
     await new Promise((r) => setTimeout(r, 4_000));
   }
-  check('the faucet deposit became 95 private XRP in the page', (await page.textContent('#balance-main')) === '95', String(await page.textContent('#note-count')));
+  check('the faucet deposit became 95 private XRP in the page', (await page.textContent('#balance-xrp')) === '95', String(await page.textContent('#note-count')));
 
   const { wallet: recipient } = await client.fundWallet();
   const balance = async () => BigInt((await client.request({ command: 'account_info', account: recipient.address, ledger_index: 'validated' })).result.account_data.Balance);

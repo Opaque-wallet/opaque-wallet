@@ -12,17 +12,21 @@
 // verified relay directory, payment status through the mesh. Nothing in the
 // page is simulated.
 
+// First: it seals and opens what the wallet stores, so nothing reads storage before it.
+import { confirmPassword, unlockGate } from './lib/lock.ts';
 import type { IntentStatus, NoteSummary, PrivacyScore, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
 
 import { makeAmount, MAX_NOTES_PER_DEPOSIT } from './lib/protocol/index.js';
 import { paymentDeadline } from './lib/payment-deadline.js';
 import { runPaymentLanes } from './lib/payment-lanes.js';
-import { hasBrowserAccount, startWallet, type WalletRuntime } from './lib/runtime.js';
-import { arcAddressOf, arcState, arcStorageOf, saveArcState } from './lib/arc-keys.ts';
+import { backupTransport, hasBrowserAccount, startWallet, type WalletRuntime } from './lib/runtime.js';
+import { addressOfKey, arcAddressOf, arcState, arcStorageOf, deployerKey, saveArcState } from './lib/arc-keys.ts';
 import { keyStoreName } from './lib/backup.ts';
+import { asHexBytes, deployment as deployOf, MAX_INITCODE, newSalt } from './lib/contracts.ts';
 import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
-import { copy, idOf, markOf, openOnboarding, setupWalletScreens, type OpenAccount } from './lib/wallet-ui.ts';
-import { deployment, NETWORK } from '../../deployments/index.ts';
+import { acceptTerms, copy, idOf, markOf, openOnboarding, setupWalletScreens, swapProgress, tokenBadge, type OpenAccount } from './lib/wallet-ui.ts';
+import { deployment, NETWORK, type SwapToken } from '../../deployments/index.ts';
+import type { SwapQuote } from '../../backend/chain/wallet-rpc.ts';
 import { networkPicker } from './lib/network-picker.ts';
 import { scoped } from './lib/storage-name.ts';
 
@@ -113,6 +117,8 @@ const TERMINAL = new Set(['SETTLED', 'FAILED']);
 async function renderBudget(): Promise<void> {
   const state = await rt.app.walletState();
   opaqueAddress = state.accountAddress as string;
+  // The open account's address, for the account list: known here without working it out.
+  if (account !== null && account !== 'browser' && arcState().addresses[account.id] === undefined) saveArcState({ addresses: { ...arcState().addresses, [account.id]: opaqueAddress.toLowerCase() } });
   el('account-short').textContent = shortAddress(opaqueAddress);
   el('account-address').textContent = opaqueAddress;
   el('receive-address').textContent = opaqueAddress;
@@ -145,6 +151,8 @@ async function renderBudget(): Promise<void> {
   const balance = funds === undefined ? '' : ` · ${funds.usdc.toFixed(2)} USDC`;
   if (funds !== undefined) {
     accountUsdc = funds.usdc;
+    // The Contracts screen's gas money, as it arrives.
+    if (!el('view-contracts').hidden) el('contracts-gas').textContent = `${accountUsdc} USDC`;
     // USDC sent to the address from outside: offer it, and drop a stale
     // "send USDC first" from before it arrived.
     const ready = Math.floor(accountUsdc - DEPOSIT_GAS_USDC);
@@ -152,7 +160,8 @@ async function renderBudget(): Promise<void> {
     if (ready >= 1 && field.value.trim() === '') { field.value = String(ready); renderDepositSplit(); }
     if (ready >= 1 && /^Send /.test(el('deposit-status').textContent ?? '')) el('deposit-status').textContent = '';
     renderBalance();
-    if (AUTO_DEPOSIT && ready >= 1 && !depositing && !autoFailed && Date.now() > quietUntil) void autoDeposit(ready);
+    if (autoOn() && ready >= 1 && !depositing && !autoFailed && Date.now() > quietUntil) void autoDeposit(ready);
+    void refreshTokens().catch(() => undefined);
   }
   el('account-state').textContent = state.active
     ? `Active${balance} · deposits are signed by its PQ key`
@@ -373,6 +382,8 @@ function renderBalance(): void {
   // number the account cannot afford, and that failure reads as a bug.
   const depositable = Math.floor(accountUsdc - DEPOSIT_GAS_USDC);
   if (depositable >= 1) parts.push(`${depositable} USDC at your address, ready to deposit`);
+  // Notes are whole USDC: what a deposit leaves at the address is not lost, it pays gas and joins the next one.
+  else if (accountUsdc >= 0.01) parts.push(`${accountUsdc.toFixed(2)} USDC at your address pays for gas and joins your next deposit`);
   el('balance').textContent = `${total}.00`;
   if (account !== null && runtimeReady) saveArcState({ balances: { ...arcState().balances, [idOf(account)]: total } });
   el('note-count').textContent = parts.join(' · ');
@@ -403,7 +414,12 @@ function renderDepositSplit(): void {
  * Testnet only: USDC that reaches the address becomes notes by itself, as a
  * payment to an XRPL address does. Mainnet waits for the audit, and a tap.
  */
-const AUTO_DEPOSIT = NETWORK === 'testnet';
+const AUTO_KEY = scoped('opaque:auto-deposit');
+/** On by default; switched off on Home, to keep USDC at the address for a swap. */
+const autoOn = (): boolean => {
+  if (NETWORK !== 'testnet') return false;
+  try { return localStorage.getItem(AUTO_KEY) !== 'off'; } catch { return true; }
+};
 let depositing = false;
 /** A deposit that failed by itself is not tried again until a reload: each try signs with the few-time key. */
 let autoFailed = false;
@@ -524,6 +540,198 @@ async function onDeposit(auto = false): Promise<boolean> {
     quietUntil = Date.now() + 30_000;
     button.disabled = false;
   }
+}
+
+// ── swap: tokens at the address, through LI.FI ────────────────────────────
+//
+// Public, like a deposit: the account swaps what its address holds, in one
+// operation its PQ key signs. The route is asked through the mesh (the exit
+// asks LI.FI, so LI.FI never sees this browser) and checked in the runtime
+// before anything is signed.
+
+const SWAP_TOKENS = deployment.swap.tokens;
+const tokenOf = (symbol: string): SwapToken => SWAP_TOKENS.find((t) => t.symbol === symbol)!;
+const isUsdc = (t: SwapToken) => t.address.toLowerCase() === deployment.tokens.usdc.address.toLowerCase();
+/** Each swap token at the address, in its smallest units. */
+let tokenHeld: Record<string, bigint> = {};
+let swapQuoted: { readonly key: string; readonly quote: SwapQuote } | undefined;
+/**
+ * Previews are quoted for this placeholder, not the account: LI.FI then learns
+ * the account and the amount only when Swap is pressed, when they go on chain
+ * anyway, and never for amounts someone only looked at.
+ */
+const PREVIEW_ACCOUNT = '0x000000000000000000000000000000000000dead' as const;
+let swapTimer: ReturnType<typeof setTimeout> | undefined;
+let swapping = false;
+const progress = swapProgress();
+/** ponytail: from testnet runs, the route, a signature and a bundler's receipt take ~20 s together. */
+const SWAP_SECONDS = 20;
+
+/** "1.5" in a token of `decimals` places, or undefined when it is not an amount. */
+function toUnits(text: string, decimals: number): bigint | undefined {
+  const m = /^(\d*)(?:\.(\d*))?$/.exec(text.trim());
+  if (m === null || (m[1] === '' && (m[2] ?? '') === '') || (m[2] ?? '').length > decimals) return undefined;
+  return BigInt(m[1] || '0') * 10n ** BigInt(decimals) + BigInt(((m[2] ?? '') + '0'.repeat(decimals)).slice(0, decimals) || '0');
+}
+function fromUnits(units: bigint, decimals: number, places = 6): string {
+  const digits = units.toString().padStart(decimals + 1, '0');
+  const fraction = digits.slice(digits.length - decimals).slice(0, places).replace(/0+$/, '');
+  return `${BigInt(digits.slice(0, digits.length - decimals)).toLocaleString()}${fraction ? `.${fraction}` : ''}`;
+}
+const swapFrom = () => tokenOf(el<HTMLSelectElement>('swap-from').value);
+const swapTo = () => tokenOf(el<HTMLSelectElement>('swap-to').value);
+const swapAmount = (): bigint | undefined => { const u = toUnits(el<HTMLInputElement>('swap-amount').value, swapFrom().decimals); return u !== undefined && u > 0n ? u : undefined; };
+const swapKey = () => `${swapFrom().symbol}>${swapTo().symbol}:${swapAmount() ?? ''}`;
+/** What a swap can take: all of it, less the gas a USDC swap keeps back. */
+const spendable = (t: SwapToken): bigint => {
+  const held = tokenHeld[t.symbol] ?? 0n;
+  const gas = isUsdc(t) ? BigInt(Math.round(DEPOSIT_GAS_USDC * 1e6)) : 0n;
+  return held > gas ? held - gas : 0n;
+};
+
+async function refreshTokens(): Promise<void> {
+  if (!runtimeReady || !opaqueAddress) return;
+  tokenHeld = await rt.tokenBalances(opaqueAddress as `0x${string}`);
+  renderSwapSides();
+  renderTokenAssets();
+}
+
+function renderSwapSides(): void {
+  const [from, to] = [swapFrom(), swapTo()];
+  tokenBadge('swap-from-tok', from.symbol);
+  tokenBadge('swap-to-tok', to.symbol);
+  el('swap-have').textContent = `${fromUnits(tokenHeld[from.symbol] ?? 0n, from.decimals)} ${from.symbol}`;
+  el('swap-have-to').textContent = `${fromUnits(tokenHeld[to.symbol] ?? 0n, to.decimals)} ${to.symbol}`;
+}
+
+/** Tokens other than USDC at the address, under Your funds: public until swapped to USDC and deposited. */
+function renderTokenAssets(): void {
+  el('assets').querySelectorAll('.at-address').forEach((n) => n.remove());
+  for (const t of SWAP_TOKENS) {
+    const held = tokenHeld[t.symbol] ?? 0n;
+    if (isUsdc(t) || held === 0n) continue;
+    const row = document.createElement('div');
+    row.className = 'asset at-address';
+    row.innerHTML = `<i class="tok tok-${t.symbol.toLowerCase()}"></i><span><b></b><small>At your address, public</small></span><span class="asset-value"><b></b><button class="link" type="button">Swap to USDC</button></span>`;
+    row.querySelector('i')!.textContent = t.symbol[0]!;
+    row.querySelector('span > b')!.textContent = t.symbol;
+    row.querySelector('.asset-value b')!.textContent = `${fromUnits(held, t.decimals)} ${t.symbol}`;
+    row.querySelector('button')!.addEventListener('click', () => {
+      el<HTMLSelectElement>('swap-from').value = t.symbol;
+      el<HTMLSelectElement>('swap-to').value = SWAP_TOKENS.find(isUsdc)!.symbol;
+      el<HTMLInputElement>('swap-amount').value = fromUnits(held, t.decimals, t.decimals).replace(/,/g, '');
+      showView('swap');
+      scheduleQuote();
+    });
+    el('assets').append(row);
+  }
+}
+
+function scheduleQuote(): void {
+  swapQuoted = undefined;
+  clearTimeout(swapTimer);
+  el('swap-quote').hidden = true;
+  el('swap-out').textContent = '0';
+  const go = el<HTMLButtonElement>('swap-go');
+  go.disabled = true;
+  if (swapAmount() === undefined) { go.textContent = 'Enter an amount'; setStatus('swap-status', ''); return; }
+  go.textContent = 'Finding the best route…';
+  swapTimer = setTimeout(() => void quoteSwap(), 500);
+}
+
+async function quoteSwap(): Promise<void> {
+  const [from, to, amount, key] = [swapFrom(), swapTo(), swapAmount(), swapKey()];
+  const go = el<HTMLButtonElement>('swap-go');
+  if (amount === undefined || !runtimeReady) return;
+  try {
+    const quote = await rt.swapQuote(PREVIEW_ACCOUNT, from, to, amount);
+    if (key !== swapKey()) return; // typed on meanwhile
+    swapQuoted = { key, quote };
+    const out = fromUnits(BigInt(quote.toAmount), to.decimals);
+    const rate = (Number(quote.toAmount) / 10 ** to.decimals) / (Number(amount) / 10 ** from.decimals);
+    el('swap-out').textContent = out;
+    el('swap-rate').textContent = `1 ${from.symbol} ≈ ${rate.toPrecision(6).replace(/\.?0+$/, '')} ${to.symbol}`;
+    el('swap-min').textContent = `${fromUnits(BigInt(quote.toAmountMin), to.decimals)} ${to.symbol}`;
+    el('swap-route').textContent = `${quote.tool}, found by LI.FI`;
+    el('swap-fee').textContent = quote.feeUsd > 0 ? `$${quote.feeUsd.toFixed(quote.feeUsd < 0.01 ? 4 : 2)}` : 'None';
+    el('swap-quote').hidden = false;
+    const short = amount > spendable(from);
+    go.disabled = short || swapping;
+    go.textContent = short ? `Not enough ${from.symbol} at your address` : `Swap ${fromUnits(amount, from.decimals)} ${from.symbol} for ${out} ${to.symbol}`;
+    setStatus('swap-status', short && isUsdc(from) && autoOn() ? 'USDC at your address becomes private notes by itself: switch that off on Home to keep it here for a swap.'
+      : short && isUsdc(from) ? `A swap from USDC keeps ${DEPOSIT_GAS_USDC} USDC at your address for gas.` : '');
+  } catch (error) {
+    if (key !== swapKey()) return;
+    go.textContent = 'No route right now';
+    setStatus('swap-status', (error as Error).message);
+  }
+}
+
+async function onSwap(): Promise<void> {
+  const [from, to, amount] = [swapFrom(), swapTo(), swapAmount()];
+  if (amount === undefined || swapping) return;
+  if (swapQuoted === undefined || swapQuoted.key !== swapKey() || el<HTMLButtonElement>('swap-go').disabled) return;
+  const go = el<HTMLButtonElement>('swap-go');
+  swapping = true;
+  go.disabled = true;
+  go.textContent = 'Swapping…';
+  setStatus('swap-status', '');
+  progress.start(SWAP_SECONDS, 'Getting the route for your account…');
+  const before = tokenHeld[to.symbol] ?? 0n;
+  try {
+    // The route the account signs is asked now, for the account itself: the preview's was for a placeholder.
+    const quote = await rt.swapQuote(opaqueAddress as `0x${string}`, from, to, amount);
+    progress.update(SWAP_SECONDS - 4, `Signing with your account's post-quantum key, for at least ${fromUnits(BigInt(quote.toAmountMin), to.decimals)} ${to.symbol}; a public bundler puts it on chain…`);
+    const tx = await rt.swap(opaqueAddress as `0x${string}`, from, amount, quote);
+    progress.update(4, 'On chain. Reading your new balance…');
+    await settle(async () => { await refreshTokens(); return (tokenHeld[to.symbol] ?? 0n) > before; });
+    const got = (tokenHeld[to.symbol] ?? 0n) - before;
+    progress.finish(`Swapped ${fromUnits(amount, from.decimals)} ${from.symbol} for ${fromUnits(got > 0n ? got : BigInt(quote.toAmount), to.decimals)} ${to.symbol} in ${shortAddress(tx)}.${isUsdc(to) && autoOn() ? ' It becomes private notes by itself.' : ''}`);
+    el<HTMLInputElement>('swap-amount').value = '';
+    void renderBudget().catch(() => undefined);
+  } catch (error) {
+    progress.fail(`Swap failed: ${(error as Error).message}`);
+  } finally {
+    swapping = false;
+    go.textContent = 'Enter an amount';
+    if (swapAmount() !== undefined) scheduleQuote();
+  }
+}
+
+function setupSwap(): void {
+  for (const id of ['swap-from', 'swap-to']) el(id).replaceChildren(...SWAP_TOKENS.map((t) => new Option(t.symbol, t.symbol)));
+  el<HTMLSelectElement>('swap-from').value = SWAP_TOKENS.find(isUsdc)!.symbol;
+  el<HTMLSelectElement>('swap-to').value = SWAP_TOKENS.find((t) => !isUsdc(t))!.symbol;
+  // The other side never names the same token.
+  const keepApart = (changed: 'swap-from' | 'swap-to') => {
+    const other = changed === 'swap-from' ? 'swap-to' : 'swap-from';
+    if (el<HTMLSelectElement>(changed).value === el<HTMLSelectElement>(other).value) {
+      el<HTMLSelectElement>(other).value = SWAP_TOKENS.find((t) => t.symbol !== el<HTMLSelectElement>(changed).value)!.symbol;
+    }
+    renderSwapSides();
+    scheduleQuote();
+  };
+  el('swap-from').addEventListener('change', () => keepApart('swap-from'));
+  el('swap-to').addEventListener('change', () => keepApart('swap-to'));
+  el('swap-amount').addEventListener('input', () => {
+    const input = el<HTMLInputElement>('swap-amount');
+    const cleaned = input.value.replace(/,/g, '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+    if (cleaned !== input.value) input.value = cleaned;
+    scheduleQuote();
+  });
+  el('swap-max').addEventListener('click', () => {
+    const from = swapFrom();
+    el<HTMLInputElement>('swap-amount').value = fromUnits(spendable(from), from.decimals, from.decimals).replace(/,/g, '');
+    scheduleQuote();
+  });
+  el('swap-flip').addEventListener('click', () => {
+    const [from, to] = [el<HTMLSelectElement>('swap-from').value, el<HTMLSelectElement>('swap-to').value];
+    el<HTMLSelectElement>('swap-from').value = to;
+    el<HTMLSelectElement>('swap-to').value = from;
+    renderSwapSides();
+    scheduleQuote();
+  });
+  el('swap-go').addEventListener('click', () => void onSwap());
 }
 
 /**
@@ -743,6 +951,161 @@ async function onSend(event: SubmitEvent): Promise<void> {
   }
 }
 
+// ── deployers: plain addresses the account funds privately ───────────────
+
+function renderDeployers(): void {
+  const keys = account === null || account === 'browser' ? null : account;
+  el('deployer-box').hidden = keys === null;
+  if (keys === null) return;
+  const count = arcState().deployers?.[keys.id] ?? 0;
+  el('deployer-list').replaceChildren(...Array.from({ length: count }, (_, i) => deployerRow(keys, i)));
+}
+
+function deployerRow(keys: AccountKeys, i: number): HTMLElement {
+  const key = deployerKey(keys, i);
+  const address = addressOfKey(key);
+  const row = document.createElement('div');
+  row.className = 'deployer';
+  row.innerHTML = `<div class="detail"><span>Deployer ${i + 1}</span><code></code></div>
+    <div class="detail"><span>Balance</span><strong>…</strong></div>
+    <code class="key-text" hidden></code>
+    <div class="dialog-actions"><button class="secondary" type="button" data-do="fund">Fund privately</button><button class="secondary" type="button" data-do="address">Copy address</button><button class="secondary" type="button" data-do="show">Show key</button><button class="secondary" type="button" data-do="key" hidden>Copy key</button></div>`;
+  const shown = row.querySelector('code')!;
+  const balance = row.querySelector('strong')!;
+  const keyText = row.querySelector<HTMLElement>('.key-text')!;
+  const button = (name: string) => row.querySelector<HTMLButtonElement>(`[data-do="${name}"]`)!;
+  shown.textContent = shortAddress(address);
+  shown.title = address;
+  if (runtimeReady) {
+    rt.accountFunds(address).then((f) => { balance.textContent = `${f.usdc} USDC`; }, () => { balance.textContent = 'Could not read'; });
+  }
+  // Funding is an ordinary private send: the Send screen, its address filled in.
+  button('fund').addEventListener('click', () => {
+    el<HTMLDialogElement>('account-dialog').close();
+    showView('send');
+    el<HTMLInputElement>('recipient').value = address;
+    el<HTMLInputElement>('send-amount').focus();
+  });
+  button('address').addEventListener('click', () => copy(address, 'Address'));
+  button('show').addEventListener('click', () => void (async () => {
+    const showing = keyText.hidden;
+    if (showing && !(await confirmPassword('this deployer\'s key'))) return;
+    keyText.textContent = showing ? `PRIVATE_KEY=${key}` : '';
+    keyText.hidden = !showing;
+    button('key').hidden = !showing;
+    button('show').textContent = showing ? 'Hide key' : 'Show key';
+  })());
+  button('key').addEventListener('click', () => copy(key, 'Deployer key', true));
+  return row;
+}
+
+async function newDeployer(): Promise<void> {
+  if (account === null || account === 'browser') return;
+  const keys = account;
+  const button = el<HTMLButtonElement>('deployer-new');
+  button.disabled = true;
+  setStatus('deployer-status', 'Making a fresh address…');
+  try {
+    let i = arcState().deployers?.[keys.id] ?? 0;
+    // One this account made in another browser holds USDC: skipped, so no two projects share a deployer.
+    while (runtimeReady && await rt.inUse(addressOfKey(deployerKey(keys, i)))) i++;
+    saveArcState({ deployers: { ...arcState().deployers, [keys.id]: i + 1 } });
+    setStatus('deployer-status', '');
+    renderDeployers();
+  } catch (error) {
+    setStatus('deployer-status', `Not made: ${(error as Error).message}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// ── contracts: deployed and called by the account's post-quantum key ─────
+
+/** A bundler's refusal, in words: AA21 is an account with nothing to pay gas from. */
+const gasWhy = (error: unknown): string => {
+  const message = (error as Error).message;
+  return /AA21/.test(message) ? 'this account has no USDC to pay gas. Send it 1 or 2 USDC from your notes first.' : message;
+};
+
+const contractsOf = () => (account === null ? [] : arcState().contracts?.[idOf(account)] ?? []);
+
+function renderContracts(): void {
+  el('contracts-account').textContent = opaqueAddress || 'Starting…';
+  el('contracts-gas').textContent = runtimeReady ? `${accountUsdc} USDC` : '—';
+  el('contracts-auto').hidden = NETWORK !== 'testnet' || !autoOn();
+  if (el<HTMLInputElement>('deploy-salt').value === '') el<HTMLInputElement>('deploy-salt').value = newSalt();
+  renderDeployAt();
+  const list = contractsOf();
+  el('contracts-box').hidden = list.length === 0;
+  el('contracts-list').replaceChildren(...list.map((c) => {
+    const link = Object.assign(document.createElement('a'), { href: `${ARC_EXPLORER}/address/${c.address}`, target: '_blank', rel: 'noopener' });
+    link.append(Object.assign(document.createElement('b'), { textContent: shortAddress(c.address) }), Object.assign(document.createElement('small'), { textContent: localDateTime(c.at) }));
+    return link;
+  }));
+}
+
+/** The deploy's bytecode and salt, checked, or why not. */
+function deployInputs(): { readonly salt: `0x${string}`; readonly initcode: `0x${string}` } {
+  const initcode = asHexBytes(el<HTMLTextAreaElement>('deploy-code').value, 'bytecode', MAX_INITCODE);
+  const salt = asHexBytes(el<HTMLInputElement>('deploy-salt').value, 'salt', 32);
+  if (salt.length !== 66) throw new Error('the salt is 32 bytes: 64 hex digits');
+  return { salt, initcode };
+}
+
+function renderDeployAt(): void {
+  try {
+    const { salt, initcode } = deployInputs();
+    el('deploy-at').textContent = deployOf(salt, initcode).address;
+  } catch (error) {
+    const why = (error as Error).message;
+    el('deploy-at').textContent = why.charAt(0).toUpperCase() + why.slice(1);
+  }
+}
+
+async function onDeploy(): Promise<void> {
+  let inputs: ReturnType<typeof deployInputs>;
+  try { inputs = deployInputs(); } catch (error) { setStatus('contracts-status', `Not deployed: ${(error as Error).message}.`); return; }
+  if (!runtimeReady || account === null) { setStatus('contracts-status', 'Opaque is still starting.'); return; }
+  const { call, address } = deployOf(inputs.salt, inputs.initcode);
+  const button = el<HTMLButtonElement>('deploy-go');
+  button.disabled = true;
+  setStatus('contracts-status', 'Signing with this account\'s post-quantum key, and sending it through the relays…');
+  try {
+    const tx = await rt.execute(opaqueAddress as `0x${string}`, [call]);
+    saveArcState({ contracts: { ...arcState().contracts, [idOf(account)]: [{ address, tx, at: Date.now() }, ...contractsOf()] } });
+    setStatus('contracts-status', `Deployed at ${address}, in ${tx}.`);
+    el<HTMLInputElement>('deploy-salt').value = newSalt();
+    el<HTMLInputElement>('call-to').value = address;
+    void renderBudget().catch(() => undefined);
+    renderContracts();
+  } catch (error) {
+    setStatus('contracts-status', `Not deployed: ${gasWhy(error)}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function onCall(): Promise<void> {
+  const to = el<HTMLInputElement>('call-to').value.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(to)) { setStatus('contracts-status', 'Enter the contract\'s address: 0x and 40 hex digits.'); return; }
+  let data: `0x${string}`;
+  try { data = asHexBytes(el<HTMLTextAreaElement>('call-data').value, 'calldata', MAX_INITCODE); } catch (error) { setStatus('contracts-status', `Not sent: ${(error as Error).message}.`); return; }
+  if (data.length < 10) { setStatus('contracts-status', 'Calldata starts with a 4-byte function selector: cast calldata makes it.'); return; }
+  if (!runtimeReady) { setStatus('contracts-status', 'Opaque is still starting.'); return; }
+  const button = el<HTMLButtonElement>('call-go');
+  button.disabled = true;
+  setStatus('contracts-status', 'Signing with this account\'s post-quantum key, and sending it through the relays…');
+  try {
+    const tx = await rt.execute(opaqueAddress as `0x${string}`, [{ to: to as `0x${string}`, data }]);
+    setStatus('contracts-status', `Sent, in ${tx}.`);
+    void renderBudget().catch(() => undefined);
+  } catch (error) {
+    setStatus('contracts-status', `Not sent: ${gasWhy(error)}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // ── activity, through the mesh ────────────────────────────────────────────
 
 function renderActivity(): void {
@@ -826,9 +1189,11 @@ async function pollActivity(): Promise<void> {
 
 // ── wiring ────────────────────────────────────────────────────────────────
 
-type View = 'home' | 'send' | 'ring' | 'activity';
+type View = 'home' | 'send' | 'swap' | 'ring' | 'activity' | 'contracts';
 function showView(name: View): void {
-  for (const view of ['home', 'send', 'ring', 'activity'] as const) {
+  if (name === 'swap') { renderSwapSides(); void refreshTokens().catch(() => undefined); }
+  if (name === 'contracts') renderContracts();
+  for (const view of ['home', 'send', 'swap', 'ring', 'activity', 'contracts'] as const) {
     el(`view-${view}`).hidden = view !== name;
     el(`tab-${view}`).setAttribute('aria-selected', String(view === name));
   }
@@ -840,6 +1205,15 @@ async function init(): Promise<void> {
   el('tab-send').addEventListener('click', () => showView('send'));
   el('tab-ring').addEventListener('click', () => { showView('ring'); void refreshRing(); });
   el('tab-activity').addEventListener('click', () => { showView('activity'); void pollActivity(); });
+  el('tab-contracts').addEventListener('click', () => showView('contracts'));
+  el('deploy-go').addEventListener('click', () => void onDeploy());
+  el('call-go').addEventListener('click', () => void onCall());
+  for (const id of ['deploy-code', 'deploy-salt']) el(id).addEventListener('input', renderDeployAt);
+  el('contracts-auto-off').addEventListener('click', () => {
+    el<HTMLInputElement>('auto-deposit').checked = false;
+    el('auto-deposit').dispatchEvent(new Event('change'));
+    renderContracts();
+  });
   el<HTMLFormElement>('send-form').addEventListener('submit', (e) => void onSend(e as SubmitEvent));
   el<HTMLInputElement>('wait-for-privacy').addEventListener('change', syncPrivacyWait);
   syncPrivacyWait();
@@ -850,7 +1224,9 @@ async function init(): Promise<void> {
   el('tile-deposit').addEventListener('click', () => { el('deposit-card').scrollIntoView({ block: 'center' }); el<HTMLInputElement>('deposit-count').focus(); });
   el('tile-privacy').addEventListener('click', () => el('tab-ring').click());
   el('tile-activity').addEventListener('click', () => el('tab-activity').click());
-  el('tile-account').addEventListener('click', () => el('account-button').click());
+  el('tile-swap').addEventListener('click', () => showView('swap'));
+  el('tab-swap').addEventListener('click', () => showView('swap'));
+  setupSwap();
   // The balance card catches the light where the pointer is.
   el('hero').addEventListener('pointermove', (e) => {
     const r = el('hero').getBoundingClientRect();
@@ -861,6 +1237,8 @@ async function init(): Promise<void> {
   el('copy-address').addEventListener('click', () => { if (opaqueAddress) copy(opaqueAddress, 'Address'); });
   el('refresh-balance').addEventListener('click', () => { void refreshNotes(); void renderBudget().catch(() => undefined); });
   el('withdraw').addEventListener('click', () => void onWithdraw());
+  el('deployer-new').addEventListener('click', () => void newDeployer());
+  for (const id of ['account-button', 'menu-button']) document.getElementById(id)?.addEventListener('click', renderDeployers);
   el('backup-export').addEventListener('click', () => void onBackupExport());
   el('backup-import').addEventListener('click', () => el<HTMLInputElement>('backup-file').click());
   el<HTMLInputElement>('backup-file').addEventListener('change', (event) => {
@@ -872,6 +1250,10 @@ async function init(): Promise<void> {
   // browser wallet. Each network is its own page (opaque.credit/ and
   // /testnet/, the same in the extension), with its own storage names.
   networkPicker(el<HTMLButtonElement>('network-switch'), NETWORK);
+  // Nothing opens before the Terms of Use and Privacy Policy are accepted.
+  await acceptTerms();
+  // A wallet with a password opens locked.
+  await unlockGate();
   // Real USDC on unaudited contracts: every visit to mainnet starts with this warning.
   if (NETWORK === 'mainnet') el<HTMLDialogElement>('mainnet-warning').showModal();
   document.querySelectorAll<HTMLElement>('[data-back]').forEach((node) => node.addEventListener('click', () => showView('home')));
@@ -886,7 +1268,7 @@ async function init(): Promise<void> {
     saveArcState({ seen: true });
   }
   setupWalletScreens({
-    views: ['home', 'send', 'ring', 'activity'], account: () => account, hasBrowserWallet: () => browserAccount,
+    views: ['home', 'send', 'swap', 'ring', 'activity', 'contracts'], account: () => account, hasBrowserWallet: () => browserAccount,
     browserNote: 'This browser only, backed up by file', where: 'on Arc',
     addressOf: (key) => arcState().addresses[key.id] ?? null,
     shortAddress,
@@ -897,6 +1279,7 @@ async function init(): Promise<void> {
     },
     balanceOf: (key) => { const b = arcState().balances[idOf(key)]; return b === undefined ? '' : `${b} USDC`; },
     rescan: async (progress) => { const kept = await rt.recover(true, progress); await refreshNotes(); return kept; },
+    backup: backupTransport(),
   });
   account = activeAccount(browserAccount);
   // Nothing to open yet: a new wallet, or one brought from elsewhere.
@@ -908,9 +1291,20 @@ async function init(): Promise<void> {
     el('backup-export').hidden = true;
     el('backup-box').querySelector('p:not(.eyebrow):not(.status)')!.textContent = 'Your recovery phrase backs this account up. A backup file from before phrases brings that browser account back here.';
   }
-  if (AUTO_DEPOSIT) {
-    el('deposit-copy').textContent = 'USDC sent to your address becomes private notes by itself.';
-    el('receive-then').textContent = 'on testnet it becomes private notes by itself';
+  if (NETWORK === 'testnet') {
+    const sayAuto = () => {
+      el('deposit-copy').textContent = autoOn() ? 'USDC sent to your address becomes private notes by itself.' : 'USDC at your address becomes private notes when you deposit it.';
+      el('receive-then').textContent = autoOn() ? 'on testnet it becomes private notes by itself' : 'Deposit turns it into private notes';
+    };
+    el('auto-wrap').hidden = false;
+    el<HTMLInputElement>('auto-deposit').checked = autoOn();
+    el('auto-deposit').addEventListener('change', () => {
+      try { localStorage.setItem(AUTO_KEY, el<HTMLInputElement>('auto-deposit').checked ? 'on' : 'off'); } catch { /* this visit only */ }
+      autoFailed = false;
+      sayAuto();
+      void renderBudget().catch(() => undefined);
+    });
+    sayAuto();
   }
   loadSent(arcStorageOf(account, keyStoreName()).sent);
   renderActivity();

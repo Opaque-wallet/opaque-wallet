@@ -129,8 +129,11 @@ async function opening() {
     narrow.addEventListener('change', () => hero.place(settled()));
 
   };
-  // Straight to the end for reduced motion, or a link to a section further down.
-  if (reduced || location.hash) { hero.place(settled(), { instant: true }); finish(); return; }
+  // Straight to the end for reduced motion, a link to a section further down, or
+  // someone who has seen it in this tab, or come from the wallet (lib/wallet-ui.ts).
+  const seen = (() => { try { return sessionStorage.getItem('opaque:opening') === 'seen'; } catch { return false; } })();
+  try { sessionStorage.setItem('opaque:opening', 'seen'); } catch {}
+  if (reduced || location.hash || seen) { hero.place(settled(), { instant: true }); finish(); return; }
   history.scrollRestoration = 'manual';
   scrollTo(0, 0);
   lockScroll(true);

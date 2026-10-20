@@ -26,6 +26,7 @@ import { asPrivateSpend } from '@opaque/protocol-types/codecs.js';
 
 import { verifyRingSpend } from '../zk/index.ts';
 import { checkProposal, payoutBatch, rotationOf } from './batch.ts';
+import { ATTESTER_FLOOR, quoteSwap, swapInto } from './swap.ts';
 import { keyChain, type KeyChain } from './keys.ts';
 import type { PoolSource } from './pool.ts';
 import { accountOf, asDestination, recipientFor, xrplChainId, type XrplDestination } from './protocol.ts';
@@ -37,7 +38,11 @@ export interface XrplPool {
 }
 
 /** A spend as it reaches XRPL: the proven spend, and the destination its recipient binds. */
-export type XrplSpend = PrivateSpend & { readonly destination: XrplDestination };
+export type XrplSpend = PrivateSpend & {
+  readonly destination: XrplDestination;
+  /** A swap into another pool: the least it delivers there, in that pool's units. */
+  readonly deliverMin?: string;
+};
 
 export interface SignRequest {
   readonly spends: readonly XrplSpend[];
@@ -48,7 +53,7 @@ export interface Attester {
   readonly id: string;
   /** The address after `address` in this attester's chain for `pool`, or undefined if it is not one of its keys. */
   nextAfter(pool: string, address: string): string | undefined;
-  /** Its address on the pool's signer list now, if any. */
+  /** Its address on the pool's signer list now, if any, searching on from where it last saw one if it must. */
   currentOn(pool: string, signers: readonly string[]): string | undefined;
   sign(request: SignRequest): Promise<string>;
   /** Signs the rotation alone: every listed key to its owner's next one, and nothing else. */
@@ -65,7 +70,8 @@ export async function signerListOf(client: Client, pool: string): Promise<Signer
 }
 
 /** Each current signer's next key, from the attester that owns it. */
-export function nextSignersOf(pool: string, signers: readonly string[], peers: readonly Pick<Attester, 'nextAfter'>[]): string[] {
+export function nextSignersOf(pool: string, signers: readonly string[], peers: readonly Pick<Attester, 'nextAfter' | 'currentOn'>[]): string[] {
+  for (const p of peers) p.currentOn(pool, signers);
   return signers.map((s) => {
     const next = peers.map((p) => p.nextAfter(pool, s)).find((n) => n !== undefined);
     if (next === undefined) throw new ProtocolFailure('SETTLEMENT_REVERTED', `no attester owns signer ${s}`);
@@ -76,6 +82,9 @@ export function nextSignersOf(pool: string, signers: readonly string[], peers: r
 /** The key chain an attester signs `pool`'s payouts with. One per pool: a key listed on two pools could sign twice. */
 export const attesterChain = (seed: Uint8Array, pool: string): KeyChain => keyChain(seed, `attester/${pool}`);
 
+/** How far past its last position an attester looks for its listed key: about 13 s of key derivation, once. */
+const CATCH_UP = 10_000;
+
 export function createAttester(options: {
   readonly id: string;
   readonly seed: Uint8Array;
@@ -85,7 +94,7 @@ export function createAttester(options: {
   readonly pools: ReadonlyMap<string, XrplPool>;
   readonly verifierId: Bytes32;
   /** Every attester, this one included: whose next keys the rotation must name. */
-  readonly peers: () => readonly Pick<Attester, 'nextAfter'>[];
+  readonly peers: () => readonly Pick<Attester, 'nextAfter' | 'currentOn'>[];
   readonly maxFeeDrops?: bigint;
   /** Ledgers a signed Batch may stay valid for. */
   readonly ledgerWindow?: number;
@@ -111,6 +120,25 @@ export function createAttester(options: {
     }
     return i;
   };
+  /**
+   * The listed key, when none of this chain's next 64 is listed: another
+   * operator with the same seeds (a laptop's e2e and the hosted service) has
+   * rotated past where this one last looked. The search costs the gap, once.
+   */
+  const catchUp = (pool: string, signers: readonly string[]): string | undefined => {
+    const chain = chains.get(pool);
+    if (chain === undefined) return undefined;
+    const listed = new Set(signers);
+    const from = (hints.get(pool) ?? 0) + 64;
+    for (let i = from; i < from + CATCH_UP; i++) {
+      const address = chain.addressAt(i);
+      if (!listed.has(address)) continue;
+      hints.set(pool, i);
+      options.onIndex?.(pool, i);
+      return address;
+    }
+    return undefined;
+  };
 
   /** Checks `proposed` is `expected` at the pool's next sequence, then signs it with this attester's listed key. */
   async function signAs(account: string, signers: readonly string[], expected: Batch | SignerListSet, proposed: Batch | SignerListSet): Promise<string> {
@@ -133,7 +161,7 @@ export function createAttester(options: {
       const i = ownIndex(pool, address);
       return i === undefined ? undefined : chains.get(pool)!.addressAt(i + 1);
     },
-    currentOn: (pool, signers) => signers.find((s) => ownIndex(pool, s) !== undefined),
+    currentOn: (pool, signers) => signers.find((s) => ownIndex(pool, s) !== undefined) ?? catchUp(pool, signers),
 
     async sign(request) {
       const first = request.spends[0];
@@ -167,9 +195,17 @@ export function createAttester(options: {
       const gross = spends.reduce((n, s) => n + BigInt(s.scope.denomination), 0n);
       const fees = pool.spendFee * BigInt(spends.length);
       if (gross <= fees) refuse('INVALID_INPUT', 'the notes do not cover the fee');
+      // A swap: held to the market, by this attester's own quote from the ledger's AMMs.
+      const deliver = swapInto(options.pools, pool.source.config.asset, destination.account, first as XrplSpend);
+      if (deliver !== undefined) {
+        const read = <T>(command: string, params: Record<string, unknown>) => client.request({ command, ...params } as never).then((r) => (r as { result: T }).result);
+        const fair = await quoteSwap(read, pool.source.config.asset, deliver.asset, gross - fees);
+        if (deliver.min * ATTESTER_FLOOR < fair) refuse('INVALID_INPUT', 'the swap would settle far below the market');
+      }
       const expected = payoutBatch({
         pool: account, asset: pool.source.config.asset, nullifiers: spends.map((s) => s.nullifier),
-        destination, units: gross - fees, nextSigners: nextSignersOf(account, list.signers, options.peers()), quorum: list.quorum,
+        destination, units: gross - fees, ...(deliver === undefined ? {} : { deliver }),
+        nextSigners: nextSignersOf(account, list.signers, options.peers()), quorum: list.quorum,
       });
       return signAs(account, list.signers, expected, request.proposed);
     },

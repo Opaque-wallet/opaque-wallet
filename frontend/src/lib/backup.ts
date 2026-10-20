@@ -11,7 +11,8 @@
 import type { Bytes32 } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
-import { IndexedDbSignerStore } from '../../../packages/pq-wallet/src/indexeddb-store.ts';
+import type { IndexedDbSignerStore } from '../../../packages/pq-wallet/src/indexeddb-store.ts';
+import { SealedSignerStore } from './lock.ts';
 import { exportSigner, restoreSigner, type ExportedSigner } from '../../../packages/pq-wallet/src/signer-state.ts';
 import type { WalletRecord } from '../../../packages/pq-wallet/src/wallet-state.ts';
 import { NETWORK } from '../../../deployments/index.ts';
@@ -88,7 +89,7 @@ export async function restoreBackup(file: Blob, passphrase: string): Promise<num
   if ((contents.network ?? 'testnet') !== NETWORK) throw new Error(`this backup is for ${contents.network ?? 'testnet'}, not ${NETWORK}`);
 
   const name = `${DEFAULT_STORE}-restored-${Date.now()}`;
-  const store = new IndexedDbSignerStore(name);
+  const store = new SealedSignerStore(name);
   try {
     for (const signer of contents.signers) await restoreSigner(store, signer);
     if (!await store.compareAndSwapWallet(WALLET_ID, undefined, { ...contents.wallet, revision: 0n })) throw new Error('could not write the restored account');

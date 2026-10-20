@@ -76,6 +76,10 @@ export interface ExecutorServerOptions {
   readonly walletRpc?: QueryAnswererDeps['walletRpc'];
   /** XRPL (xrpl/queries.ts). Optional; absent, it is refused. */
   readonly xrpl?: QueryAnswererDeps['xrpl'];
+  /** BACKUP (mesh/backup-store.ts). Optional; absent, it is refused. */
+  readonly backup?: QueryAnswererDeps['backup'];
+  /** CREDENTIAL (cre/credential.ts). Optional; absent, it is refused. */
+  readonly credential?: QueryAnswererDeps['credential'];
   /**
    * The deployed CRE workflow's routes: GET /v1/cre/pending serves the
    * envelopes awaiting a decision, POST /v1/cre/release takes its tagged
@@ -244,6 +248,8 @@ export function createExecutorServer(options: ExecutorServerOptions = {}): Execu
         ...(options.receipt === undefined ? {} : { receipt: options.receipt }),
         ...(options.walletRpc === undefined ? {} : { walletRpc: options.walletRpc }),
         ...(options.xrpl === undefined ? {} : { xrpl: options.xrpl }),
+        ...(options.backup === undefined ? {} : { backup: options.backup }),
+        ...(options.credential === undefined ? {} : { credential: options.credential }),
       });
 
   // Reassembles intents too large for one mesh message. See mesh/chunks.ts.
@@ -270,6 +276,8 @@ export function createExecutorServer(options: ExecutorServerOptions = {}): Execu
       // Not yet: tell the client which to resend. 200 rather than an error,
       // because an incomplete upload is a normal state of a chunked send.
       if (done.kind === 'MISSING') return send(res, 200, { missing: done.missing });
+      // A query too large for one message (mesh/client.ts): answered as any query is.
+      if (c['query'] === true) return answerQuery(res, jsonOf(done.payload));
       // The hash already matched inside take(). The intent is the committed
       // header plus the reassembled ciphertext, revived like any other.
       const intent = reviveIntent({ ...(c['intent'] as object), encryptedPayload: toHex(done.payload) });
@@ -281,10 +289,14 @@ export function createExecutorServer(options: ExecutorServerOptions = {}): Execu
   }
 
   async function meshQuery(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    await answerQuery(res, jsonOf(meshBody(JSON.parse(await readBody(req)), 'QUERY')));
+  }
+
+  async function answerQuery(res: ServerResponse, raw: unknown): Promise<void> {
     if (answer === undefined) {
       throw new ProtocolFailure('MESH_UNAVAILABLE', 'this exit answers no queries: no graph configured', true);
     }
-    const query = decodeMeshQuery(jsonOf(meshBody(JSON.parse(await readBody(req)), 'QUERY')));
+    const query = decodeMeshQuery(raw);
     const bytes = encodeAnswer(await answer(query));
     res.writeHead(200, {
       'content-type': 'application/json',

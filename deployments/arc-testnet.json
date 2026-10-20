@@ -176,5 +176,21 @@
     "releaseEgressUrl": null,
     "creTriggerUrl": null,
     "relayDirectoryUrl": null
+  },
+  "swap": {
+    "$comment": "Swaps at the account's address through LI.FI, which picks the best route. router is LI.FI's contract on this chain (li.quest/v1/quote's transactionRequest.to and approvalAddress, checked live 2026-10-19): the wallet refuses a quote that calls anything else. Only these tokens are offered.",
+    "router": "0xff70f4a1d11995621854f3692acf286d8acd04b2",
+    "tokens": [
+      {
+        "symbol": "USDC",
+        "address": "0x3600000000000000000000000000000000000000",
+        "decimals": 6
+      },
+      {
+        "symbol": "EURC",
+        "address": "0x89b50855aa3be2f677cd6303cec089b5f319d72a",
+        "decimals": 6
+      }
+    ]
   }
 }

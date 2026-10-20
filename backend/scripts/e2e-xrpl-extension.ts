@@ -77,11 +77,11 @@ try {
   await wallet.click('#faucet-button');
   await wallet.waitForFunction(() => /^The faucet paid|^Faucet unavailable/.test(document.getElementById('receive-status')?.textContent ?? ''), null, { timeout: 150_000 });
   await wallet.click('#tab-home');
-  for (let i = 0; i < 30 && (await wallet.textContent('#balance-main')) !== '95'; i++) {
+  for (let i = 0; i < 30 && (await wallet.textContent('#balance-xrp')) !== '95'; i++) {
     await wallet.click('#refresh');
     await new Promise((r) => setTimeout(r, 4_000));
   }
-  check('the extension\'s wallet holds 95 private XRP', (await wallet.textContent('#balance-main')) === '95', String(await wallet.textContent('#note-count')));
+  check('the extension\'s wallet holds 95 private XRP', (await wallet.textContent('#balance-xrp')) === '95', String(await wallet.textContent('#note-count')));
 
   // ── the dapp, and the extension in it ─────────────────────────────────────
   const dapp = await context.newPage();

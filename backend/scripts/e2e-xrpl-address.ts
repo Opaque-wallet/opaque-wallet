@@ -39,7 +39,7 @@ const executablePath = process.env['CHROMIUM']
 const browser = await chromium.launch({ ...(executablePath ? { executablePath } : { channel: 'chromium' }), headless: true });
 const origin = new URL(PAGE).origin;
 
-const balance = async (page: any) => String(await page.textContent('#balance-main'));
+const balance = async (page: any) => String(await page.textContent('#balance-xrp'));
 /** Refreshes until the balance reads `want`, or two minutes pass. */
 async function settleTo(page: any, want: string): Promise<string> {
   for (let i = 0; i < 30 && (await balance(page)) !== want; i++) {
@@ -96,8 +96,8 @@ try {
 
   // ── 4. the account list ────────────────────────────────────────────────────
   await walletA.click('#account-button');
-  await walletA.waitForSelector('.addr-chip', { timeout: 30_000 });
-  const chip = String(await walletA.textContent('.addr-chip code'));
+  await walletA.waitForSelector('.addr-chip:not(.pending)', { timeout: 30_000 });
+  const chip = String(await walletA.textContent('.addr-chip:not(.pending) code'));
   check('the account list shows the address under the account', address.startsWith(chip.split('…')[0]!) && address.endsWith(chip.split('…')[1]!), chip);
 
   // ── 5. browser B, with only the phrase ─────────────────────────────────────

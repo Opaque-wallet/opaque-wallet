@@ -28,7 +28,13 @@
     "xrpl:e2e:phrase": "node --use-system-ca scripts/e2e-xrpl-phrase.ts",
     "xrpl:e2e:import": "node --use-system-ca scripts/e2e-xrpl-import.ts",
     "xrpl:e2e:address": "node --use-system-ca scripts/e2e-xrpl-address.ts",
-    "arc:e2e:phrase": "node --use-system-ca scripts/e2e-arc-phrase.ts"
+    "arc:e2e:phrase": "node --use-system-ca scripts/e2e-arc-phrase.ts",
+    "arc:e2e:swap": "node --use-system-ca scripts/e2e-arc-swap.ts",
+    "arc:e2e:deployer": "node --use-system-ca scripts/e2e-arc-deployer.ts",
+    "arc:e2e:contracts": "node --use-system-ca scripts/e2e-arc-contracts.ts",
+    "xrpl:e2e:swap": "node --use-system-ca scripts/e2e-xrpl-swap.ts",
+    "e2e:passkey": "node --use-system-ca scripts/e2e-passkey.ts",
+    "e2e:lock": "node --use-system-ca scripts/e2e-lock.ts"
   },
   "comment": [
     "Runs .ts directly: Node >=22.18 strips types natively, so there is no build",

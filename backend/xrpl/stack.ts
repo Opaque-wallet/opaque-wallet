@@ -39,8 +39,9 @@ import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
 import { xrplDeployment, xrplMeshTrustRoot } from '../../deployments/xrpl.ts';
 import { evaluatePublicReadiness } from '../../graph/src/privacy-score.ts';
-import { issueCredential } from '../cre/credential.ts';
+import { credentialJson } from '../cre/credential.ts';
 import { createExecutorServer } from '../cre/executor-server.ts';
+import { backupFromEnv, backupHttpHandler, createBackupStore } from '../mesh/backup-store.ts';
 import { generateIntentKeypair } from '../cre/seal-client.ts';
 import { createCreSimulator } from '../cre/simulator.ts';
 import type { DirectoryTrustRoot } from '../mesh/contracts.ts';
@@ -110,7 +111,15 @@ const relaySnapshot = (): RelaySnapshot => ({
 
 const moonpayKey = process.env['MOONPAY_API_KEY'];
 const moonpaySecret = process.env['MOONPAY_SECRET_KEY'];
+// Passkey backups: one store for every chain (mesh/backup-store.ts), asked where it
+// is kept. The first ones were kept here, and /v1/backup still serves them while
+// the store they moved to reads through.
+const backup = backupFromEnv(join(XRPL_STATE, 'backups'), PUBLIC_URL !== undefined);
+const firstBackups = backup.kept ? backup.send : createBackupStore(join(XRPL_STATE, 'backups'));
 const exit = createExecutorServer({
+  backup: backup.send,
+  // Asked across the mesh, so the authority never sees who asked; the HTTP route stays for old clients.
+  credential: async (recipient) => toHex(new TextEncoder().encode(credentialJson(recipient, POLICY, credentialMac, nowS()))),
   graph: {
     getRingSnapshot: (s) => node.ringSnapshot(s),
     getRelaySnapshot: async () => relaySnapshot(),
@@ -150,10 +159,9 @@ const credentialHandler: RequestListener = (req, res) => {
   req.on('end', () => {
     try {
       const { recipient } = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { recipient?: string };
-      if (typeof recipient !== 'string' || !/^0x[0-9a-f]{40}$/.test(recipient)) throw new Error('recipient must be a lower-case address');
-      const credential = issueCredential({ recipient: recipient as never, policyVersion: POLICY, expiresAt: (nowS() + 86_400n) as UnixSeconds }, credentialMac);
+      const credential = credentialJson(String(recipient), POLICY, credentialMac, nowS());
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(credential, (_k, v) => (typeof v === 'bigint' ? v.toString(10) : v)));
+      res.end(credential);
     } catch (e) {
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ message: (e as Error).message }));
@@ -229,6 +237,7 @@ const router = PORT === undefined ? undefined : createServer((req, res) => {
   if (hop && relay) { req.url = hop[2]; relay.handler(req, res); return; }
   if (url.startsWith('/v1/mesh/')) { exit.handler(req, res); return; }
   if (url === '/v1/credential') { credentialHandler(req, res); return; }
+  if (url === '/v1/backup') { backupHttpHandler(firstBackups)(req, res); return; }
   if (WC_PROJECT !== undefined && req.method === 'GET' && url.startsWith('/v1/wc-verify/')) { void proxyVerify(url, res); return; }
   if (url === '/xrpl-stack.json') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });

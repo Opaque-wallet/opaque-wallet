@@ -11,7 +11,7 @@ import type { Batch, Client, SignerListSet } from 'xrpl';
 import type { NoteCommitment, Nullifier } from '@opaque/protocol-types';
 
 import { buildRingSpend, createNoteSecret, deriveCommitment, verifierId } from '../../zk/index.ts';
-import { createAttester, attesterChain, type Attester, type XrplSpend } from '../attester.ts';
+import { createAttester, attesterChain, nextSignersOf, type Attester, type XrplSpend } from '../attester.ts';
 import { checkProposal, payoutBatch, rotationOf, signerListOf, type Payout } from '../batch.ts';
 import { keyChain } from '../keys.ts';
 import { createPoolSource, creditDeposits, incomingOf, type IncomingPayment } from '../pool.ts';
@@ -189,6 +189,18 @@ test('key chains are deterministic, per pool, and found again from the ledger', 
   assert.notEqual(attesterChain(seed, POOL).addressAt(0), attesterChain(seed, ALICE).addressAt(0));
   assert.equal(chain.indexOf(chain.addressAt(5)), 5);
   assert.equal(chain.indexOf(chain.addressAt(5), 6), undefined);
+});
+
+test('an attester more than a window behind (another operator rotated past it) finds its listed key', () => {
+  const seeds = [1, 2, 3].map((n) => new Uint8Array(32).fill(n));
+  const at = (i: number) => seeds.map((s) => attesterChain(s, POOL).addressAt(i));
+  const saved: number[] = [];
+  const all: Attester[] = seeds.map((seed, i) => createAttester({
+    id: `A${i + 1}`, seed, client: {} as Client, networkId: 1, pools: new Map([[POOL, {} as never]]), verifierId: verifierId(2), peers: () => all,
+    startIndex: new Map([[POOL, 25]]), onIndex: (_, index) => saved.push(index),
+  }));
+  assert.deepEqual(nextSignersOf(POOL, at(146), all), at(147), '121 keys on, past the 64 it searches first');
+  assert.deepEqual(saved, [146, 146, 146], 'and the stack saves where it found them');
 });
 
 test('an attester refuses a spend before it ever signs', async () => {

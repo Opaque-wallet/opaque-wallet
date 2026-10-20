@@ -7,6 +7,8 @@
 //   arc/<chain id>/fors/<epoch>        its PQ key at each epoch: the first,
 //                                      the next, and every rotation's after
 //   arc/<chain id>/note/<pool>/<i>     the i-th note it makes in a pool
+//   arc/<chain id>/deployer/<i>        its i-th deployer: a plain address it
+//                                      funds privately, for contracts and scripts
 //
 // So the phrase alone gives back the address (CREATE2 commits it to the first
 // two keys and a fixed deadline), the key in force (adoptWallet finds it on
@@ -14,6 +16,8 @@
 // pool's deposits). Each chain id has keys of its own: a few-time key must
 // never sign on two chains. Nothing here leaves the page.
 
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { keccak_256 } from '@noble/hashes/sha3';
 import type { NoteCommitment, PoolScope } from '@opaque/protocol-types';
 import { deriveCommitment, SECRET_BYTES } from '@opaque/zk';
 
@@ -33,6 +37,26 @@ export const forsSeed = (account: AccountKeys, epoch: bigint): Uint8Array => str
 export const noteSecret = (account: AccountKeys, scope: PoolScope, i: number): Uint8Array =>
   stream(account.key, `arc/${CHAIN}/note/${scope.pool.toLowerCase()}/${i}`)(SECRET_BYTES);
 
+const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+
+/** An address from its 20 bytes, checksummed (EIP-55). */
+export function checksummed(address: Uint8Array): `0x${string}` {
+  const plain = hex(address);
+  const mix = hex(keccak_256(plain));
+  return `0x${[...plain].map((c, i) => (parseInt(mix[i]!, 16) >= 8 ? c.toUpperCase() : c)).join('')}`;
+}
+
+/** The address of a secp256k1 private key. */
+export const addressOfKey = (key: `0x${string}`): `0x${string}` => checksummed(keccak_256(secp256k1.getPublicKey(key.slice(2), false).slice(1)).slice(-20));
+
+/**
+ * The account's i-th deployer key: an ordinary Arc address, for forge, hardhat
+ * or a script's .env. The account pays it from its notes, so on chain the pool
+ * funded it and nothing ties it to the account. One per project: a deployer
+ * used twice links what it deployed.
+ */
+export const deployerKey = (account: AccountKeys, i: number): `0x${string}` => `0x${hex(stream(account.key, `arc/${CHAIN}/deployer/${i}`)(32))}`;
+
 // ── what this browser keeps per Arc account ───────────────────────────────
 
 const STATE_KEY = scoped('opaque:arc-accounts:v1');
@@ -47,6 +71,10 @@ export interface ArcState {
   readonly generations: Readonly<Record<string, number>>;
   /** Set on the first visit since Arc took phrases. */
   readonly seen?: boolean;
+  /** How many deployers each account has made, by account id. */
+  readonly deployers?: Readonly<Record<string, number>>;
+  /** What each account deployed (lib/contracts.ts), newest first, by account id. */
+  readonly contracts?: Readonly<Record<string, readonly { readonly address: string; readonly tx: string; readonly at: number }[]>>;
 }
 const read = <T>(key: string, fallback: T): T => { try { return (JSON.parse(localStorage.getItem(key) ?? 'null') as T | null) ?? fallback; } catch { return fallback; } };
 export const arcState = (): ArcState => ({ addresses: {}, balances: {}, scanned: {}, generations: {}, ...read<Partial<ArcState>>(STATE_KEY, {}) });

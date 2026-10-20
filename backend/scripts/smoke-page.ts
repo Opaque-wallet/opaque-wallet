@@ -11,7 +11,7 @@
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 
 import { deployment, requireService } from '../../deployments/index.ts';
-import { ARC_READY, createWallet } from './xrpl-wallet-page.ts';
+import { acceptTerms, ARC_READY, createWallet } from './xrpl-wallet-page.ts';
 
 const APP_URL = process.env['APP_URL'] ?? 'https://www.opaque.credit/app.html';
 const stackOrigin = new URL(requireService('meshExitUrl')).origin;
@@ -34,11 +34,13 @@ const check = (name: string, ok: boolean, detail: string) => {
 console.log(`\n  ${APP_URL} — expecting ${deployment.network.displayName}\n`);
 const t0 = Date.now();
 await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-// A fresh browser opens on onboarding: make a wallet as a person would.
-if (await page.waitForSelector('#ob-create', { state: 'visible', timeout: 30_000 }).then(() => true, () => false)) {
-  if (await page.isVisible('#mainnet-continue')) await page.click('#mainnet-continue');
-  await createWallet(page, 120_000, ARC_READY);
+// A fresh browser is asked to accept the terms, then opens on onboarding: make a wallet as a person would.
+await acceptTerms(page);
+if (deployment.network.chainId !== 5042002) {
+  await page.waitForSelector('#mainnet-continue', { state: 'visible', timeout: 30_000 });
+  await page.click('#mainnet-continue');
 }
+if (await page.waitForSelector('#ob-create', { state: 'visible', timeout: 30_000 }).then(() => true, () => false)) await createWallet(page, 120_000, ARC_READY);
 const started = await page.waitForFunction(() => (globalThis as { opaque?: unknown }).opaque !== undefined, undefined, { timeout: 120_000 })
   .then(() => true, () => false);
 const bootError = await page.evaluate(() => document.body.innerText.match(/Could not start:[^\n]*/)?.[0] ?? '');

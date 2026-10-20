@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opaque — Terms of Use</title>
+<meta name="description" content="The terms for using the Opaque wallet: opaque.credit and the Opaque browser extension.">
+<style>
+  :root { color-scheme: light dark; --ink: #1b1a19; --muted: #5f5b57; --ground: #fbfaf8; --rule: #e4e0da; --accent: #c2410c; }
+  @media (prefers-color-scheme: dark) { :root { --ink: #ece8e3; --muted: #a8a29b; --ground: #121110; --rule: #2b2826; --accent: #fb923c; } }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 44rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin: 2.25rem 0 .5rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); }
+  p, li { color: var(--ink); }
+  .meta { color: var(--muted); margin: 0 0 2rem; }
+  .summary { border: 1px solid var(--rule); border-radius: 12px; padding: .25rem 1.25rem; }
+  ul { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  a { color: var(--accent); }
+  strong { font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Terms of Use</h1>
+  <p class="meta">Opaque wallet: <a href="https://www.opaque.credit">opaque.credit</a>, its wallet pages and the Opaque browser extension. Last updated 19 October 2026.</p>
+
+  <p>These terms are an agreement between you and the team that builds and operates Opaque ("Opaque", "we", "us"). By creating or importing a wallet, or otherwise using Opaque, you agree to these terms and to our <a href="/privacy">Privacy Policy</a>. If you don't agree, don't use Opaque.</p>
+
+  <div class="summary">
+    <p><strong>In short:</strong></p>
+    <ul>
+      <li>Opaque is self-custodial. Your recovery phrase is your wallet: nobody, including us, can recover it, freeze your money or reverse a payment.</li>
+      <li>Opaque is in public beta. Arc mainnet uses real USDC on contracts that are not audited yet, and we recommend not depositing there.</li>
+      <li>Don't use Opaque for anything illegal, including money laundering, sanctions evasion or moving the proceeds of crime.</li>
+      <li>Privacy has limits. Deposits and settlements are public on the blockchain.</li>
+    </ul>
+  </div>
+
+  <h2>1. What Opaque is</h2>
+  <ul>
+    <li>Opaque is software for making private payments on public blockchains, today Arc and the XRP Ledger. It runs in your browser, on opaque.credit or in the extension.</li>
+    <li><strong>You hold your money.</strong> Your wallet is your 12-word recovery phrase, or, for an account made before recovery phrases, the keys and backup file in your browser. Only someone holding them can move your funds. We never receive your phrase, your keys or your note secrets, and we cannot recover, freeze, reverse or move your funds.</li>
+    <li>We are not a bank, exchange, broker or custodian, and we don't hold your money. Nothing in Opaque is financial, investment, legal or tax advice.</li>
+    <li>To keep payments private, Opaque relies on services we operate: relays that carry encrypted requests, a service that submits operations to the network, a check on recipients, and, on the XRP Ledger, attesters that co-sign payments out of a pool. These services can refuse, delay or fail to process a request.</li>
+  </ul>
+
+  <h2>2. Public beta</h2>
+  <ul>
+    <li>Opaque is in public beta. On testnets, its tokens have no monetary value.</li>
+    <li>On Arc mainnet, Opaque uses real USDC on smart contracts that have not been audited. We recommend not depositing there until they are. If you do, you accept the risk of losing everything you deposit.</li>
+    <li>Features may change, break or be removed without notice.</li>
+  </ul>
+
+  <h2>3. Who can use Opaque</h2>
+  <ul>
+    <li>You must be at least 18 and able to enter into a binding contract.</li>
+    <li>You may not use Opaque if you, or anyone you act for, are subject to sanctions of the United Nations, the United States, the European Union or the United Kingdom, or are located, resident or organised in a country or region subject to comprehensive sanctions by any of them.</li>
+    <li>You are responsible for following the laws that apply to you, including tax law.</li>
+  </ul>
+
+  <h2>4. What you must not do</h2>
+  <ul>
+    <li>Launder money, finance terrorism, evade sanctions, or move the proceeds of crime, including fraud, theft, hacks, ransomware and scams.</li>
+    <li>Buy, sell or pay for anything illegal.</li>
+    <li>Get around Opaque's screening, limits or blocks, including by using a VPN to reach Opaque from a place where it is not offered.</li>
+    <li>Attack, overload or interfere with Opaque, its relays, its services or other users, or look for and exploit weaknesses in them instead of reporting them to us.</li>
+    <li>Break the law or anyone else's rights.</li>
+  </ul>
+  <p>We may refuse to process a request we reasonably believe breaks these terms or the law, such as a payment to a sanctioned address, and we may block access to opaque.credit from some places.</p>
+
+  <h2>5. Privacy and its limits</h2>
+  <p>Opaque hides which deposit paid which recipient. It does not hide everything. Deposits and settlements are public on the blockchain, note sizes are visible, and timing and patterns can still suggest links. Payments into one reusable address can be linked to each other. Opaque does not guarantee anonymity. Our <a href="/privacy">Privacy Policy</a> describes what each part of Opaque can see.</p>
+
+  <h2>6. Your responsibilities</h2>
+  <ul>
+    <li>Keep your recovery phrase, and any account key (<code>opq1…</code>), secret and offline. Anyone who has them controls your funds. If you lose them, your funds are lost.</li>
+    <li>Use your phrase to sign on one device at a time. Opaque's post-quantum keys are few-time keys, and signatures made on two devices at once weaken them.</li>
+    <li>Check every address and amount before you send. Blockchain payments cannot be reversed.</li>
+    <li>Keep your device and browser secure. Anything that can read your browser's storage can read your wallet.</li>
+  </ul>
+
+  <h2>7. Risks you accept</h2>
+  <ul>
+    <li><strong>Software.</strong> Opaque's software and smart contracts can have bugs that lose funds. Arc mainnet's contracts are not audited.</li>
+    <li><strong>Cryptography.</strong> Opaque uses new post-quantum signatures and ring proofs. New cryptography can turn out to be weaker than expected.</li>
+    <li><strong>Networks.</strong> Arc, the XRP Ledger and the services they rely on can halt, change or fail.</li>
+    <li><strong>Stablecoin issuers.</strong> Circle (USDC) and Ripple (RLUSD) can freeze or claw back their tokens, including tokens held in Opaque's pools.</li>
+    <li><strong>Our services.</strong> If our relays, payment service or attesters stop, payments through Opaque may be delayed, or impossible until they return.</li>
+    <li><strong>Regulation.</strong> Laws can change, and may limit Opaque or your access to it.</li>
+  </ul>
+
+  <h2>8. Fees</h2>
+  <p>Payments pay network fees, and some pools charge a fee per payment. Opaque shows them before you confirm. Third-party services, such as MoonPay for buying crypto, set their own fees.</p>
+
+  <h2>9. Other services</h2>
+  <p>Opaque connects to apps through the GemWallet, Crossmark and WalletConnect interfaces, and links to services such as MoonPay, faucets and block explorers. We don't control them and aren't responsible for them. Their own terms apply.</p>
+
+  <h2>10. Our software</h2>
+  <p>Opaque's software, design and name belong to us. We give you a personal, non-exclusive, non-transferable, revocable licence to use opaque.credit and the extension as we offer them. You may not copy, modify, distribute or sell Opaque's software, or use our name or logo, without our written permission. If you send us feedback, we may use it freely.</p>
+
+  <h2>11. No warranties</h2>
+  <p>Opaque is provided "as is" and "as available". To the fullest extent the law allows, we disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, title and non-infringement. We don't promise that Opaque will be uninterrupted, secure, error-free or private in every case.</p>
+
+  <h2>12. Limitation of liability</h2>
+  <p>To the fullest extent the law allows, we are not liable for any indirect, incidental, special, consequential or punitive damages, or for any loss of funds, profits, data or goodwill, arising from your use of Opaque. Our total liability for any claim relating to Opaque is limited to the greater of 100 US dollars or the fees you paid us in the 12 months before the claim. Some places don't allow these limits, so they apply only as far as the law allows.</p>
+
+  <h2>13. Indemnity</h2>
+  <p>You agree to compensate us for claims, losses and costs that arise from your breach of these terms or of the law.</p>
+
+  <h2>14. Ending</h2>
+  <p>You can stop using Opaque at any time. Your funds stay under your recovery phrase. We may suspend or end access to opaque.credit, the extension or our services, for you or for everyone, for example to comply with the law. If we plan to close a service your funds depend on, we intend to give notice first, so you can move them.</p>
+
+  <h2>15. Changes to these terms</h2>
+  <p>We may update these terms. If we change them materially, Opaque will ask you to accept them again before you continue. The date at the top shows the last update.</p>
+
+  <h2>16. General</h2>
+  <p>If any part of these terms can't be enforced, the rest still applies. These terms and the Privacy Policy are the whole agreement between you and us about Opaque. We may transfer them as part of a reorganisation; you may not transfer them without our consent.</p>
+
+  <h2>17. Contact</h2>
+  <p>Questions about these terms: <a href="https://x.com/Opaquecredit">x.com/Opaquecredit</a>.</p>
+</main>
+</body>
+</html>

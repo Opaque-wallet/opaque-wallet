@@ -8,7 +8,8 @@
 //      the demo app connected, its account funded privately
 //   2. browser A: Account 2 is a wallet of its own, empty; Account 1 still holds the rest
 //   3. browser B: the phrase imported; the ledger gives back Account 1's notes,
-//      spent and unspent as they are, so the balance matches A's
+//      spent and unspent as they are, so the balance matches A's; and finds
+//      Account 2, which A only opened (its address, nothing in it)
 //   4. browser B: the same app, connected again, gets the same address, and
 //      nothing is paid to fund it a second time
 //
@@ -20,7 +21,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { createWallet, importWallet } from './xrpl-wallet-page.ts';
+import { createWallet, importWallet, unlockIfAsked } from './xrpl-wallet-page.ts';
 
 const WALLET = (process.argv[2] ?? 'https://www.opaque.credit').replace(/\/+$/, '');
 const DAPP = (process.argv[3] ?? 'https://opaque-xrpl-demo.vercel.app').replace(/\/+$/, '');
@@ -39,7 +40,7 @@ const executablePath = process.env['CHROMIUM']
   ?? (build && join(cache, build, 'chrome-mac-arm64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'));
 const browser = await chromium.launch({ ...(executablePath ? { executablePath } : { channel: 'chromium' }), headless: true });
 
-const balance = async (page: any) => String(await page.textContent('#balance-main'));
+const balance = async (page: any) => String(await page.textContent('#balance-xrp'));
 /** Refreshes until the balance reads `want`, or a minute and a half passes. */
 async function settleTo(page: any, want: string): Promise<string> {
   for (let i = 0; i < 22 && (await balance(page)) !== want; i++) {
@@ -54,6 +55,7 @@ async function connectDemo(context: any, dapp: any): Promise<string> {
   const opened = context.waitForEvent('page');
   await dapp.click('#connect');
   const popup = await opened;
+  await unlockIfAsked(popup);
   await popup.waitForFunction(() => !document.getElementById('request')!.hidden && /Connect privately/.test(document.getElementById('request-title')?.textContent ?? '')
     && !(document.getElementById('approve') as HTMLButtonElement).disabled, null, { timeout: 120_000 });
   await popup.click('#approve');
@@ -92,8 +94,12 @@ try {
   await walletA.click('#account-button');
   await walletA.click('#account-add');
   await walletA.waitForFunction(() => document.getElementById('account-short')?.textContent === 'Notes in this browser', null, { timeout: 90_000 });
-  await walletA.waitForFunction(() => document.getElementById('balance-main')?.textContent !== '—', null, { timeout: 60_000 });
+  await walletA.waitForFunction(() => document.getElementById('balance-xrp') !== null, null, { timeout: 60_000 });
   check('A: Account 2 is a wallet of its own, empty', (await walletA.textContent('#account-name')) === 'Account 2' && (await balance(walletA)) === '0', `${await walletA.textContent('#account-name')}: ${await balance(walletA)} XRP`);
+  // Its address is made as it opens: wait for it, as a person would see it under Deposit.
+  await walletA.click('#tab-receive');
+  await walletA.waitForFunction(() => /^T/.test(document.getElementById('address-x')?.textContent ?? ''), null, { timeout: 180_000 });
+  await walletA.click('#tab-home');
   await walletA.click('#account-button');
   await walletA.click('.account-row:first-child');
   await walletA.waitForFunction(() => document.getElementById('account-short')?.textContent === 'Notes in this browser', null, { timeout: 90_000 });
@@ -108,6 +114,7 @@ try {
   const found = await importWallet(walletB, phrase);
   const restored = await settleTo(walletB, left);
   check('B: the phrase imported, and the ledger gave back Account 1\'s balance', restored === left, `${found} ${restored} XRP, ${Math.round((Date.now() - t0) / 1000)} s`);
+  check('B: and found Account 2, which A only opened', /and 1 more account of this phrase/.test(found), found);
 
   // ── 4. the same app, from browser B ────────────────────────────────────────
   const dappB = await b.newPage();

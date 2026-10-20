@@ -44,6 +44,12 @@ const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 /** Chunks in flight at once, and how many times a commit may ask again. */
 const CHUNK_CONCURRENCY = 4;
 const COMMIT_ATTEMPTS = 8;
+/**
+ * A query's body crosses as hex inside the innermost JSON, which must fit
+ * 65,536 bytes: past this it goes as chunks, like a large intent. Only a
+ * UserOperation carrying contract bytecode gets near it.
+ */
+const QUERY_CHUNK_BYTES = 28 * 1024;
 const text = (b: Uint8Array): string => new TextDecoder().decode(b);
 
 /**
@@ -184,6 +190,14 @@ export function createMeshTransport(options: MeshClientOptions = {}): PrivacyTra
    * 1.1 MiB against a 64 KiB mesh. See chunks.ts for what each party sees.
    */
   async function submitChunked(input: EncryptedIntent, payload: Uint8Array, path: RelayPath): Promise<IntentRef> {
+    // Everything but the payload travels in the commit; the payload is what
+    // was chunked, and its hash is what the exit checks the reassembly against.
+    const { encryptedPayload: _payload, ...header } = input;
+    return refFrom(await uploadChunked(payload, { intent: header }, path));
+  }
+
+  /** `payload` as one-way chunks, then a commit carrying `about`: the exit's answer to it, once every chunk is there. */
+  async function uploadChunked(payload: Uint8Array, about: Record<string, unknown>, path: RelayPath): Promise<Uint8Array> {
     const uploadId = crypto.getRandomValues(new Uint8Array(16));
     const chunks = splitPayload(payload);
     const total = chunks.length;
@@ -200,18 +214,16 @@ export function createMeshTransport(options: MeshClientOptions = {}): PrivacyTra
       }
     };
 
-    // Everything but the payload travels in the commit; the payload is what
-    // was chunked, and its hash is what the exit checks the reassembly against.
-    const { encryptedPayload: _payload, ...header } = input;
     const commitBody = toHex(utf8(wire({
-      commit: { uploadId: toHex(uploadId), total, payloadHash: payloadHash(payload), intent: header },
+      commit: { uploadId: toHex(uploadId), total, payloadHash: payloadHash(payload), ...about },
     })));
 
     await send(chunks.map((_, i) => i));
     const seen = new Map<number, number>();
     for (let attempt = 0; attempt < COMMIT_ATTEMPTS; attempt++) {
-      const answer = JSON.parse(text(await roundTrip('PAYMENT', commitBody, await fresh()))) as { missing?: number[] };
-      if (!Array.isArray(answer.missing)) return refFrom(utf8(JSON.stringify(answer)));
+      const raw = await roundTrip('PAYMENT', commitBody, await fresh());
+      const answer = JSON.parse(text(raw)) as { missing?: number[] };
+      if (!Array.isArray(answer.missing)) return raw;
       // Relays delay on purpose, so a chunk reported missing on the first ask
       // is usually still in flight. Resend only what is missing TWICE running.
       const resend = answer.missing.filter((i) => (seen.get(i) ?? 0) >= 1);
@@ -224,7 +236,9 @@ export function createMeshTransport(options: MeshClientOptions = {}): PrivacyTra
 
   return {
     async query(request: MeshQuery, path: RelayPath): Promise<MeshQueryResult> {
-      const answer = await roundTrip('QUERY', toHex(utf8(wire(request))), path);
+      const body = utf8(wire(request));
+      // A query too large for one message (a contract's bytecode) goes up in chunks; the exit answers the commit.
+      const answer = body.length > QUERY_CHUNK_BYTES ? await uploadChunked(body, { query: true }, path) : await roundTrip('QUERY', toHex(body), path);
       let parsed: unknown;
       try {
         parsed = JSON.parse(text(answer));

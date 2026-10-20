@@ -114,7 +114,7 @@ Everything is served on one port. The egress is never routed.
 | `POST` | `/v1/mesh/query` | The exit, for wallet reads from the last relay |
 | `GET` | `/v1/cre/pending` | Pending intent ids and sealed envelopes, for the CRE workflow |
 | `POST` | `/v1/cre/release` | Tagged decisions from the CRE workflow |
-| `POST` | `/v1/credential` | The test credential authority |
+| `POST` | `/v1/credential` | The test credential authority, for old clients: the wallet asks it across the mesh (`CREDENTIAL` query), so it never sees who asked |
 | `GET` | `/stack.json` | The wallet's config: signed directory, trust root, CRE public key |
 
 ## Environment

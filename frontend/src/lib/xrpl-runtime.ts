@@ -19,11 +19,12 @@
 //
 // The page talks to its own origin and Opaque's stack, and nothing else.
 
-import type { CredentialHandle, Hex, IdempotencyKey, IntentRef, IntentStatus, NoteSummary, PaymentRequest, PoolScope, PrivacyScore, RelaySnapshot, RingSnapshot, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
+import type { Address, CredentialHandle, Hex, IdempotencyKey, IntentRef, IntentStatus, MeshQuery, NoteSummary, PaymentRequest, PoolScope, PrivacyScore, RelaySnapshot, RingSnapshot, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 import { createNoteSecret, deriveCommitment } from '@opaque/zk';
 
 import { createMeshBootstrap } from '../../../backend/mesh/bootstrap.ts';
+import type { BackupTransport } from './passkey-backup.ts';
 import { chainTo } from '../../../backend/mesh/directory.ts';
 import { createGraphHealth } from '../../../backend/mesh/graph-health.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from '../../../backend/mesh/contracts.ts';
@@ -32,6 +33,7 @@ import { accountOf, recipientFor, scopeOf, xAddressOf, type XrplDestination } fr
 import { faucetDeposit, meshLedger, nullifierSpent, onrampUrl, registerTag, tagStatus, type XrplSend } from '../../../backend/xrpl/queries.ts';
 import { closeSite, newSite, resultOf, rotate, setupSite, signAndSubmit, signMessage, signOnly, syncIndex, type Site } from '../../../backend/xrpl/site.ts';
 import { planSweep, runSweep, sweepKey, type SweepPlan } from '../../../backend/xrpl/sweep.ts';
+import { deliverMinOf, notesForPayments, quoteNotes, xrpPriceIn } from '../../../backend/xrpl/swap.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient, type NoteVault } from '../../../packages/ring-client/src/index.ts';
 import { xrplDeployment, xrplMeshTrustRoot, type XrplPoolDeployment } from '../../../deployments/xrpl.ts';
@@ -52,7 +54,6 @@ export interface XrplStackConfig {
   /** A dev server's root, for its random mesh. A built wallet never reads it. */
   readonly trustRoot: DirectoryTrustRoot;
   readonly cre: { readonly publicKey: `0x${string}`; readonly encryptionKeyId: string; readonly policyVersion: string };
-  readonly credentialUrl: string;
   readonly buy: boolean;
   /** Set when the stack offers WalletConnect (lib/walletconnect.ts): its relay and Verify, through the stack. */
   readonly walletConnect?: WalletConnectConfig | null;
@@ -68,7 +69,7 @@ const UNIT = 1_000_000;
  */
 const storageOf = (account: AccountKeys | null) => {
   const name = (part: string) => scoped(account === null ? `opaque:xrpl-${part}:v1` : `opaque:xrpl:${account.id}:${part}:v1`);
-  return { notes: name('notes'), tags: name('tags'), activity: name('activity'), sites: name('sites'), counters: name('note-counters'), addresses: name('addresses') };
+  return { notes: name('notes'), tags: name('tags'), activity: name('activity'), sites: name('sites'), counters: name('note-counters'), addresses: name('addresses'), swapTags: name('swap-tags') };
 };
 /** Whether the browser wallet from before recovery phrases holds anything. */
 export const hasBrowserWallet = (): boolean => {
@@ -128,6 +129,18 @@ export interface ReceiveTag {
   readonly createdAt: number;
 }
 
+export interface SwapQuote {
+  /** In `to`'s units: settled one by one, and the least, together. */
+  readonly out: bigint;
+  readonly least: bigint;
+  /** The pool's fee on the notes spent, in `from`'s units. */
+  readonly fees: bigint;
+  readonly notes: number;
+  /** Each note's quote, as if it settled last, and the notes a tag needs to take them all. */
+  readonly each: readonly bigint[];
+  readonly tagNotes: ReadonlyMap<number, number>;
+}
+
 export interface Sent {
   readonly id: string;
   readonly symbol: string;
@@ -135,6 +148,10 @@ export interface Sent {
   readonly amount: number;
   readonly destination: XrplDestination;
   readonly createdAt: number;
+  /** A private swap: the asset the notes became, in the other pool. */
+  readonly swapTo?: string;
+  /** Into the account's swap tag, carrying leftovers forward, rather than a fresh one. */
+  readonly swapCarry?: boolean;
   readonly notes: { readonly noteId: string; readonly size: number; readonly reservation: string; handle?: string; state: string; txHash?: string; error?: string }[];
 }
 
@@ -167,7 +184,7 @@ export interface XrplWallet {
   notes(): Promise<readonly NoteSummary[]>;
   balance(symbol: string): Promise<{ readonly units: number; readonly notes: number }>;
   /** A fresh tag and its notes, registered with the attesters. */
-  receive(symbol: string, expected?: number): Promise<ReceiveTag>;
+  receive(symbol: string, expected?: number, counts?: ReadonlyMap<number, number>): Promise<ReceiveTag>;
   tags(): readonly ReceiveTag[];
   tagStatus(t: ReceiveTag): Promise<{ readonly notes: number; readonly carried: bigint }>;
   /** A signed MoonPay checkout for the tag; the caller opens it in a new tab. */
@@ -179,7 +196,34 @@ export interface XrplWallet {
   send(input: {
     readonly symbol: string; readonly amount: number; readonly destination: XrplDestination;
     readonly waitForPrivacy: boolean; readonly deadline: UnixSeconds; readonly onProgress?: (line: string) => void;
+    /** A swap: each note's DeliverMin, from the notes' values after fees, sealed beside its spend. */
+    readonly deliverMin?: (nets: readonly bigint[]) => Promise<readonly bigint[]>;
+    readonly swapTo?: string;
+    readonly swapCarry?: boolean;
   }): Promise<Sent>;
+  /**
+   * What swapping `amount` of `from` into `to` would bring now, through the
+   * ledger's AMMs, or undefined when the notes held cannot make it exactly.
+   */
+  swapQuote(from: string, to: string, amount: number): Promise<SwapQuote | undefined>;
+  /**
+   * A private swap: the notes are spent through rings into a fresh tag of
+   * `to`'s pool, each delivering at least its quote less 2%. Nothing links
+   * the notes spent to the notes that arrive.
+   */
+  swap(input: {
+    readonly from: string; readonly to: string; readonly amount: number; readonly deadline: UnixSeconds; readonly onProgress?: (line: string) => void;
+    /** Into this account's swap tag for `to`, where leftovers under one note carry into the next swap's; a fresh one-time tag otherwise. */
+    readonly carry?: boolean;
+  }): Promise<{ readonly sent: Sent; readonly tag: number }>;
+  /** What this account's swap tag for `symbol` carries: under one note, waiting for the next swap. 0 without one. */
+  swapCarried(symbol: string): Promise<bigint>;
+  /**
+   * Each asset in US dollars, as the ledger prices it: USDC and RLUSD at 1,
+   * XRP at the ledger's XRP/USDC price, null where there is none (MPTs).
+   * Read through the relays, at most once a minute.
+   */
+  usdPrices(): Promise<Readonly<Record<string, number | null>>>;
   activity(): readonly Sent[];
   /** Polls each unfinished note of each payment through the mesh. */
   pollActivity(): Promise<readonly Sent[]>;
@@ -219,10 +263,12 @@ export interface XrplWallet {
   sweep(secret: string, plan: SweepPlan, onProgress?: (line: string) => void): Promise<readonly string[]>;
 }
 
-export async function startXrplWallet(config?: XrplStackConfig, account: AccountKeys | null = null): Promise<XrplWallet> {
-  const cfg = config ?? (await loadXrplStack());
-  const K = storageOf(account);
-
+/**
+ * This page's mesh: the directory checked against the pinned root first, then
+ * every query through three relays. One per page, shared by the wallet and the
+ * passkey backup, which may need it before any account opens.
+ */
+function meshOf(cfg: XrplStackConfig) {
   const relayHealth = createGraphHealth({ fetchSnapshot: async () => (await query<RelaySnapshot>({ kind: 'RELAY_SNAPSHOT' })).value });
   // VERIFY FIRST: throws before any relay is contacted if the directory does
   // not chain to the root. Only a dev server's wallet takes the stack's root.
@@ -236,6 +282,22 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     (await bootstrap.transport.query(request, await bootstrap.pathFor())) as unknown as { value: T };
   void relayHealth.refresh();
   setInterval(() => void relayHealth.refresh(), 120_000);
+  return { bootstrap, query };
+}
+let pageQuery: (<T>(request: MeshQuery) => Promise<{ value: T }>) | undefined;
+let pageMesh: Promise<<T>(request: MeshQuery) => Promise<{ value: T }>> | undefined;
+/** The passkey backup's way to its store (lib/passkey-backup.ts): through this page's mesh, an account open or not. */
+export const backupTransport = (): BackupTransport => async (operation, encodedRequest) => {
+  const query = pageQuery ?? await (pageMesh ??= loadXrplStack().then((cfg) => meshOf(cfg).query));
+  return (await query<Hex>({ kind: 'BACKUP', operation, encodedRequest })).value;
+};
+
+export async function startXrplWallet(config?: XrplStackConfig, account: AccountKeys | null = null): Promise<XrplWallet> {
+  const cfg = config ?? (await loadXrplStack());
+  const K = storageOf(account);
+
+  const { bootstrap, query } = meshOf(cfg);
+  pageQuery = query;
 
   const xrpl: XrplSend = async (operation, encodedRequest) => (await query<Hex>({ kind: 'XRPL', operation, encodedRequest })).value;
   // A per-site account's reads and transactions, through the mesh like everything else.
@@ -316,65 +378,79 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
   }
   const scopes = () => xrplDeployment.pools.flatMap((p) => p.sizes.map((size) => ({ p, scope: scopeFor(p, size) })));
 
-  // ── the reusable address: one per pool, found again from the phrase ─────
-  // Everything is drawn from the account key: candidate tag i, its hash chain,
-  // and note j of each size, which is the j-th note that size credits on the
-  // tag. So any browser with the phrase knows which notes a payment made,
-  // without a scan, and the pool learns nothing it did not already hold.
-  const addressLabel = (p: XrplPoolDeployment, i: number) => `address/${xrplDeployment.network.name}/${p.account}/${i}`;
-  const tagAt = (keys: AccountKeys, p: XrplPoolDeployment, i: number) => {
-    const b = stream(keys.key, `${addressLabel(p, i)}/tag`)(4);
+  // ── owned tags: the reusable address, and the swap tag ──────────────────
+  // One of each per pool, found again from the phrase. Everything is drawn
+  // from the account key: candidate tag i, its hash chain, and note j of each
+  // size, which is the j-th note that size credits on the tag. So any browser
+  // with the phrase knows which notes a payment made, without a scan, and the
+  // pool learns nothing it did not already hold.
+  //
+  //   address  the address this account shares (labels pinned: never change them)
+  //   swaps    where swaps land when leftovers carry forward: what is under one
+  //            note stays carried on the tag and joins the next swap's. Its own
+  //            labels, so it is never the shared address.
+  type TagKind = 'address' | 'swaps';
+  const labelOf = (kind: TagKind, p: XrplPoolDeployment, i: number) => `${kind}/${xrplDeployment.network.name}/${p.account}/${i}`;
+  const tagAt = (keys: AccountKeys, p: XrplPoolDeployment, i: number, kind: TagKind = 'address') => {
+    const b = stream(keys.key, `${labelOf(kind, p, i)}/tag`)(4);
     return 1 + ((((b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0) % 0xffff_fffe);
   };
   /** Link n of candidate i's chain: SHA-256 applied n times to its seed. The anchor is link CHAIN. */
-  const linkAt = (keys: AccountKeys, p: XrplPoolDeployment, i: number, n: number) => {
-    let h = stream(keys.key, `${addressLabel(p, i)}/owner`)(32);
+  const linkAt = (keys: AccountKeys, p: XrplPoolDeployment, i: number, n: number, kind: TagKind = 'address') => {
+    let h = stream(keys.key, `${labelOf(kind, p, i)}/owner`)(32);
     for (let k = 0; k < n; k++) h = sha256(h);
     return toHex(h) as string;
   };
-  const addressDraw = (keys: AccountKeys, p: XrplPoolDeployment, i: number, size: number, j: number) => stream(keys.key, `${addressLabel(p, i)}/note/${size}/${j}`);
-  const addressCommitment = (keys: AccountKeys, p: XrplPoolDeployment, i: number, size: number, j: number) =>
-    deriveCommitment(createNoteSecret(addressDraw(keys, p, i, size, j)), scopeFor(p, size));
-  /** The next notes for the tag: per size, from position `from[size]`, at most 64 in all. */
-  const addressBatch = (keys: AccountKeys, p: XrplPoolDeployment, i: number, from: Record<string, number>) => {
+  const addressDraw = (keys: AccountKeys, p: XrplPoolDeployment, i: number, size: number, j: number, kind: TagKind = 'address') => stream(keys.key, `${labelOf(kind, p, i)}/note/${size}/${j}`);
+  const addressCommitment = (keys: AccountKeys, p: XrplPoolDeployment, i: number, size: number, j: number, kind: TagKind = 'address') =>
+    deriveCommitment(createNoteSecret(addressDraw(keys, p, i, size, j, kind)), scopeFor(p, size));
+  /** The next notes for the tag: per size, from position `from[size]`, `counts[size]` of them or an even share of 64. */
+  const addressBatch = (keys: AccountKeys, p: XrplPoolDeployment, i: number, from: Record<string, number>, kind: TagKind = 'address', counts?: Record<string, number>) => {
     const per = Math.min(20, Math.floor(64 / Object.keys(from).length));
     return Object.fromEntries(Object.entries(from).map(([size, start]) =>
-      [size, Array.from({ length: per }, (_, k) => addressCommitment(keys, p, i, Number(size), start + k))]));
+      [size, Array.from({ length: counts?.[size] ?? per }, (_, k) => addressCommitment(keys, p, i, Number(size), start + k, kind))]));
   };
-  const addresses = () => load<Record<string, AddressRecord>>(K.addresses, {});
-  const saveAddress = (pool: string, rec: AddressRecord) => save(K.addresses, { ...addresses(), [pool]: rec });
+  const recordsOf = (kind: TagKind) => load<Record<string, AddressRecord>>(kind === 'address' ? K.addresses : K.swapTags, {});
+  const saveRecord = (kind: TagKind, pool: string, rec: AddressRecord) => save(kind === 'address' ? K.addresses : K.swapTags, { ...recordsOf(kind), [pool]: rec });
+  const addresses = () => recordsOf('address');
+  const saveAddress = (pool: string, rec: AddressRecord) => saveRecord('address', pool, rec);
   /**
-   * This account's address on a pool: the first candidate tag whose chain is
-   * its own, or, with `make`, the first free one, registered with its anchor.
-   * ponytail: without `make` it stops at the first free candidate, so an
-   * address that skipped a tag someone had paid unregistered is found only by
-   * asking for it; scan all eight if that ever matters.
+   * This account's owned tag of a kind on a pool: the first candidate whose
+   * chain is its own, or, with `make`, the first free one, registered with
+   * its anchor.
+   * ponytail: without `make` it stops at the first free candidate, so a tag
+   * that skipped one someone had paid unregistered is found only by asking
+   * for it; scan all eight if that ever matters.
    */
-  async function claimAddress(keys: AccountKeys, p: XrplPoolDeployment, make: boolean): Promise<AddressRecord | null> {
+  const claiming = new Map<string, Promise<AddressRecord>>();
+  /** Dollar stablecoins, counted at $1. ponytail: testnet's own tokens; a price feed when mainnet needs one. */
+  const STABLE = new Set(['USDC', 'RLUSD']);
+  let priced: { readonly at: number; readonly value: Readonly<Record<string, number | null>> } | undefined;
+  async function claimAddress(keys: AccountKeys, p: XrplPoolDeployment, make: boolean, kind: TagKind = 'address'): Promise<AddressRecord | null> {
     for (let i = 0; i < 8; i++) {
-      const tag = tagAt(keys, p, i);
+      const tag = tagAt(keys, p, i, kind);
       const s = await tagStatus(xrpl, p.account, tag);
       if (s.owner !== null) {
-        if (linkAt(keys, p, i, CHAIN - s.owner.depth) === s.owner.anchor) return { i, tag, synced: {} };
+        if (linkAt(keys, p, i, CHAIN - s.owner.depth, kind) === s.owner.anchor) return { i, tag, synced: {} };
         continue;
       }
       if (s.registered || s.notes > 0) continue;
       if (!make) return null;
       try {
-        await registerTag(xrpl, p.account, tag, addressBatch(keys, p, i, Object.fromEntries(p.sizes.map((size) => [String(size), 0]))), { owner: linkAt(keys, p, i, CHAIN) });
+        await registerTag(xrpl, p.account, tag, addressBatch(keys, p, i, Object.fromEntries(p.sizes.map((size) => [String(size), 0])), kind), { owner: linkAt(keys, p, i, CHAIN, kind) });
         return { i, tag, synced: {} };
       } catch (error) {
         // Paid before anyone registered it: the next candidate.
         if (!/already in use/.test((error as Error).message)) throw error;
       }
     }
-    throw new Error('no free tag for this account\'s address yet: try again');
+    throw new Error('no free tag for this account yet: try again');
   }
   /**
-   * Keeps the notes payments have credited to the address, and tops it up
+   * Keeps the notes payments have credited to an owned tag, and tops it up
    * when a size runs low, revealing the next link. Returns the notes it kept.
    */
-  async function syncAddress(keys: AccountKeys, p: XrplPoolDeployment, rec: AddressRecord): Promise<number> {
+  async function syncAddress(keys: AccountKeys, p: XrplPoolDeployment, rec: AddressRecord, kind: TagKind = 'address'): Promise<number> {
     const s = await tagStatus(xrpl, p.account, rec.tag);
     const have = new Set((await vault.list()).map((n) => n.commitment as string));
     const synced = { ...rec.synced };
@@ -382,21 +458,46 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     for (const size of p.sizes) {
       const credited = s.sizes[String(size)]?.credited ?? 0;
       for (let j = synced[String(size)] ?? 0; j < credited; j++) {
-        if (have.has(addressCommitment(keys, p, rec.i, size, j))) continue;
-        drawing = addressDraw(keys, p, rec.i, size, j);
+        if (have.has(addressCommitment(keys, p, rec.i, size, j, kind))) continue;
+        drawing = addressDraw(keys, p, rec.i, size, j, kind);
         try { await vault.create(scopeFor(p, size)); } finally { drawing = undefined; }
         kept++;
       }
       synced[String(size)] = Math.max(synced[String(size)] ?? 0, credited);
     }
-    saveAddress(p.account, { ...rec, synced });
+    saveRecord(kind, p.account, { ...rec, synced });
     const low = p.sizes.filter((size) => { const z = s.sizes[String(size)]; return z !== undefined && z.registered - z.credited < LOW; });
     if (low.length > 0 && s.owner !== null) {
       const from = Object.fromEntries(low.map((size) => [String(size), s.sizes[String(size)]!.registered]));
       // Another browser of the phrase may top it up first; its link is then spent, and the next sync sees its notes.
-      await registerTag(xrpl, p.account, rec.tag, addressBatch(keys, p, rec.i, from), { reveal: linkAt(keys, p, rec.i, CHAIN - s.owner.depth - 1) }).catch(() => undefined);
+      await registerTag(xrpl, p.account, rec.tag, addressBatch(keys, p, rec.i, from, kind), { reveal: linkAt(keys, p, rec.i, CHAIN - s.owner.depth - 1, kind) }).catch(() => undefined);
     }
     return kept;
+  }
+  /**
+   * The swap tag on `p`, made the first time, with at least `need[size]`
+   * notes of each size not yet credited: a swap's payments must all find one.
+   * Topped up as many times as it takes, 64 notes a registration.
+   */
+  async function swapTagReady(keys: AccountKeys, p: XrplPoolDeployment, need: ReadonlyMap<number, number>): Promise<AddressRecord> {
+    const rec = recordsOf('swaps')[p.account] ?? await claimAddress(keys, p, true, 'swaps');
+    if (recordsOf('swaps')[p.account] === undefined) saveRecord('swaps', p.account, rec!);
+    for (let round = 0; round < 8; round++) {
+      const s = await tagStatus(xrpl, p.account, rec!.tag);
+      const short = Object.fromEntries(p.sizes.flatMap((size) => {
+        const z = s.sizes[String(size)];
+        const missing = (need.get(size) ?? 0) - ((z?.registered ?? 0) - (z?.credited ?? 0));
+        return missing > 0 ? [[String(size), missing]] : [];
+      }));
+      if (Object.keys(short).length === 0) return rec!;
+      if (s.owner === null) throw new Error('the swap tag is not this account\'s');
+      // At most 64 a registration: the rest next round, with the next link.
+      let room = 64;
+      const counts = Object.fromEntries(Object.entries(short).map(([size, n]) => { const k = Math.min(n, room); room -= k; return [size, k]; }).filter(([, k]) => (k as number) > 0));
+      const from = Object.fromEntries(Object.keys(counts).map((size) => [size, s.sizes[size]?.registered ?? 0]));
+      await registerTag(xrpl, p.account, rec!.tag, addressBatch(keys, p, rec!.i, from, 'swaps', counts), { reveal: linkAt(keys, p, rec!.i, CHAIN - s.owner.depth - 1, 'swaps') });
+    }
+    throw new Error('could not make room on the swap tag: try again');
   }
   const poolOf = (account: string) => xrplDeployment.pools.find((p) => p.account === account);
   const seal = createIntentSealer({
@@ -410,9 +511,9 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
   const credentials = new Map<string, string>();
   async function credentialFor(recipient: `0x${string}`): Promise<CredentialHandle> {
     if (!credentials.has(recipient)) {
-      const response = await fetch(cfg.credentialUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ recipient }) });
-      if (!response.ok) throw new Error(`the credential authority refused: ${response.status}`);
-      credentials.set(recipient, await response.text());
+      // Across the mesh like every read: the authority learns a recipient, never who asked.
+      const value = (await query<Hex>({ kind: 'CREDENTIAL', recipient: recipient as Address })).value;
+      credentials.set(recipient, new TextDecoder().decode(fromHex(value)));
     }
     return recipient as unknown as CredentialHandle;
   }
@@ -421,10 +522,10 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     // What paid this account's addresses since, first: their notes are kept here, then reconciled below.
     if (account !== null) {
       const keys = account;
-      await Promise.all(Object.entries(addresses()).map(([pool, rec]) => {
+      await Promise.all((['address', 'swaps'] as const).flatMap((kind) => Object.entries(recordsOf(kind)).map(([pool, rec]) => {
         const p = poolOf(pool);
-        return p === undefined ? 0 : syncAddress(keys, p, rec).catch(() => 0);
-      }));
+        return p === undefined ? 0 : syncAddress(keys, p, rec, kind).catch(() => 0);
+      })));
     }
     const notes = await vault.list();
     for (const n of notes) {
@@ -437,7 +538,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     return vault.list();
   }
 
-  async function payNote(note: NoteSummary, reservation: string, destination: XrplDestination, minScore: number, deadline: UnixSeconds): Promise<IntentRef> {
+  async function payNote(note: NoteSummary, reservation: string, destination: XrplDestination, minScore: number, deadline: UnixSeconds, deliverMin?: bigint): Promise<IntentRef> {
     const recipient = recipientFor(destination);
     const request: PaymentRequest = {
       noteId: note.id, recipient, minPrivacyScore: minScore as PrivacyScore, deadline,
@@ -453,7 +554,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
         submit: async (intent) => bootstrap.transport.submitIntent(intent, await bootstrap.pathFor()),
         getStatus: async (handle: StatusHandle) => (await query<IntentStatus>({ kind: 'INTENT_STATUS', handle })).value,
       },
-      sealIntent: (input) => seal({ ...input, spend: { ...(input.spend as object), destination } }),
+      sealIntent: (input) => seal({ ...input, spend: { ...(input.spend as object), destination, ...(deliverMin === undefined ? {} : { deliverMin: deliverMin.toString(10) }) } }),
       resolveNoteScope: async () => note.scope,
     } as Pick<AdapterPorts, 'ring' | 'graph' | 'pathPolicy' | 'transport' | 'executor' | 'sealIntent' | 'resolveNoteScope'>;
     return createPaymentFlow(ports as AdapterPorts, request, note.scope, recipient);
@@ -470,12 +571,13 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       return { units: held.reduce((s, n) => s + n.scope.denomination / UNIT, 0), notes: held.length };
     },
 
-    async receive(symbol, expected = 0) {
+    async receive(symbol, expected = 0, wanted) {
       const p = poolBySymbol(symbol);
       const sizes = [...p.sizes].sort((a, b) => b - a);
       // Enough of each smaller size for any remainder (9), and of the largest
-      // for what is expected plus one; 64 at most per registration.
-      const counts = new Map(sizes.map((s, i) => [s, i === 0 ? Math.min(64 - 9 * (sizes.length - 1), Math.ceil(expected * UNIT / s) + 1) : 9]));
+      // for what is expected plus one; 64 at most per registration. A swap
+      // says what it needs instead: its payments arrive one per note.
+      const counts = wanted ?? new Map(sizes.map((s, i) => [s, i === 0 ? Math.min(64 - 9 * (sizes.length - 1), Math.ceil(expected * UNIT / s) + 1) : 9]));
       const mint = async () => {
         const commitments: Record<string, NoteSummary['commitment'][]> = {};
         for (const [size, n] of counts) {
@@ -507,9 +609,19 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     async address(symbol) {
       if (account === null) return null;
       const p = poolBySymbol(symbol);
-      const rec = addresses()[p.account] ?? await claimAddress(account, p, true);
-      if (addresses()[p.account] === undefined) saveAddress(p.account, rec!);
-      return { symbol, pool: p.account, tag: rec!.tag, xAddress: xAddressOf(p.account, rec!.tag, isTestnet()) };
+      // One claim per pool at a time: a second, alongside, would find the
+      // first's tag taken and register the next candidate as well.
+      let claim = claiming.get(p.account);
+      if (claim === undefined) {
+        claim = (async () => {
+          const rec = addresses()[p.account] ?? await claimAddress(account, p, true);
+          if (addresses()[p.account] === undefined) saveAddress(p.account, rec!);
+          return addresses()[p.account]!;
+        })().finally(() => claiming.delete(p.account));
+        claiming.set(p.account, claim);
+      }
+      const rec = await claim;
+      return { symbol, pool: p.account, tag: rec.tag, xAddress: xAddressOf(p.account, rec.tag, isTestnet()) };
     },
     tagStatus: (t) => tagStatus(xrpl, t.pool, t.tag),
     buyUrl: (t, fiat) => onrampUrl(xrpl, t.pool, t.tag, fiat),
@@ -524,16 +636,17 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       return makeAmount(amount, p.sizes.map((s) => s / UNIT), have);
     },
 
-    async send({ symbol, amount, destination, waitForPrivacy, deadline, onProgress }) {
+    async send({ symbol, amount, destination, waitForPrivacy, deadline, onProgress, deliverMin, swapTo, swapCarry }) {
       const p = poolBySymbol(symbol);
       const plan = await wallet.plan(symbol, amount);
       if (plan === undefined) throw new Error(`the notes held cannot make ${amount} ${symbol} exactly`);
       const available = (await vault.list()).filter((n) => n.state === 'AVAILABLE' && accountOf(n.scope.pool) === p.account);
       const picked: NoteSummary[] = [];
       for (const [size, count] of plan) picked.push(...available.filter((n) => n.scope.denomination === size * UNIT).slice(0, count));
+      const mins = deliverMin === undefined ? undefined : await deliverMin(picked.map((n) => BigInt(n.scope.denomination) - BigInt(p.spendFee)));
       const id = toHex(crypto.getRandomValues(new Uint8Array(8)));
       const sent: Sent = {
-        id, symbol, amount, destination, createdAt: Date.now(),
+        id, symbol, amount, destination, createdAt: Date.now(), ...(swapTo === undefined ? {} : { swapTo }), ...(swapCarry ? { swapCarry } : {}),
         notes: picked.map((n, i) => ({ noteId: n.id, size: n.scope.denomination / UNIT, reservation: `xrpl:${id}:${i}`, state: 'PROVING' })),
       };
       save(K.activity, [sent, ...load<Sent[]>(K.activity, [])]);
@@ -542,7 +655,17 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
         const entry = sent.notes[i]!;
         onProgress?.(`note ${i + 1}/${picked.length} (${entry.size} ${symbol}): proving in this browser…`);
         try {
-          const ref = await payNote(note, entry.reservation, destination, waitForPrivacy ? WAIT_SCORE : 0, deadline);
+          // A dropped connection is tried again, twice: the note's reservation is
+          // the same, so a payment the first try did get through cannot spend it twice
+          // (one nullifier), and the user is not left with half a swap for a blip.
+          let ref: IntentRef;
+          for (let attempt = 0; ; attempt++) {
+            try { ref = await payNote(note, entry.reservation, destination, waitForPrivacy ? WAIT_SCORE : 0, deadline, mins?.[i]); break; } catch (error) {
+              if (attempt >= 2 || !/failed to fetch|networkerror|load failed|network connection/i.test((error as Error).message)) throw error;
+              onProgress?.(`note ${i + 1}/${picked.length}: the connection dropped, trying again…`);
+              await new Promise((resolve) => setTimeout(resolve, 2_000 * (attempt + 1)));
+            }
+          }
           entry.handle = ref.statusHandle as string;
           entry.state = 'SUBMITTED';
           onProgress?.(`note ${i + 1}/${picked.length}: sealed and sent through the mesh`);
@@ -556,17 +679,65 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       });
       return sent;
     },
+    async swapQuote(from, to, amount) {
+      const [a, b] = [poolBySymbol(from), poolBySymbol(to)];
+      const plan = await wallet.plan(from, amount);
+      if (plan === undefined) return undefined;
+      const nets = [...plan].flatMap(([size, count]) => Array.from({ length: count }, () => BigInt(size * UNIT) - BigInt(a.spendFee)));
+      const read = <T,>(command: string, params: Record<string, unknown>) => meshLedger(xrpl).request<T>(command, params);
+      const { each, total } = await quoteNotes(read, a.asset, b.asset, nets);
+      const tagNotes = notesForPayments(each, b.sizes);
+      if ([...tagNotes.values()].reduce((n, c) => n + c, 0) > 64) throw new Error(`that swap would arrive as more notes than one tag holds: swap it in two parts`);
+      return { out: total, least: each.reduce((sum, e) => sum + deliverMinOf(e), 0n), fees: BigInt(a.spendFee) * BigInt(nets.length), notes: nets.length, each, tagNotes };
+    },
+    async usdPrices() {
+      if (priced !== undefined && Date.now() - priced.at < 60_000) return priced.value;
+      const usdc = xrplDeployment.pools.find((p) => p.symbol === 'USDC');
+      const read = <T,>(command: string, params: Record<string, unknown>) => meshLedger(xrpl).request<T>(command, params);
+      const xrp = usdc === undefined ? null : await xrpPriceIn(read, usdc.asset).catch(() => null);
+      const value = Object.fromEntries(xrplDeployment.pools.map((p) => [p.symbol, p.asset.kind === 'XRP' ? xrp : STABLE.has(p.symbol) ? 1 : null]));
+      if (xrp !== null) priced = { at: Date.now(), value };
+      return value;
+    },
+    async swapCarried(symbol) {
+      const rec = recordsOf('swaps')[poolBySymbol(symbol).account];
+      return rec === undefined ? 0n : (await tagStatus(xrpl, poolBySymbol(symbol).account, rec.tag)).carried;
+    },
+    async swap({ from, to, amount, deadline, onProgress, carry }) {
+      const [a, b] = [poolBySymbol(from), poolBySymbol(to)];
+      const quote = await wallet.swapQuote(from, to, amount);
+      if (quote === undefined) throw new Error(`the notes held cannot make ${amount} ${from} exactly`);
+      // Carrying needs the phrase (the tag is drawn from it); the browser account always takes a fresh tag.
+      const carrying = carry === true && account !== null;
+      onProgress?.(carrying ? `readying your ${to} swap tag, where leftovers carry forward…` : `making a fresh ${to} tag for what the swap brings…`);
+      // A one-time tag: nothing ties what arrives to this wallet's other deposits. The swap
+      // tag ties this swap to the others into this asset, and nothing else.
+      const tag = carrying ? (await swapTagReady(account!, b, quote.tagNotes)).tag : (await wallet.receive(to, Number(quote.out) / Number(UNIT), quote.tagNotes)).tag;
+      const read = <T,>(command: string, params: Record<string, unknown>) => meshLedger(xrpl).request<T>(command, params);
+      const sent = await wallet.send({
+        symbol: from, amount, destination: { account: b.account, tag }, waitForPrivacy: false, deadline, swapTo: to, swapCarry: carrying,
+        ...(onProgress ? { onProgress } : {}),
+        // Asked again as the notes go: the least each must bring, if it settles last.
+        deliverMin: async (nets) => (await quoteNotes(read, a.asset, b.asset, nets)).each.map(deliverMinOf),
+      });
+      return { sent, tag };
+    },
     activity: () => load<Sent[]>(K.activity, []),
     async pollActivity() {
-      const all = load<Sent[]>(K.activity, []);
-      for (const sent of all) {
+      // What each polled note's status says, kept apart and laid onto storage
+      // at the end: a send still under way writes its notes meanwhile, and a
+      // copy read before it would undo them.
+      const changes = new Map<string, { state: string; txHash?: string; error?: string }>();
+      for (const sent of load<Sent[]>(K.activity, [])) {
         for (const entry of sent.notes) {
           if (entry.handle === undefined || entry.state === 'SETTLED' || entry.state === 'FAILED') continue;
           const status = (await query<IntentStatus>({ kind: 'INTENT_STATUS', handle: entry.handle as StatusHandle }).catch(() => null))?.value;
           if (status === undefined) continue;
-          entry.state = status.state;
-          if (status.txHash !== undefined) entry.txHash = status.txHash.slice(2).toUpperCase();
-          if (status.error !== undefined) entry.error = status.error.publicMessage;
+          changes.set(`${sent.id}:${entry.reservation}`, {
+            state: status.state,
+            ...(status.txHash === undefined ? {} : { txHash: status.txHash.slice(2).toUpperCase() }),
+            ...(status.error === undefined ? {} : { error: status.error.publicMessage }),
+          });
           if (status.state === 'FAILED') {
             // Back to spendable unless the ledger says the note is gone.
             await vault.release({ noteId: entry.noteId as never, reservation: entry.reservation as IdempotencyKey, terminalIntent: entry.handle as never }).catch(() => undefined);
@@ -575,8 +746,10 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
           if (status.state === 'SETTLED') await vault.reconcile(entry.noteId as never).catch(() => undefined);
         }
       }
-      save(K.activity, all);
-      return all;
+      const latest = load<Sent[]>(K.activity, []);
+      for (const sent of latest) for (const entry of sent.notes) Object.assign(entry, changes.get(`${sent.id}:${entry.reservation}`) ?? {});
+      save(K.activity, latest);
+      return latest;
     },
     ring,
     pathFor: () => bootstrap.pathFor(),
@@ -712,17 +885,23 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       }
       // The account's reusable addresses, wherever another browser made them.
       for (const p of xrplDeployment.pools) {
-        if (addresses()[p.account] !== undefined) continue;
-        onProgress?.(`Looking for your ${p.symbol} address…`);
-        const rec = await claimAddress(account, p, false).catch(() => null);
-        if (rec !== null) { saveAddress(p.account, rec); kept += await syncAddress(account, p, rec).catch(() => 0); }
+        for (const kind of ['address', 'swaps'] as const) {
+          if (recordsOf(kind)[p.account] !== undefined) continue;
+          onProgress?.(kind === 'address' ? `Looking for your ${p.symbol} address…` : `Looking for your ${p.symbol} swaps…`);
+          const rec = await claimAddress(account, p, false, kind).catch(() => null);
+          if (rec !== null) { saveRecord(kind, p.account, rec); kept += await syncAddress(account, p, rec, kind).catch(() => 0); }
+        }
       }
       onProgress?.('Checking which of them are still yours to spend…');
       await refresh(true);
       return kept;
     },
     async probe(other) {
-      // Whether an account was ever used: its first notes of a size are among its first numbers.
+      // Whether an account was ever used: its reusable address (made the first time it opens), a
+      // swap tag, or notes of a one-time tag among its first numbers.
+      for (const kind of ['address', 'swaps'] as const) {
+        for (const p of xrplDeployment.pools) if (await claimAddress(other, p, false, kind).catch(() => null) !== null) return 1;
+      }
       for (const { scope } of scopes()) if ((await scan(other, scope, 0, PROBE_GAP)).length > 0) return 1;
       return 0;
     },
