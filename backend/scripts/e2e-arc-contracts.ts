@@ -124,6 +124,8 @@ try {
       await page.click('#tab-contracts');
       await new Promise((r) => setTimeout(r, 10_000));
     }
+    const gas = Number.parseFloat(String(await page.textContent('#contracts-gas')));
+    if (!(gas >= 1)) throw new Error(`no USDC arrived at ${account}: send 2 testnet USDC, then run again (the same account opens)`);
     await page.fill('#deploy-code', initcode);
     await page.fill('#deploy-salt', salt);
 

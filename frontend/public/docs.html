@@ -24,11 +24,11 @@
   :focus-visible { outline: 2px solid var(--soft); outline-offset: 3px; border-radius: 6px; }
 
   .top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; padding: 0 clamp(16px, 4vw, 40px); border-bottom: 1px solid var(--line); background: rgba(7, 6, 8, 0.86); backdrop-filter: blur(12px); }
-  .brand { display: flex; align-items: baseline; gap: 10px; color: var(--cream); text-decoration: none; }
-  .brand b { font: 700 26px/1 "Quicksand", system-ui, sans-serif; letter-spacing: -0.02em; color: var(--orange); }
-  .brand span { color: var(--muted); font-size: 14px; }
+  .brand { display: flex; align-items: center; gap: 12px; color: var(--cream); text-decoration: none; }
+  .brand img { display: block; width: auto; height: 32px; }
+  .brand span { padding-left: 12px; border-left: 1px solid var(--line); color: var(--muted); font-size: 14px; line-height: 20px; }
   .top nav { display: flex; gap: 6px; }
-  .top nav a { padding: 8px 14px; border-radius: 999px; color: var(--cream); font-size: 14px; font-weight: 500; text-decoration: none; }
+  .top nav a { white-space: nowrap; padding: 8px 14px; border-radius: 999px; color: var(--cream); font-size: 14px; font-weight: 500; text-decoration: none; }
   .top nav a:hover { background: var(--raised); color: var(--cream); }
   .top nav a.go { background: var(--orange); color: var(--ink); }
   .top nav a.go:hover { background: var(--soft); }
@@ -92,13 +92,16 @@
     .toc.open { display: block; }
     .toc-toggle { display: block; width: 100%; margin-top: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--cream); font: 500 15px "Poppins", system-ui, sans-serif; text-align: left; }
     .top nav a:not(.go) { display: none; }
+    .brand { gap: 10px; }
+    .brand img { height: 26px; }
+    .brand span { padding-left: 10px; }
     main { padding-top: 24px; }
   }
 </style>
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/"><b>opaque</b><span>Docs</span></a>
+  <a class="brand" href="/" aria-label="opaque, home"><img src="/logo.png" alt="opaque" width="942" height="200"><span>Docs</span></a>
   <nav><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="go" href="/app">Open the wallet</a></nav>
 </header>
 
