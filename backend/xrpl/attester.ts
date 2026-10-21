@@ -26,7 +26,7 @@ import { asPrivateSpend } from '@opaque/protocol-types/codecs.js';
 
 import { verifyRingSpend } from '../zk/index.ts';
 import { checkProposal, payoutBatch, rotationOf } from './batch.ts';
-import { ATTESTER_FLOOR, quoteSwap, swapInto } from './swap.ts';
+import { ATTESTER_FLOOR_BPS, quoteSwap, swapInto } from './swap.ts';
 import { keyChain, type KeyChain } from './keys.ts';
 import type { PoolSource } from './pool.ts';
 import { accountOf, asDestination, recipientFor, xrplChainId, type XrplDestination } from './protocol.ts';
@@ -200,7 +200,7 @@ export function createAttester(options: {
       if (deliver !== undefined) {
         const read = <T>(command: string, params: Record<string, unknown>) => client.request({ command, ...params } as never).then((r) => (r as { result: T }).result);
         const fair = await quoteSwap(read, pool.source.config.asset, deliver.asset, gross - fees);
-        if (deliver.min * ATTESTER_FLOOR < fair) refuse('INVALID_INPUT', 'the swap would settle far below the market');
+        if (deliver.min * 10_000n < fair * (10_000n - ATTESTER_FLOOR_BPS)) refuse('INVALID_INPUT', 'the swap would settle below the market');
       }
       const expected = payoutBatch({
         pool: account, asset: pool.source.config.asset, nullifiers: spends.map((s) => s.nullifier),

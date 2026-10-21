@@ -22,6 +22,7 @@
 import type { BackupOperation, Hex } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
+import { BASE_BITS, findWork } from '../../../backend/mesh/backup-work.ts';
 import { importedKeyTexts, restoreImportedKeys, savePhrase, saveWalletState, storedPhrase, walletState } from './xrpl-keys.ts';
 
 export type BackupTransport = (operation: BackupOperation, encodedRequest: Hex) => Promise<Hex>;
@@ -40,6 +41,8 @@ interface Local {
   readonly leftOut?: boolean;
   /** Which store it was last sent to (STORE). */
   readonly store?: string;
+  /** The work a new id cost (backend/mesh/backup-work.ts), kept for sending it to a new store. */
+  readonly work?: string;
 }
 interface Contents { readonly v: 1; readonly phrase: string | null; readonly imported: readonly string[]; readonly xrpl: Readonly<Record<string, string>>; readonly accounts?: number }
 
@@ -51,6 +54,8 @@ const MAX_BLOB = 24_000;
 /** The XRPL browser account's records: xrpl-runtime.ts storageOf(null). */
 const XRPL_BROWSER = /^opaque:xrpl-(notes|tags|sites):v1(@[a-z-]+)?$/;
 const WRAPPED = 12 + 32 + 16;
+/** Saved again at least this often, so the store never counts it stale (backup-store.ts STALE_MS). */
+const REFRESH_MS = 30 * 24 * 60 * 60 * 1000;
 
 const utf8 = (s: string) => new TextEncoder().encode(s);
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
@@ -178,14 +183,33 @@ export async function syncBackup(send: BackupTransport, force = false): Promise<
   if (local === null) return null;
   const body = utf8(JSON.stringify(contents(true)));
   const hash = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', body)));
-  if (!force && hash === local.hash && local.store === STORE) return local;
+  if (!force && hash === local.hash && local.store === STORE && Date.now() - (local.savedAt ?? 0) < REFRESH_MS) return local;
   let blob = await blobOf(local, body);
   const leftOut = blob.length > MAX_BLOB;
   if (leftOut) blob = await blobOf(local, utf8(JSON.stringify(contents(false))));
-  await call(send, 'PUT', { id: local.id, token: local.token, blob });
-  const saved = { ...local, hash, savedAt: Date.now(), leftOut, store: STORE };
+  const work = await put(send, local, blob);
+  const saved = { ...local, hash, savedAt: Date.now(), leftOut, store: STORE, ...(work === undefined ? {} : { work }) };
   saveLocal(saved);
   return saved;
+}
+
+/**
+ * PUT, with the work a new id costs: the store says how many bits it wants
+ * when what was sent falls short (it rises as the store fills), and the work
+ * is done then. An update to a backup already kept needs none.
+ */
+async function put(send: BackupTransport, local: Local, blob: string): Promise<string | undefined> {
+  let work = local.work;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await call(send, 'PUT', { id: local.id, token: local.token, blob, ...(work === undefined ? {} : { work }) });
+      return work;
+    } catch (error) {
+      const bits = /needs (\d+) bits of work/.exec((error as Error).message)?.[1];
+      if (bits === undefined || attempt >= 3) throw error;
+      work = await findWork(local.id, Number(bits));
+    }
+  }
 }
 
 /** Makes a passkey and the first backup under it. */
@@ -194,7 +218,9 @@ export async function createBackup(send: BackupTransport): Promise<Local> {
   try {
     const keys = await keysOf(prf);
     const dataKey = random(32);
-    saveLocal({ id: keys.id, token: keys.token, dataKey: hex(dataKey), wrapped: b64(await seal(keys.wrap, dataKey)), credential: b64url(credential) });
+    // A new id costs work: done now, at the least the store asks, while the passkey prompt is fresh.
+    const work = await findWork(keys.id, BASE_BITS);
+    saveLocal({ id: keys.id, token: keys.token, dataKey: hex(dataKey), wrapped: b64(await seal(keys.wrap, dataKey)), credential: b64url(credential), work });
     return (await syncBackup(send, true))!;
   } catch (error) {
     localStorage.removeItem(LOCAL);

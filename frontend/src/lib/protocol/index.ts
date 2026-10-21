@@ -327,3 +327,27 @@ export async function createPaymentFlow(
   });
   return ports.executor.submit(sealed);
 }
+
+/**
+ * Whether the swap about to be signed is the one the user was shown: its
+ * least within `previewBps` of the preview's least, and no more than
+ * `slippageBps` under its own estimate (the exit sets the slippage, so a
+ * floor near nothing is refused). Otherwise the user sees the new quote first.
+ */
+export function swapHoldsPreview(preview: { readonly toAmountMin: string }, signed: { readonly toAmount: string; readonly toAmountMin: string }, previewBps = 50n, slippageBps = 200n): boolean {
+  const least = BigInt(signed.toAmountMin);
+  return least * 10_000n >= BigInt(preview.toAmountMin) * (10_000n - previewBps)
+    && least * 10_000n >= BigInt(signed.toAmount) * (10_000n - slippageBps);
+}
+
+/**
+ * Smallest units as a decimal, grouped with commas whatever the browser's
+ * language: the result goes into amount fields, which read `.` as the
+ * decimal point and drop `,`. Grouped by the locale, German's 1.234 (one
+ * thousand two hundred thirty-four) would swap 1.234.
+ */
+export function fromUnits(units: bigint, decimals: number, places = 6): string {
+  const digits = units.toString().padStart(decimals + 1, '0');
+  const fraction = digits.slice(digits.length - decimals).slice(0, places).replace(/0+$/, '');
+  return `${BigInt(digits.slice(0, digits.length - decimals)).toLocaleString('en-US')}${fraction ? `.${fraction}` : ''}`;
+}

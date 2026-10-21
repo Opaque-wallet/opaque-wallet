@@ -20,12 +20,14 @@ import { join } from 'node:path';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { requireService } from '../../deployments/index.ts';
-import { ARC_READY, acceptTerms, createWallet, passkeyOffer } from './xrpl-wallet-page.ts';
+import { ARC_READY, acceptTerms, createWallet, passkeyOffer, PASSWORD } from './xrpl-wallet-page.ts';
 
 const ORIGIN = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit';
 const clean = ORIGIN.includes('opaque.credit');
-const XRPL = `${ORIGIN}/testnet/xrpl${clean ? '' : '.html'}`;
-const ARC = `${ORIGIN}/testnet/app${clean ? '' : '.html'}`;
+// A vite dev server (frontend: npx vite) serves the testnet pages at its root.
+const base = /\/\/(127\.0\.0\.1|localhost):/.test(ORIGIN) ? ORIGIN : `${ORIGIN}/testnet`;
+const XRPL = `${base}/xrpl${clean ? '' : '.html'}`;
+const ARC = `${base}/app${clean ? '' : '.html'}`;
 const log = (s: string) => process.stdout.write(`${s}\n`);
 let failures = 0;
 const check = (name: string, ok: boolean, detail: string) => {
@@ -110,6 +112,10 @@ try {
   const { id } = JSON.parse(String(await stored(page, 'opaque:passkey-backup:v1'))) as { id: string };
   await page.click('#account-button');
   await page.click('#passkey-remove');
+  // F-8 (overlord): removing it asks for the password too.
+  await page.waitForSelector('#confirm-password', { timeout: 30_000 });
+  await page.fill('#confirm-password', PASSWORD);
+  await page.click('#confirm-go');
   await page.waitForFunction(() => /^Removed/.test(document.getElementById('passkey-status')?.textContent ?? ''), null, { timeout: 60_000 });
   await page.keyboard.press('Escape');
   await clearSite(page);

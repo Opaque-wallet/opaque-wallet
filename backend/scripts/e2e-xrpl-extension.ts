@@ -89,6 +89,23 @@ try {
   const injected = await dapp.evaluate(() => (window as any).gemWallet === true && (window as any).xrpl?.isCrossmark === true);
   check('the extension answers as GemWallet and Crossmark', injected, `on ${DAPP}`);
 
+  // F-20 (overlord): the connect page, served to every https site, refuses to run inside one.
+  // OMEGA's PoC: a site reads the published URL and frames it, invisibly, to steer a click onto Approve.
+  const framedUrl = await dapp.evaluate(() => {
+    const url = document.documentElement.dataset['opaqueWallet']!;
+    const frame = Object.assign(document.createElement('iframe'), { src: url, style: 'width:1px;height:1px;opacity:0' });
+    document.body.append(frame);
+    return url;
+  });
+  let framed: any;
+  for (let i = 0; i < 40 && framed === undefined; i++) {
+    framed = dapp.frames().find((f: any) => f.url() === framedUrl);
+    if (framed === undefined) await dapp.waitForTimeout(250);
+  }
+  const framedText = framed === undefined ? 'no frame' : String(await framed.waitForFunction(() => document.body?.textContent ?? '', null, { timeout: 30_000 }).then((h: any) => h.jsonValue(), () => ''));
+  const framedButtons = framed === undefined ? -1 : await framed.evaluate(() => document.querySelectorAll('button').length).catch(() => -1);
+  check('framed by a site, the connect page shows nothing and does nothing (F-20)', /only in its own window/.test(framedText) && framedButtons === 0, framedText.slice(0, 60));
+
   let popup: any;
   let popups = 0;
   context.on('page', (p: any) => { if (p !== wallet && p !== dapp) { popups++; popup = p; police(p); } });

@@ -75,7 +75,7 @@ export function xrplAnswerer(node: XrplNode, moonpay?: CheckoutConfig): XrplSend
   // ponytail: one faucet call at a time, since the faucet limits by IP; a queue if testnet traffic grows.
   let fauceting = false;
   return createXrplAnswerer({
-    registerTag: (pool, tag, registration, auth) => node.registerTag(pool, tag, registration, auth),
+    registerTag: (pool, tag, registration, auth, payable) => node.registerTag(pool, tag, registration, auth, payable),
     async tagStatus(pool, tag) {
       const source = sourceOf(pool);
       await source.sync();
@@ -132,7 +132,7 @@ export interface XrplNode {
   readonly attesters: readonly Attester[];
   readonly settlement: XrplSettlement;
   ringSnapshot(scope: PoolScope): Promise<RingSnapshot>;
-  registerTag(pool: string, tag: number, registration: TagRegistration, auth?: TagAuth): Promise<void>;
+  registerTag(pool: string, tag: number, registration: TagRegistration, auth?: TagAuth, payable?: boolean): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -184,12 +184,12 @@ export async function startXrpl(options: { readonly dir?: string; readonly log?:
         now: BigInt(Math.floor(Date.now() / 1000)) as UnixSeconds,
       });
     },
-    async registerTag(pool, tag, registration, auth) {
+    async registerTag(pool, tag, registration, auth, payable) {
       const source = pools.get(pool)?.source;
       if (source === undefined) throw new ProtocolFailure('INVALID_INPUT', 'no XRPL pool at that address');
       // Current first: a tag that was paid since the last read is refused.
       await source.sync();
-      source.registerTag(tag, registration, auth);
+      source.registerTag(tag, registration, auth, payable);
     },
     close: () => client.disconnect(),
   };

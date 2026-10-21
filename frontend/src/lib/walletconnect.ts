@@ -83,10 +83,27 @@ function tunnelRelaySockets(tunnel: string): void {
   };
 }
 
+/** WalletConnect's records, in local storage under 'opaque:wc:v1:', which the lock seals (bigints kept as such). */
+const WC_KEY = 'opaque:wc:v1:';
+const toJson = (v: unknown) => JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? { $bigint: x.toString() } : x));
+const fromJson = (s: string): unknown => JSON.parse(s, (_k, x) => (x !== null && typeof x === 'object' && typeof (x as { $bigint?: unknown }).$bigint === 'string' ? BigInt((x as { $bigint: string }).$bigint) : x));
+const wcKeys = () => Object.keys(localStorage).filter((k) => k.startsWith(WC_KEY)).map((k) => k.slice(WC_KEY.length));
+const lockedStorage = {
+  getKeys: async () => wcKeys(),
+  getEntries: async () => wcKeys().map((k) => [k, fromJson(localStorage.getItem(WC_KEY + k)!)] as [string, unknown]),
+  getItem: async (k: string) => { const v = localStorage.getItem(WC_KEY + k); return v === null ? undefined : fromJson(v); },
+  setItem: async (k: string, v: unknown) => localStorage.setItem(WC_KEY + k, toJson(v)),
+  removeItem: async (k: string) => localStorage.removeItem(WC_KEY + k),
+};
+
 export async function startWalletConnect(config: WalletConnectConfig, chainId: string, handlers: WalletConnectHandlers): Promise<{ pair(uri: string): Promise<void> }> {
   tunnelRelaySockets(config.relayUrl);
   const [{ SignClient }, { buildApprovedNamespaces, getSdkError }] = await Promise.all([import('@walletconnect/sign-client'), import('@walletconnect/utils')]);
+  // Its own IndexedDB would keep sessions, per-site addresses and keys readable while Opaque is locked:
+  // instead they live in local storage under the password (lock.ts SECRET), and the old database goes.
+  indexedDB.deleteDatabase('WALLET_CONNECT_V2_INDEXED_DB');
   const client = await SignClient.init({
+    storage: lockedStorage as never,
     projectId: config.projectId, relayUrl: RELAY, telemetryEnabled: false,
     metadata: { name: 'Opaque', description: 'Private XRPL accounts, one per app', url: location.origin, icons: [] },
   });

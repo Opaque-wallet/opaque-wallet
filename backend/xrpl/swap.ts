@@ -16,15 +16,20 @@
 
 import { ProtocolFailure } from '@opaque/protocol-types';
 
-import { splitAmount, UNIT, type XrplAsset } from './protocol.ts';
+import { splitAmount, unitsOfDecimal, type XrplAsset } from './protocol.ts';
 
 /** A ledger read: rippled's command and its parameters, answered with its result. */
 export type LedgerRead = <T>(command: string, params: Record<string, unknown>) => Promise<T>;
 
 /** What a wallet accepts below the quote: 2%. */
 export const SWAP_SLIPPAGE_BPS = 200n;
-/** What an attester accepts: a DeliverMin no lower than half its own quote. */
-export const ATTESTER_FLOOR = 2n;
+/**
+ * What an attester accepts: a DeliverMin at most 10% under its own quote,
+ * from validated reserves. The DeliverMin travels beside the spend, not in
+ * its proof, so this floor is what an executor could shave; it leaves the
+ * wallet's 2% and some movement while a payment waits for privacy.
+ */
+export const ATTESTER_FLOOR_BPS = 1_000n;
 
 const refuse = (message: string): never => { throw new ProtocolFailure('INVALID_INPUT', message); };
 const sameAsset = (a: XrplAsset, b: XrplAsset): boolean =>
@@ -39,11 +44,8 @@ export function ammOut(amountIn: bigint, reserveIn: bigint, reserveOut: bigint, 
   return (reserveOut * kept) / (reserveIn * 100_000n + kept);
 }
 
-/** "12.3456789" in a token's 6-decimal units, rounded down. */
-const unitsOf = (value: string): bigint => {
-  const [whole, frac = ''] = value.split('.');
-  return BigInt(whole || '0') * UNIT + BigInt((frac + '000000').slice(0, 6));
-};
+/** "12.3456789", or "1.2e11" as the ledger writes large values, in a token's 6-decimal units, rounded down. */
+const unitsOf = (value: string): bigint => unitsOfDecimal(value);
 
 interface Reserves { readonly xrp: bigint; readonly token: bigint; readonly fee: number }
 
@@ -51,7 +53,8 @@ interface Reserves { readonly xrp: bigint; readonly token: bigint; readonly fee:
 async function reservesOf(read: LedgerRead, token: XrplAsset): Promise<Reserves> {
   if (token.kind !== 'IOU') return refuse(`no swaps for ${token.kind === 'MPT' ? 'MPTs' : 'XRP'} yet: swaps run through XRP/token AMMs`);
   const result = await read<{ amm?: { amount: string | { value: string }; amount2: string | { value: string }; trading_fee: number } }>('amm_info', {
-    asset: { currency: 'XRP' }, asset2: { currency: token.currency, issuer: token.issuer },
+    // Validated: the open ledger's reserves move with transactions not yet agreed on.
+    asset: { currency: 'XRP' }, asset2: { currency: token.currency, issuer: token.issuer }, ledger_index: 'validated',
   }).catch(() => ({ amm: undefined }));
   const amm = result.amm ?? refuse('there is no AMM for this pair on the ledger yet');
   // amm_info names the pair in the order it was created; XRP is the one that is a string.

@@ -24,4 +24,8 @@ WORKDIR /app/backend
 # backend/.backups is opaque-mainnet's volume: the passkey backups
 # (mesh/backup-store.ts). Railway mounts it owned by root, so hand it to the
 # service's user, then drop root for good. A service without it skips that.
+# The image's own user stays root for that reason alone (only root can take
+# over a root-owned mount): node runs as `opaque`, and only a shell opened
+# into the container (railway ssh) is root. Audited 2026-10-21 (overlord F-27),
+# accepted: a non-root image can't write the volume Railway gives it.
 CMD ["sh", "-c", "if [ -d /app/backend/.backups ]; then chown -R opaque:opaque /app/backend/.backups; fi && exec su-exec opaque node stack.ts"]

@@ -87,14 +87,28 @@ test('one upload, one total: a second value cannot stitch two payloads together'
 
 // ── bounds: the only DoS defence the exit has ─────────────────────────────
 
-test('the store refuses new uploads when full, retryably', () => {
+// Was "refuses new uploads when full": refusing let anyone block every upload (overlord F-7).
+test('a full store makes room by dropping its oldest upload in progress', () => {
   const store = new ChunkStore({ maxUploads: 2 });
   store.put({ uploadId: id(5), index: 0, total: 2, data: payload(10) });
   store.put({ uploadId: id(6), index: 0, total: 2, data: payload(10) });
-  assert.throws(
-    () => store.put({ uploadId: id(7), index: 0, total: 2, data: payload(10) }),
-    (e: unknown) => e instanceof ProtocolFailure && e.code === 'MESH_UNAVAILABLE' && e.retryable,
-  );
+  store.put({ uploadId: id(7), index: 0, total: 2, data: payload(10) });
+  assert.equal(store.uploads, 2);
+  assert.equal(store.bytes, 20, 'the dropped upload\'s bytes are returned');
+  store.put({ uploadId: id(7), index: 1, total: 2, data: payload(10) });
+  assert.equal(store.take(id(7), 2, payloadHash(new Uint8Array([...payload(10), ...payload(10)]))).kind, 'COMPLETE', 'the newest finishes');
+});
+
+test('slots held by uploads never finished cannot block a real one (F-7)', () => {
+  const store = new ChunkStore();
+  const uid = (n: number) => { const u = new Uint8Array(16); new DataView(u.buffer).setUint32(0, n); return u; };
+  // OMEGA's PoC: single one-byte frames claiming total=64, each under a fresh uploadId, filling every slot.
+  for (let n = 0; n < 300; n++) store.put({ uploadId: uid(1000 + n), index: 0, total: 64, data: payload(1) });
+  // A real upload arriving next still gets a slot, completes, and is taken.
+  const real = uid(9999);
+  store.put({ uploadId: real, index: 0, total: 2, data: payload(100) });
+  store.put({ uploadId: real, index: 1, total: 2, data: payload(100) });
+  assert.equal(store.take(real, 2, payloadHash(new Uint8Array([...payload(100), ...payload(100)]))).kind, 'COMPLETE');
 });
 
 test('total bytes across every upload are bounded', () => {

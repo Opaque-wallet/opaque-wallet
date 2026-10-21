@@ -367,3 +367,115 @@ test('a top-up credits what a reusable address was carrying', () => {
   assert.deepEqual(after.deposits.map((d) => d.commitment), [c(1), c(2), c(3)]);
   assert.equal(after.carried.get(77), 0n);
 });
+
+// F-1 (overlord): a ledger read that fails on a later page must not keep the payments of its
+// earlier pages, or the next read adds them again and one payment credits notes twice.
+test('a read that fails partway keeps nothing: one payment is credited once (F-1)', async () => {
+  // OMEGA's PoC: one 10 XRP payment to a tag holding twenty 1 XRP notes; page 2 throws slowDown once.
+  const payment = {
+    validated: true, hash: 'P1', ledger_index: 20,
+    tx_json: { TransactionType: 'Payment', Account: ALICE, Destination: POOL, DestinationTag: 77 },
+    meta: { TransactionResult: 'tesSUCCESS', delivered_amount: String(10 * XRP) },
+  };
+  let reads = 0;
+  let failed = false;
+  const source = createPoolSource({
+    client: fakeLedger({
+      account_tx: (req) => {
+        reads++;
+        if (reads === 1) return { ledger_index_max: 15, transactions: [] };
+        if (req['marker'] === undefined) return { ledger_index_max: 50, transactions: [payment], marker: 'page-2' };
+        if (!failed) { failed = true; throw Object.assign(new Error('slowDown'), { data: { error: 'slowDown' } }); }
+        return { ledger_index_max: 50, transactions: [] };
+      },
+    }),
+    config: { account: POOL, asset: { kind: 'XRP' }, sizes: SIZES, deployedAtLedger: 10 },
+  });
+  await source.sync();
+  source.registerTag(77, { [String(XRP)]: Array.from({ length: 20 }, (_, i) => c(500 + i)) });
+  await assert.rejects(source.sync(), /slowDown/);
+  assert.equal(source.log().deposits.length, 0, 'the failed read added nothing');
+  await source.sync();
+  const credited = source.log().deposits.filter((d) => d.tag === 77);
+  assert.equal(credited.length, 10, 'ten 1 XRP notes for 10 XRP, not twenty');
+  assert.equal(credited.reduce((n, d) => n + d.denomination, 0), 10 * XRP);
+  // And a read that overlaps one already counted (the same hash again) adds nothing.
+  await source.sync();
+  assert.equal(source.log().deposits.filter((d) => d.tag === 77).length, 10);
+});
+
+// F-11 (overlord): a registration from a wallet that sized its notes largest-first
+// (one that hasn't reloaded since) is split largest-first: nothing stranded.
+test('a tag registered without asking for the payable split is split largest-first (F-11)', async () => {
+  const pay95 = { validated: true, hash: 'F11', ledger_index: 20, tx_json: { TransactionType: 'Payment', Account: ALICE, Destination: POOL, DestinationTag: 31 }, meta: { TransactionResult: 'tesSUCCESS', delivered_amount: String(95 * XRP) } };
+  for (const payable of [false, true]) {
+    let reads = 0;
+    const source = createPoolSource({
+      client: fakeLedger({ account_tx: () => (++reads === 1 ? { ledger_index_max: 15, transactions: [] } : { ledger_index_max: 50, transactions: [pay95] }) }),
+      config: { account: POOL, asset: { kind: 'XRP' }, sizes: SIZES, deployedAtLedger: 10 },
+    });
+    await source.sync();
+    // OMEGA's PoC: an old client's one-time tag, 1×100, 9×10, 9×1, then the faucet's 95 XRP.
+    source.registerTag(31, { [String(100 * XRP)]: [c(700)], [String(10 * XRP)]: Array.from({ length: 9 }, (_, i) => c(710 + i)), [String(XRP)]: Array.from({ length: 9 }, (_, i) => c(730 + i)) }, undefined, payable);
+    await source.sync();
+    const carried = source.log().carried.get(31) ?? 0n;
+    if (payable) assert.equal(carried, 6n * BigInt(XRP), 'asked for, with notes sized for largest-first: 6 left over, which is why it must be asked for');
+    else assert.equal(carried, 0n, 'not asked for: largest first, all 95 credited');
+  }
+});
+
+// F-12 / F-13 (overlord): registrations go to an append-only log, on disk before they change
+// anything; a restart rebuilds the same table and history, and a torn last line is dropped.
+test('the tag table is a log: written first, replayed whole, a torn line dropped (F-12, F-13)', async () => {
+  const { mkdtempSync, rmSync, appendFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'opaque-tags-'));
+  try {
+    const tagFile = join(dir, `tags-${POOL}.json`);
+    const pay = (hash: string, ledger: number, units: number) => ({ validated: true, hash, ledger_index: ledger, tx_json: { TransactionType: 'Payment', Account: ALICE, Destination: POOL, DestinationTag: 40 }, meta: { TransactionResult: 'tesSUCCESS', delivered_amount: String(units * XRP) } });
+    let ledger: Record<string, unknown>[] = [];
+    let max = 15;
+    const open = () => createPoolSource({ client: fakeLedger({ account_tx: () => ({ ledger_index_max: max, transactions: ledger }) }), config: { account: POOL, asset: { kind: 'XRP' }, sizes: SIZES, deployedAtLedger: 10 }, tagFile });
+    const a = open();
+    await a.sync();
+    const anchor = `0x${'11'.repeat(32)}`;
+    a.registerTag(40, { [String(XRP)]: [c(800), c(801)] }, { owner: anchor });
+    const lines = readFileSync(join(dir, `tags-${POOL}.log`), 'utf8').trim().split('\n');
+    assert.equal(lines.length, 1, 'one line for one registration, written before the call returned');
+    ledger = [pay('L1', 20, 2)];
+    max = 50;
+    await a.sync();
+    const before = a.log().deposits.map((d) => d.commitment);
+    // A crash mid-write leaves half a line.
+    appendFileSync(join(dir, `tags-${POOL}.log`), '{"tag":41,"add":{"1000000":["0x');
+    const b = open();
+    await b.sync();
+    assert.deepEqual(b.log().deposits.map((d) => d.commitment), before, 'the same notes after a restart');
+    assert.equal(b.registered(41), false, 'the torn line never took effect');
+    assert.equal(b.owner(40)?.anchor, anchor);
+    // And the log goes on cleanly after it.
+    b.registerTag(42, { [String(XRP)]: [c(810)] });
+    const c2 = open();
+    await c2.sync();
+    assert.equal(c2.registered(42), true);
+    assert.throws(() => c2.registerTag(43, { [String(XRP)]: [c(800)] }), /registered|another tag/, 'the commitment index survives the restart');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// F-28 (overlord): a registration's carry is credited at its place in the ledger, so a
+// payment made after it, by anyone, cannot move what it credited.
+test('carry credited at a registration stays put whatever is paid after (F-28)', () => {
+  const list = { [String(XRP)]: [c(900), c(901), c(902)] };
+  const history = new Map([[50, [{ at: 10, len: { [String(XRP)]: 0 } }, { at: 30, len: { [String(XRP)]: 3 } }]]]);
+  const tagged = pay({ tag: 50, units: 2n * BigInt(XRP), ledgerIndex: 20, hash: 'T' });
+  const before = creditDeposits([tagged], SIZES, new Map([[50, list]]), history);
+  assert.deepEqual(before.deposits.map((d) => d.commitment), [c(900), c(901)], 'carry credited at the registration (ledger 30)');
+  // OMEGA's PoC: an InvoiceID deposit at ledger 40 of a note the registration's carry credited.
+  const invoice = pay({ tag: 0, units: BigInt(XRP), ledgerIndex: 40, hash: 'I', invoiceId: (c(900) as string).slice(2).toUpperCase() });
+  const after = creditDeposits([tagged, invoice], SIZES, new Map([[50, list]]), history);
+  assert.deepEqual(after.deposits.filter((d) => d.tag === 50).map((d) => d.commitment), [c(900), c(901)], 'the tag\'s notes are the same');
+  assert.equal(after.unmatched.length, 1, 'the late InvoiceID deposit of an already-credited note credits nothing');
+});

@@ -14,6 +14,16 @@ import { accountLabel, activeAccount } from './lib/xrpl-keys.ts';
 import { termsAccepted } from './lib/wallet-ui.ts';
 import { startWalletConnect } from './lib/walletconnect.ts';
 
+// The extension serves this page to any https site (web_accessible_resources), so a site
+// could frame it, unlocked, under its own page and steer a click onto Approve. It runs
+// only as a window of its own: framed, it shows nothing and does nothing.
+const FRAMED = window.top !== window.self;
+if (FRAMED) {
+  document.documentElement.replaceChildren(Object.assign(document.createElement('body'), { textContent: 'Opaque opens only in its own window.' }));
+  // Nothing below runs: no listener for a site's requests, no wallet.
+  throw new Error('Opaque opens only in its own window');
+}
+
 type Method = 'connect' | 'sign' | 'signAndSubmit' | 'signMessage';
 type Outcome = { result?: unknown; error?: string };
 interface Pending {

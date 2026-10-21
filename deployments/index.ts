@@ -33,6 +33,7 @@ export type Address = `0x${string}`;
 
 export type ContractName =
   | 'pqKeyRegistry'
+  | 'create2Factory'
   | 'singleNotePqVerifier'
   | 'attestedRingVerifier'
   | 'attestedRingVerifier2'

@@ -8,9 +8,11 @@
 
 import { keccak_256 } from '@noble/hashes/sha3';
 
+import { deployment as network } from '../../../deployments/index.ts';
 import { checksummed } from './arc-keys.ts';
 
-export const CREATE2_FACTORY = '0x4e59b44847b379578588920ca78fbf26c0b4956c';
+/** Pinned per network (deployments/*.json create2Factory), its code checked there: null where it isn't, and Contracts stays off. */
+export const CREATE2_FACTORY = (network.contracts.create2Factory?.address ?? null) as `0x${string}` | null;
 /** EIP-3860: the most initcode a chain takes. */
 export const MAX_INITCODE = 49_152;
 
@@ -33,7 +35,39 @@ export const create2Address = (deployer: string, salt: `0x${string}`, initcode: 
   checksummed(keccak_256(join(Uint8Array.of(0xff), bytesOf(deployer), bytesOf(salt), keccak_256(bytesOf(initcode)))).slice(-20));
 
 /** The account's one call that deploys it, and where it lands. */
-export const deployment = (salt: `0x${string}`, initcode: `0x${string}`) => ({
-  call: { to: CREATE2_FACTORY as `0x${string}`, data: `0x${salt.slice(2)}${initcode.slice(2)}` as `0x${string}` },
-  address: create2Address(CREATE2_FACTORY, salt, initcode),
-});
+export function deployment(salt: `0x${string}`, initcode: `0x${string}`) {
+  // A call to an address with no code succeeds and deploys nothing: never sent where the factory isn't pinned.
+  if (CREATE2_FACTORY === null) throw new Error('contracts can\'t be deployed on this network yet');
+  return {
+    call: { to: CREATE2_FACTORY, data: `0x${salt.slice(2)}${initcode.slice(2)}` as `0x${string}` },
+    address: create2Address(CREATE2_FACTORY, salt, initcode),
+  };
+}
+
+const word = (data: string, i: number) => data.slice(10 + 64 * i, 74 + 64 * i);
+const addressAt = (data: string, i: number) => `0x${word(data, i).slice(24)}`;
+const amountAt = (data: string, i: number) => {
+  const v = BigInt(`0x${word(data, i) || '0'}`);
+  return v >= 2n ** 255n ? 'unlimited' : v.toString(10);
+};
+
+/**
+ * What a call does with this account's tokens, in words, when it hands them
+ * to someone: an approval, a transfer, a permit, an operator, or gas money
+ * drawn out of the EntryPoint. null for anything else. The Contracts screen
+ * asks before signing these: `cast calldata` makes them as easily as a
+ * setFee, and a pasted approve(attacker, max) would empty the account later.
+ */
+export function riskOfCall(to: string, data: string, names: Readonly<Record<string, string>> = {}): string | null {
+  const token = names[to.toLowerCase()] ?? to;
+  switch (data.slice(0, 10).toLowerCase()) {
+    case '0x095ea7b3': return `This lets ${addressAt(data, 0)} spend ${amountAt(data, 1)} units of ${token} from this account, now or any time later.`;
+    case '0x39509351': return `This lets ${addressAt(data, 0)} spend ${amountAt(data, 1)} more units of ${token} from this account, now or any time later.`;
+    case '0xa9059cbb': return `This sends ${amountAt(data, 1)} units of ${token} from this account to ${addressAt(data, 0)}, publicly.`;
+    case '0x23b872dd': return `This moves ${amountAt(data, 2)} units of ${token} from ${addressAt(data, 0)} to ${addressAt(data, 1)}.`;
+    case '0xd505accf': return `This signs a permit letting ${addressAt(data, 1)} spend ${amountAt(data, 2)} units of ${token}.`;
+    case '0xa22cb465': return `This ${BigInt(`0x${word(data, 1) || '0'}`) === 0n ? 'removes' : 'gives'} ${addressAt(data, 0)} control of every token this account holds in ${token}.`;
+    case '0x205c2878': return `This draws ${amountAt(data, 1)} of this account's gas money out of the EntryPoint, to ${addressAt(data, 0)}.`;
+    default: return null;
+  }
+}

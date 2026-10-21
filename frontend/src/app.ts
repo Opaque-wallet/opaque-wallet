@@ -16,13 +16,13 @@
 import { confirmPassword, unlockGate } from './lib/lock.ts';
 import type { IntentStatus, NoteSummary, PrivacyScore, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
 
-import { makeAmount, MAX_NOTES_PER_DEPOSIT } from './lib/protocol/index.js';
+import { fromUnits, makeAmount, MAX_NOTES_PER_DEPOSIT, swapHoldsPreview } from './lib/protocol/index.js';
 import { paymentDeadline } from './lib/payment-deadline.js';
 import { runPaymentLanes } from './lib/payment-lanes.js';
 import { backupTransport, hasBrowserAccount, startWallet, type WalletRuntime } from './lib/runtime.js';
 import { addressOfKey, arcAddressOf, arcState, arcStorageOf, deployerKey, saveArcState } from './lib/arc-keys.ts';
 import { keyStoreName } from './lib/backup.ts';
-import { asHexBytes, deployment as deployOf, MAX_INITCODE, newSalt } from './lib/contracts.ts';
+import { asHexBytes, CREATE2_FACTORY, deployment as deployOf, MAX_INITCODE, newSalt, riskOfCall } from './lib/contracts.ts';
 import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
 import { acceptTerms, copy, idOf, markOf, openOnboarding, setupWalletScreens, swapProgress, tokenBadge, type OpenAccount } from './lib/wallet-ui.ts';
 import { deployment, NETWORK, type SwapToken } from '../../deployments/index.ts';
@@ -217,6 +217,8 @@ async function onWithdraw(): Promise<void> {
 
 async function onBackupExport(): Promise<void> {
   const pass = el<HTMLInputElement>('backup-pass');
+  // A file of the account's keys and notes, under a passphrase of the holder's choosing: the password first.
+  if (!(await confirmPassword('save this account\'s keys and notes to a file'))) return;
   try {
     const url = URL.createObjectURL(await rt.exportBackup(pass.value));
     const link = document.createElement('a');
@@ -573,11 +575,6 @@ function toUnits(text: string, decimals: number): bigint | undefined {
   if (m === null || (m[1] === '' && (m[2] ?? '') === '') || (m[2] ?? '').length > decimals) return undefined;
   return BigInt(m[1] || '0') * 10n ** BigInt(decimals) + BigInt(((m[2] ?? '') + '0'.repeat(decimals)).slice(0, decimals) || '0');
 }
-function fromUnits(units: bigint, decimals: number, places = 6): string {
-  const digits = units.toString().padStart(decimals + 1, '0');
-  const fraction = digits.slice(digits.length - decimals).slice(0, places).replace(/0+$/, '');
-  return `${BigInt(digits.slice(0, digits.length - decimals)).toLocaleString()}${fraction ? `.${fraction}` : ''}`;
-}
 const swapFrom = () => tokenOf(el<HTMLSelectElement>('swap-from').value);
 const swapTo = () => tokenOf(el<HTMLSelectElement>('swap-to').value);
 const swapAmount = (): bigint | undefined => { const u = toUnits(el<HTMLInputElement>('swap-amount').value, swapFrom().decimals); return u !== undefined && u > 0n ? u : undefined; };
@@ -681,8 +678,13 @@ async function onSwap(): Promise<void> {
   try {
     // The route the account signs is asked now, for the account itself: the preview's was for a placeholder.
     const quote = await rt.swapQuote(opaqueAddress as `0x${string}`, from, to, amount);
+    // Signed only if it is the swap that was shown: the price moved, or the floor dropped, and it is shown again first.
+    if (!swapHoldsPreview(swapQuoted.quote, quote)) {
+      progress.fail(`The price changed: this swap now gets at least ${fromUnits(BigInt(quote.toAmountMin), to.decimals)} ${to.symbol}, not ${fromUnits(BigInt(swapQuoted.quote.toAmountMin), to.decimals)}. Nothing was signed; check the new quote and swap again.`);
+      return;
+    }
     progress.update(SWAP_SECONDS - 4, `Signing with your account's post-quantum key, for at least ${fromUnits(BigInt(quote.toAmountMin), to.decimals)} ${to.symbol}; a public bundler puts it on chain…`);
-    const tx = await rt.swap(opaqueAddress as `0x${string}`, from, amount, quote);
+    const tx = await rt.swap(opaqueAddress as `0x${string}`, from, to, amount, quote);
     progress.update(4, 'On chain. Reading your new balance…');
     await settle(async () => { await refreshTokens(); return (tokenHeld[to.symbol] ?? 0n) > before; });
     const got = (tokenHeld[to.symbol] ?? 0n) - before;
@@ -967,7 +969,7 @@ function deployerRow(keys: AccountKeys, i: number): HTMLElement {
   const row = document.createElement('div');
   row.className = 'deployer';
   row.innerHTML = `<div class="detail"><span>Deployer ${i + 1}</span><code></code></div>
-    <div class="detail"><span>Balance</span><strong>…</strong></div>
+    <div class="detail"><span>Balance</span><strong><button class="link" type="button" data-do="balance">Check balance</button></strong></div>
     <code class="key-text" hidden></code>
     <div class="dialog-actions"><button class="secondary" type="button" data-do="fund">Fund privately</button><button class="secondary" type="button" data-do="address">Copy address</button><button class="secondary" type="button" data-do="show">Show key</button><button class="secondary" type="button" data-do="key" hidden>Copy key</button></div>`;
   const shown = row.querySelector('code')!;
@@ -976,9 +978,13 @@ function deployerRow(keys: AccountKeys, i: number): HTMLElement {
   const button = (name: string) => row.querySelector<HTMLButtonElement>(`[data-do="${name}"]`)!;
   shown.textContent = shortAddress(address);
   shown.title = address;
-  if (runtimeReady) {
+  // Read only when asked: read with every look at Accounts, beside the account's own reads, its
+  // queries could let an exit tie the deployers to the account by their timing.
+  button('balance').addEventListener('click', () => {
+    if (!runtimeReady) return;
+    balance.textContent = '…';
     rt.accountFunds(address).then((f) => { balance.textContent = `${f.usdc} USDC`; }, () => { balance.textContent = 'Could not read'; });
-  }
+  });
   // Funding is an ordinary private send: the Send screen, its address filled in.
   button('fund').addEventListener('click', () => {
     el<HTMLDialogElement>('account-dialog').close();
@@ -989,7 +995,7 @@ function deployerRow(keys: AccountKeys, i: number): HTMLElement {
   button('address').addEventListener('click', () => copy(address, 'Address'));
   button('show').addEventListener('click', () => void (async () => {
     const showing = keyText.hidden;
-    if (showing && !(await confirmPassword('this deployer\'s key'))) return;
+    if (showing && !(await confirmPassword('show this deployer\'s key'))) return;
     keyText.textContent = showing ? `PRIVATE_KEY=${key}` : '';
     keyText.hidden = !showing;
     button('key').hidden = !showing;
@@ -1092,6 +1098,10 @@ async function onCall(): Promise<void> {
   try { data = asHexBytes(el<HTMLTextAreaElement>('call-data').value, 'calldata', MAX_INITCODE); } catch (error) { setStatus('contracts-status', `Not sent: ${(error as Error).message}.`); return; }
   if (data.length < 10) { setStatus('contracts-status', 'Calldata starts with a 4-byte function selector: cast calldata makes it.'); return; }
   if (!runtimeReady) { setStatus('contracts-status', 'Opaque is still starting.'); return; }
+  // A call that hands this account's tokens to someone is said in words, and asked about, before the key signs it.
+  const names = Object.fromEntries([...deployment.swap.tokens.map((t) => [t.address.toLowerCase(), t.symbol]), [deployment.tokens.usdc.address.toLowerCase(), 'USDC']]);
+  const risk = riskOfCall(to, data, names);
+  if (risk !== null && !confirm(`${risk}\n\nSign it with this account's key?`)) { setStatus('contracts-status', 'Not sent.'); return; }
   const button = el<HTMLButtonElement>('call-go');
   button.disabled = true;
   setStatus('contracts-status', 'Signing with this account\'s post-quantum key, and sending it through the relays…');
@@ -1206,6 +1216,8 @@ async function init(): Promise<void> {
   el('tab-ring').addEventListener('click', () => { showView('ring'); void refreshRing(); });
   el('tab-activity').addEventListener('click', () => { showView('activity'); void pollActivity(); });
   el('tab-contracts').addEventListener('click', () => showView('contracts'));
+  // No pinned factory on this network: no Contracts.
+  el('tab-contracts').hidden = CREATE2_FACTORY === null;
   el('deploy-go').addEventListener('click', () => void onDeploy());
   el('call-go').addEventListener('click', () => void onCall());
   for (const id of ['deploy-code', 'deploy-salt']) el(id).addEventListener('input', renderDeployAt);

@@ -41,6 +41,7 @@ import { ProtocolFailure, type Address, type Bytes32, type Hex, type TxHash, typ
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
 import { deployment, entryPoint, requireContract } from '../../deployments/index.ts';
+import { rateLimit } from '../mesh/limit.ts';
 
 /** The one thing the page hands the mesh: an operation and its JSON, as hex. */
 export type WalletRpcSend = (operation: WalletRpcOperation, encodedRequest: Hex) => Promise<Hex>;
@@ -108,6 +109,8 @@ export function createWalletRpcAnswerer(options: {
   readonly fetch?: typeof globalThis.fetch;
   /** LI.FI's API key, for its higher rate limit; without one, quotes share the public limit. */
   readonly lifiApiKey?: string;
+  /** Swap quotes a minute, whoever asks (each is a call to LI.FI on a quota everyone shares). */
+  readonly quotesPerMinute?: number;
 }): WalletRpcSend {
   const { publicClient } = options;
   const allowlist = options.allowlist ?? walletRpcAllowlist();
@@ -118,6 +121,8 @@ export function createWalletRpcAnswerer(options: {
 
   const signer = options.payer === undefined ? undefined : publicClient.extend(walletActions);
   const rotatedAt = new Map<string, number>();
+  // A flood of quote requests is refused here, rather than spending the LI.FI quota every swap needs.
+  const quoteAllowance = rateLimit(options.quotesPerMinute ?? 60);
 
   const refuse = (message: string): never => { throw new ProtocolFailure('INVALID_INPUT', message); };
   /** Only a deployed PQAccount clone. Cached: a clone's code never changes. */
@@ -259,6 +264,7 @@ export function createWalletRpcAnswerer(options: {
     if (typeof from !== 'string' || typeof to !== 'string' || !offered.has(from) || !offered.has(to) || from === to) refuse('a swap is between two of this network\'s swap tokens');
     if (typeof amount !== 'string' || !/^[1-9][0-9]{0,30}$/.test(amount)) refuse('a swap amount is a whole number of the token\'s smallest units');
     if (typeof account !== 'string' || !/^0x[0-9a-f]{40}$/.test(account)) refuse('a swap names its account');
+    if (!quoteAllowance()) throw new ProtocolFailure('MESH_UNAVAILABLE', 'swap quotes are busy: try again in a minute', true);
     const chain = String(deployment.network.chainId);
     const query = new URLSearchParams({
       fromChain: chain, toChain: chain, fromToken: from as string, toToken: to as string, fromAmount: amount as string,
@@ -271,7 +277,8 @@ export function createWalletRpcAnswerer(options: {
       estimate?: { toAmount?: string; toAmountMin?: string; approvalAddress?: string; feeCosts?: { amountUSD?: string }[] };
       transactionRequest?: { to?: string; data?: string; value?: string } };
     if (!response.ok || body.estimate === undefined || body.transactionRequest === undefined) {
-      throw new ProtocolFailure('SETTLEMENT_REVERTED', `LI.FI has no route: ${String(body.message ?? response.status).slice(0, 200)}`, true);
+      // Its own words stay with LI.FI: the wallet hears that there is no route, and the status.
+      throw new ProtocolFailure('SETTLEMENT_REVERTED', `LI.FI found no route for that swap (${response.status})`, true);
     }
     const { estimate: e, transactionRequest: tx } = body;
     return {

@@ -48,7 +48,7 @@ import { chainTo } from '../../../backend/mesh/directory.ts';
 import { createGraphHealth } from '../../../backend/mesh/graph-health.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from '../../../backend/mesh/contracts.ts';
 import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
-import { ARC_AUTHORITY, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../../backend/chain/pq-wallet-chain.ts';
+import { ARC_AUTHORITY, checkSwapCall, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../../backend/chain/pq-wallet-chain.ts';
 import { browserPayer, createBrowserPool, createMeshChainObserver, type DepositMany } from '../../../backend/chain/wallet-chain.ts';
 import { capabilitiesOf } from '../../../backend/chain/pool.ts';
 import { readOne, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
@@ -157,7 +157,7 @@ export interface WalletRuntime {
   /** LI.FI's best route for `amount` of `from` into `to`, asked through the mesh and checked here. */
   swapQuote(address: `0x${string}`, from: SwapToken, to: SwapToken, amount: bigint): Promise<SwapQuote>;
   /** The quoted swap, as one operation the account's PQ key signs: approve LI.FI exactly `amount`, then its call. */
-  swap(address: `0x${string}`, from: SwapToken, amount: bigint, quote: SwapQuote): Promise<TxHash>;
+  swap(address: `0x${string}`, from: SwapToken, to: SwapToken, amount: bigint, quote: SwapQuote): Promise<TxHash>;
   exportBackup(passphrase: string): Promise<Blob>;
   /** Into a new key store; reload the page to open it. Returns the notes it added. */
   restoreBackup(file: Blob, passphrase: string): Promise<number>;
@@ -393,16 +393,16 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
     async swapQuote(address, from, to, amount) {
       const quote = await swapQuote(walletRpc, { from: from.address as never, to: to.address as never, amount, account: address as never });
       // The exit relayed this; the account signs it. So it is checked here: only
-      // LI.FI's pinned contract, nothing paid in gas currency, and the account
-      // itself as the receiver.
+      // LI.FI's pinned contract, nothing paid in gas currency, and its call
+      // decoded: this account receives at least the least it shows, of `to`,
+      // for exactly `amount` of `from`. The signer checks the call again.
       const router = deployment.swap.router.toLowerCase();
       if (quote.to !== router || quote.approvalAddress !== router) throw new Error('the quote calls a contract other than LI.FI\'s');
       if (BigInt(quote.value) !== 0n) throw new Error('the quote asks for USDC on top of the swap');
-      if (!quote.data.toLowerCase().includes(address.slice(2).toLowerCase())) throw new Error('the quote does not pay this account');
-      if (!(BigInt(quote.toAmountMin) > 0n)) throw new Error('the quote delivers nothing');
+      checkSwapCall(quote.data, { account: address as never, from: from.address as never, to: to.address as never, amount, minOut: BigInt(quote.toAmountMin) });
       return quote;
     },
-    swap: (address, from, amount, quote) => opsFor(address).swap(from.address as never, amount, quote),
+    swap: (address, from, to, amount, quote) => opsFor(address).swap(from.address as never, amount, quote, to.address as never),
     exportBackup: (passphrase) => exportBackup(keys, passphrase),
     restoreBackup,
   };

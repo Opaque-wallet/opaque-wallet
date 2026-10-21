@@ -23,7 +23,8 @@ import { ARC_READY, createWallet } from './xrpl-wallet-page.ts';
 const args = process.argv.slice(2);
 const ORIGIN = args.find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit';
 const FUND = args.includes('--fund');
-const PAGE = `${ORIGIN}/testnet/app${ORIGIN.includes('opaque.credit') ? '' : '.html'}`;
+// A vite dev server (frontend: npx vite) serves the testnet pages at its root.
+const PAGE = `${/\/\/(127\.0\.0\.1|localhost):/.test(ORIGIN) ? ORIGIN : `${ORIGIN}/testnet`}/app${ORIGIN.includes('opaque.credit') ? '' : '.html'}`;
 const log = (s: string) => process.stdout.write(`${s}\n`);
 let failures = 0;
 const check = (name: string, ok: boolean, detail: string) => {

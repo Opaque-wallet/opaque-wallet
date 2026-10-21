@@ -134,7 +134,7 @@ export class ChunkStore {
   #totalBytes = 0;
 
   constructor(options: ChunkStoreOptions = {}) {
-    this.#maxUploads = options.maxUploads ?? 64;
+    this.#maxUploads = options.maxUploads ?? 256;
     this.#maxUploadBytes = options.maxUploadBytes ?? 1280 * 1024;
     this.#maxTotalBytes = options.maxTotalBytes ?? 48 * 1024 * 1024;
     this.#ttlMs = options.ttlMs ?? 10 * 60 * 1000;
@@ -166,9 +166,13 @@ export class ChunkStore {
     const id = toHex(frame.uploadId);
     let upload = this.#uploads.get(id);
     if (upload === undefined) {
-      // Retryable: the store is full now, not forever.
+      // Full: the oldest upload in progress makes room (a Map keeps creation order). Slots
+      // held by uploads nobody finishes then push out only each other, and a real upload,
+      // seconds long, is pushed out only by a flood faster than it: refusing instead let 64
+      // one-byte frames every ten minutes block every large intent and query.
       if (this.#uploads.size >= this.#maxUploads) {
-        throw new ProtocolFailure('MESH_UNAVAILABLE', 'too many uploads in progress', true);
+        const [oldestId, oldest] = this.#uploads.entries().next().value!;
+        this.#drop(oldestId, oldest);
       }
       upload = { total: frame.total, parts: new Map(), bytes: 0, createdAt: this.#now() };
       this.#uploads.set(id, upload);

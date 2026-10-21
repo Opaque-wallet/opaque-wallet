@@ -28,7 +28,7 @@
 // carried remainder is credited as soon as there are notes for it.
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, truncateSync, writeSync } from 'node:fs';
 
 import type { Client } from 'xrpl';
 
@@ -152,7 +152,17 @@ export function creditDeposits(
     applied.set(tag, i);
   };
 
+  // Every tag's registrations, in ledger order: each takes effect before every payment after it,
+  // whoever made that payment, so nothing paid later (an InvoiceID deposit of the same
+  // commitment) can change what a registration credited from a tag's carry.
+  const queue = [...history].flatMap(([tag, events]) => (tags.has(tag) ? events.map((e) => ({ tag, at: e.at })) : [])).sort((a, b) => a.at - b.at || a.tag - b.tag);
+  let next = 0;
+  const applyBefore = (ledger: number) => {
+    for (; next < queue.length && queue[next]!.at < ledger; next++) advance(queue[next]!.tag, tags.get(queue[next]!.tag)!, ledger);
+  };
+
   for (const p of payments) {
+    applyBefore(p.ledgerIndex);
     if (p.tag === INVOICE_TAG) {
       const commitment = p.invoiceId === null ? null : commitmentOfInvoice(p.invoiceId);
       const size = descending.find((s) => BigInt(s) === p.units);
@@ -241,7 +251,8 @@ export interface PoolSource {
   sync(): Promise<void>;
   log(): DepositLog;
   indexedThrough(): number;
-  registerTag(tag: number, registration: TagRegistration, auth?: TagAuth): void;
+  /** `payable`: payments after this registration split payably (the registrant sized its notes for it); otherwise largest first. */
+  registerTag(tag: number, registration: TagRegistration, auth?: TagAuth, payable?: boolean): void;
   registered(tag: number): boolean;
   registration(tag: number): TagRegistration | undefined;
   owner(tag: number): TagOwner | undefined;
@@ -261,40 +272,68 @@ export function createPoolSource(options: { readonly client: Client; readonly co
   const { client, config } = options;
   const payments: IncomingPayment[] = [];
   const tagsSeen = new Set<number>();
-  const tags = new Map<number, TagRegistration>(
-    options.tagFile !== undefined && existsSync(options.tagFile)
-      ? Object.entries(JSON.parse(readFileSync(options.tagFile, 'utf8')) as Record<string, TagRegistration>).map(([t, r]) => [Number(t), r])
-      : [],
-  );
-  const ownerFile = options.tagFile?.replace(/\.json$/, '.owners.json');
-  const owners = new Map<number, TagOwner>(
-    ownerFile !== undefined && existsSync(ownerFile)
-      ? Object.entries(JSON.parse(readFileSync(ownerFile, 'utf8')) as Record<string, TagOwner>).map(([t, o]) => [Number(t), o])
-      : [],
-  );
+  // ── the tag table: its files from before the log, read once, then the log ──
+  // Each registration is one line of `tags-<pool>.log`, written and synced to disk
+  // before it changes anything here: a crash keeps it whole or not at all, with its
+  // history, and a registration costs its own size, never a rewrite of the table.
+  const load = <T>(file: string | undefined): [number, T][] =>
+    file !== undefined && existsSync(file) ? Object.entries(JSON.parse(readFileSync(file, 'utf8')) as Record<string, T>).map(([t, v]) => [Number(t), v]) : [];
+  const tags = new Map<number, TagRegistration>(load<TagRegistration>(options.tagFile));
+  const owners = new Map<number, TagOwner>(load<TagOwner>(options.tagFile?.replace(/\.json$/, '.owners.json')));
   // When each tag's notes took effect (creditDeposits), so a later registration never re-splits an earlier payment.
-  const historyFile = options.tagFile?.replace(/\.json$/, '.history.json');
-  const history = new Map<number, TagEvent[]>(
-    historyFile !== undefined && existsSync(historyFile)
-      ? Object.entries(JSON.parse(readFileSync(historyFile, 'utf8')) as Record<string, TagEvent[]>).map(([t, h]) => [Number(t), h])
-      : [],
-  );
+  const history = new Map<number, TagEvent[]>(load<TagEvent[]>(options.tagFile?.replace(/\.json$/, '.history.json')));
+  /** Every commitment registered to any tag: a new one is checked against it, not against the whole table. */
+  const registeredCommitments = new Set<string>([...tags.values()].flatMap((r) => Object.values(r).flat()));
   const lengths = (r: TagRegistration) => Object.fromEntries(Object.entries(r).map(([size, list]) => [size, list.length]));
-  const persist = () => {
-    if (options.tagFile !== undefined) writeFileSync(options.tagFile, JSON.stringify(Object.fromEntries(tags)), { mode: 0o600 });
-    if (ownerFile !== undefined) writeFileSync(ownerFile, JSON.stringify(Object.fromEntries(owners)), { mode: 0o600 });
-    if (historyFile !== undefined) writeFileSync(historyFile, JSON.stringify(Object.fromEntries(history)), { mode: 0o600 });
+  /** One registration: its new commitments per size, the owner it leaves, the events it adds. */
+  type Entry = { readonly tag: number; readonly add: TagRegistration; readonly owner?: TagOwner; readonly events: readonly TagEvent[] };
+  const apply = (e: Entry) => {
+    const before = tags.get(e.tag) ?? {};
+    const merged: Record<string, readonly NoteCommitment[]> = { ...before };
+    // Appended per size: earlier payments keep the notes they were credited.
+    for (const [size, list] of Object.entries(e.add)) {
+      merged[size] = [...(before[size] ?? []), ...list];
+      for (const c of list) registeredCommitments.add(c);
+    }
+    tags.set(e.tag, merged);
+    if (e.owner !== undefined) owners.set(e.tag, e.owner);
+    history.set(e.tag, [...(history.get(e.tag) ?? []), ...e.events]);
+  };
+  const logFile = options.tagFile?.replace(/\.json$/, '.log');
+  if (logFile !== undefined && existsSync(logFile)) {
+    const text = readFileSync(logFile, 'utf8');
+    // A last line a crash cut short never took effect: dropped, so the next write starts a line of its own.
+    const whole = text.lastIndexOf('\n') + 1;
+    if (whole < text.length) truncateSync(logFile, Buffer.byteLength(text.slice(0, whole)));
+    for (const line of text.slice(0, whole).split('\n')) if (line !== '') apply(JSON.parse(line) as Entry);
+  }
+  const write = (e: Entry) => {
+    if (logFile === undefined) return;
+    const fd = openSync(logFile, 'a', 0o600);
+    try { writeSync(fd, `${JSON.stringify(e)}\n`); fsyncSync(fd); } finally { closeSync(fd); }
   };
   const rings = new Map<string, number>();
   let through = config.deployedAtLedger - 1;
   let current: DepositLog = creditDeposits([], config.sizes, tags, history);
   let inFlight: Promise<void> | undefined;
 
-  const recompute = () => { current = creditDeposits(payments, config.sizes, tags, history); };
+  /** Every commitment the log has credited: a registration may not name one. */
+  let depositCommitments = new Set<string>();
+  const recompute = () => {
+    current = creditDeposits(payments, config.sizes, tags, history);
+    depositCommitments = new Set(current.deposits.map((d) => d.commitment as string));
+  };
 
+  // Every payment once, by hash, whatever reads overlap.
+  const seenPayments = new Set<string>();
   async function read(): Promise<void> {
     let marker: unknown;
     let max = through;
+    // Only a whole read counts: its payments and `through` are kept together, after its
+    // last page. A page that fails keeps nothing, so the next read starts from the same
+    // ledger and never adds a payment twice (a payment counted twice credits notes
+    // nobody paid for).
+    const fresh: IncomingPayment[] = [];
     do {
       const response = await client.request({
         command: 'account_tx', account: config.account, ledger_index_min: through + 1, ledger_index_max: -1,
@@ -307,13 +346,17 @@ export function createPoolSource(options: { readonly client: Client; readonly co
       if (response === null) return;
       for (const entry of response.result.transactions) {
         const p = incomingOf(config.account, config.asset, entry);
-        if (p === null) continue;
-        payments.push(p);
-        if (p.tag !== null) tagsSeen.add(p.tag);
+        if (p !== null) fresh.push(p);
       }
       max = response.result.ledger_index_max;
       marker = response.result.marker;
     } while (marker !== undefined);
+    for (const p of fresh) {
+      if (seenPayments.has(p.hash)) continue;
+      seenPayments.add(p.hash);
+      payments.push(p);
+      if (p.tag !== null) tagsSeen.add(p.tag);
+    }
     through = Math.max(through, max);
     recompute();
   }
@@ -326,7 +369,7 @@ export function createPoolSource(options: { readonly client: Client; readonly co
     },
     log: () => current,
     indexedThrough: () => through,
-    registerTag(tag, registration, auth) {
+    registerTag(tag, registration, auth, payable = false) {
       if (!Number.isInteger(tag) || tag <= INVOICE_TAG || tag > MAX_TAG) refuse('a tag is 1 to 2^32-1; 0 is for InvoiceID deposits');
       const topUp = auth !== undefined && 'reveal' in auth;
       if (topUp) {
@@ -348,32 +391,36 @@ export function createPoolSource(options: { readonly client: Client; readonly co
         for (const raw of list) {
           const c = asNoteCommitment(raw);
           if (!RING_IMAGE.test(c)) refuse('a commitment must be a 128-bit image');
-          if (fresh.has(c) || current.deposits.some((d) => d.commitment === c)) refuse('a commitment is registered twice');
+          if (fresh.has(c) || depositCommitments.has(c)) refuse('a commitment is registered twice');
           fresh.add(c);
           count += 1;
         }
       }
       if (count === 0 || count > MAX_REGISTERED) refuse(`a registration names 1 to ${MAX_REGISTERED} commitments`);
-      for (const r of tags.values()) for (const list of Object.values(r)) if (list.some((c) => fresh.has(c))) refuse('a commitment is already registered to another tag');
+      for (const c of fresh) if (registeredCommitments.has(c)) refuse('a commitment is already registered to another tag');
+      const ladder = payable ? { ladder: true as const } : {};
+      let entry: Entry;
       if (topUp) {
         const before = tags.get(tag)!;
         const total = Object.values(before).reduce((n, l) => n + l.length, 0) + count;
         if (total > MAX_TAG_NOTES) refuse('this address holds all the notes it can');
-        // Appended per size: earlier payments keep the notes they were credited.
-        const merged: Record<string, readonly NoteCommitment[]> = { ...before };
-        for (const [size, list] of Object.entries(registration)) merged[size] = [...(before[size] ?? []), ...list];
-        tags.set(tag, merged);
+        const after = Object.fromEntries(Object.entries(before).map(([size, list]) => [size, list.length]));
+        for (const [size, list] of Object.entries(registration)) after[size] = (after[size] ?? 0) + list.length;
         // Taking effect after every payment read so far (the caller syncs first). A tag from
         // before histories keeps what it held as registered from the start.
-        const events = history.get(tag) ?? [{ at: 0, len: lengths(before) }];
-        history.set(tag, [...events, { at: through, len: lengths(merged), ladder: true }]);
-        owners.set(tag, { anchor: (auth as { reveal: string }).reveal, depth: owners.get(tag)!.depth + 1 });
+        entry = {
+          tag, add: registration, owner: { anchor: (auth as { reveal: string }).reveal, depth: owners.get(tag)!.depth + 1 },
+          events: [...(history.has(tag) ? [] : [{ at: 0, len: lengths(before) }]), { at: through, len: after, ...ladder }],
+        };
       } else {
-        tags.set(tag, registration);
-        history.set(tag, [{ at: through, len: lengths(registration), ladder: true }]);
-        if (auth !== undefined) owners.set(tag, { anchor: (auth as { owner: string }).owner, depth: 0 });
+        entry = {
+          tag, add: registration, ...(auth === undefined ? {} : { owner: { anchor: (auth as { owner: string }).owner, depth: 0 } }),
+          events: [{ at: through, len: lengths(registration), ...ladder }],
+        };
       }
-      persist();
+      // On disk first: what a wallet is told was registered survives any restart.
+      write(entry);
+      apply(entry);
       recompute();
     },
     registered: (tag) => tags.has(tag),

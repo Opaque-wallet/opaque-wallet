@@ -21,15 +21,34 @@ import { fileURLToPath } from 'node:url';
 import { ProtocolFailure, type BackupOperation, type Hex } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
+import { workBits, zeroBits } from './backup-work.ts';
+import { rateLimit } from './limit.ts';
 import { BACKUP_OPERATIONS } from './queries.ts';
 
 export type BackupSend = (operation: BackupOperation, encodedRequest: Hex) => Promise<Hex>;
 
 /** A blob's most, in base64 characters: what fits one mesh message as hex, with room to spare. */
 export const MAX_BLOB = 24_000;
-// ponytail: a fixed cap on how many backups are kept (24 KB each at most, so
-// ~240 MB); per-id quotas or proof of work if strangers start filling it.
+/**
+ * How many backups are kept (24 KB each at most, so ~240 MB). Anyone may keep
+ * one, so a new id costs work (backup-work.ts) that rises as the store fills,
+ * and at capacity a backup not saved for STALE_MS makes room: filling the
+ * store is expensive and never permanent. The wallet saves its backup again
+ * at least every month (passkey-backup.ts), so a wallet in use is never the
+ * one that makes room.
+ */
 const MAX_RECORDS = 10_000;
+const STALE_MS = 90 * 24 * 60 * 60 * 1000;
+
+export interface BackupStoreOptions {
+  readonly maxRecords?: number;
+  /** Bits of work a new backup needs in an empty store. */
+  readonly baseBits?: number;
+  /** false: a store kept for reading while backups move; it takes no new ids, only its owners' updates and removals. */
+  readonly acceptNew?: boolean;
+  readonly staleMs?: number;
+  readonly now?: () => number;
+}
 
 interface Record { readonly blob: string; readonly auth: string; readonly savedAt: number }
 
@@ -39,12 +58,27 @@ const hashOf = (token: string) => createHash('sha256').update(Buffer.from(token,
 const json = (value: unknown): Hex => toHex(new TextEncoder().encode(JSON.stringify(value)));
 
 /** The store, on disk under `dir`: one file per id. */
-export function createBackupStore(dir: string): BackupSend {
+export function createBackupStore(dir: string, options: BackupStoreOptions = {}): BackupSend {
+  const max = options.maxRecords ?? MAX_RECORDS;
+  const now = options.now ?? Date.now;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   let count = readdirSync(dir).filter((f) => f.endsWith('.json')).length;
   const file = (id: string) => join(dir, `${id}.json`);
   const read = (id: string): Record | null => (existsSync(file(id)) ? JSON.parse(readFileSync(file(id), 'utf8')) as Record : null);
   const owned = (record: Record, token: string) => timingSafeEqual(Buffer.from(record.auth, 'hex'), Buffer.from(hashOf(token), 'hex'));
+  /** At capacity: the backup saved longest ago goes, if that was more than STALE_MS ago. */
+  const makeRoom = (): boolean => {
+    let oldest: { id: string; at: number } | undefined;
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.json')) continue;
+      const at = (read(f.slice(0, -5))?.savedAt) ?? 0;
+      if (oldest === undefined || at < oldest.at) oldest = { id: f.slice(0, -5), at };
+    }
+    if (oldest === undefined || now() - oldest.at <= (options.staleMs ?? STALE_MS)) return false;
+    unlinkSync(file(oldest.id));
+    count--;
+    return true;
+  };
 
   const handlers: { [op in BackupOperation]: (r: { [k: string]: unknown }) => unknown } = {
     GET(r) {
@@ -59,8 +93,14 @@ export function createBackupStore(dir: string): BackupSend {
       if (blob.length > MAX_BLOB) refuse(`a backup is at most ${MAX_BLOB} characters`);
       const record = read(id);
       if (record !== null && !owned(record, token)) refuse('that backup was made by another passkey');
-      if (record === null && count >= MAX_RECORDS) throw new ProtocolFailure('MESH_UNAVAILABLE', 'the backup store is full', true);
-      const savedAt = Date.now();
+      if (record === null) {
+        if (options.acceptNew === false) refuse('this store keeps earlier backups only: send yours to the store they moved to');
+        const bits = workBits(count, max, options.baseBits);
+        const work = typeof r['work'] === 'string' && /^([0-9a-f]{2}){1,32}$/.test(r['work']) ? r['work'] : '';
+        if (zeroBits(id, work) < bits) refuse(`a new backup needs ${bits} bits of work`);
+        if (count >= max && !makeRoom()) throw new ProtocolFailure('MESH_UNAVAILABLE', 'the backup store is full', true);
+      }
+      const savedAt = now();
       // Written whole, then moved into place: a crash leaves the old backup, never half of a new one.
       writeFileSync(`${file(id)}.tmp`, JSON.stringify({ blob, auth: record?.auth ?? hashOf(token), savedAt } satisfies Record), { mode: 0o600 });
       renameSync(`${file(id)}.tmp`, file(id));
@@ -86,8 +126,9 @@ export function createBackupStore(dir: string): BackupSend {
       return json({ result: handlers[operation](request as { [k: string]: unknown }) });
     } catch (error) {
       // An answer carries its own error, as XRPL's do: a failed query would leave the wallet waiting out its deadline.
-      const e = error as { publicMessage?: string; message?: string; code?: string; retryable?: boolean };
-      return json({ error: { code: e.code ?? 'MESH_UNAVAILABLE', message: e.publicMessage ?? e.message ?? 'failed', retryable: e.retryable ?? true } });
+      // Only this store's own refusals say why; anything else (a disk error, with its path) says only that it failed.
+      const e = error instanceof ProtocolFailure ? error : new ProtocolFailure('MESH_UNAVAILABLE', 'the backup store failed', true);
+      return json({ error: { code: e.code, message: e.publicMessage, retryable: e.retryable } });
     }
   };
 }
@@ -119,7 +160,7 @@ export function backupHttpHandler(send: BackupSend): (req: IncomingMessage, res:
         res.end(JSON.stringify({ value }));
       } catch (error) {
         res.writeHead(400, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ message: (error as Error).message }));
+        res.end(JSON.stringify({ message: error instanceof ProtocolFailure ? error.publicMessage : 'a backup request is { operation, encodedRequest }' }));
       }
     })());
   };
@@ -139,13 +180,46 @@ const VOLUME = join(dirname(fileURLToPath(import.meta.url)), '..', '.backups');
  * which the old store has nothing anyone needs.
  */
 // ponytail: read-through to the first store; drop it once wallets have re-sent theirs (a few weeks).
-export function movingFrom(store: BackupSend, before: BackupSend): BackupSend {
-  const isNone = (answer: Hex) => (JSON.parse(new TextDecoder().decode(fromHex(answer))) as { result?: unknown }).result === null;
+export function movingFrom(store: BackupSend, before: BackupSend, allowance: () => boolean = rateLimit(120)): BackupSend {
+  const answerOf = (a: Hex) => JSON.parse(new TextDecoder().decode(fromHex(a))) as { result?: unknown; error?: unknown };
+  const isNone = (a: Hex) => answerOf(a).result === null;
+  const isError = (a: Hex | null) => a === null || answerOf(a).error !== undefined;
+  const failed = (message: string) => json({ error: { code: 'MESH_UNAVAILABLE', message, retryable: true } });
+  const busy = failed('the backup store is busy: try again in a minute');
+  const idOf = (encodedRequest: Hex): string | undefined => {
+    try { const id = (JSON.parse(new TextDecoder().decode(fromHex(encodedRequest))) as { id?: unknown }).id; return typeof id === 'string' ? id : undefined; } catch { return undefined; }
+  };
+  // Each call to the first store is one a stranger can make for free: at most `allowance` a minute.
+  const first = (operation: BackupOperation, encodedRequest: Hex) => before(operation, encodedRequest).catch(() => null);
   return async (operation, encodedRequest) => {
-    const answer = await store(operation, encodedRequest);
-    if (operation === 'GET' && isNone(answer)) return before(operation, encodedRequest).catch(() => answer);
-    if (operation === 'DELETE') await before(operation, encodedRequest).catch(() => undefined);
-    return answer;
+    if (operation === 'GET') {
+      const answer = await store('GET', encodedRequest);
+      if (!isNone(answer)) return answer;
+      if (!allowance()) return busy;
+      const old = await first('GET', encodedRequest);
+      return isError(old) ? answer : old!;
+    }
+    if (operation === 'PUT') {
+      // An id the first store still holds is its owner's: the first store checks the token
+      // before this one takes it. Unsure whether it holds it, this store takes nothing.
+      const id = idOf(encodedRequest);
+      if (id !== undefined && isNone(await store('GET', json({ id })))) {
+        if (!allowance()) return busy;
+        const old = await first('GET', json({ id }));
+        if (isError(old)) return failed('the earlier backup store did not answer: try again');
+        if (!isNone(old!)) {
+          const checked = await first('PUT', encodedRequest);
+          if (checked === null) return failed('the earlier backup store did not answer: try again');
+          if (isError(checked)) return checked;
+        }
+      }
+      return store('PUT', encodedRequest);
+    }
+    // DELETE: from the first store, then this one. If the first fails, nothing is removed
+    // and the wallet asks again, so a removed backup never comes back from the first store.
+    if (!allowance()) return busy;
+    if (isError(await first('DELETE', encodedRequest))) return failed('the earlier copy could not be removed: try again');
+    return store('DELETE', encodedRequest);
   };
 }
 

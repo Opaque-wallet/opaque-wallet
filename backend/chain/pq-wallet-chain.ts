@@ -77,6 +77,36 @@ const REGISTRY = parseAbi([
 ]);
 const FACTORY = parseAbi(['function createAccount(bytes32, bytes32, uint64, uint64) returns (address)']);
 const ACCOUNT = parseAbi(['function executeBatch((address target, uint256 value, bytes data)[] calls)']);
+
+/** LI.FI's same-chain token swaps (GenericSwapFacetV3): the only calls a swap quote may make. */
+const LIFI_SWAP = parseAbi([
+  'struct SwapData { address callTo; address approveTo; address sendingAssetId; address receivingAssetId; uint256 fromAmount; bytes callData; bool requiresDeposit; }',
+  'function swapTokensSingleV3ERC20ToERC20(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, SwapData _swapData)',
+  'function swapTokensMultipleV3ERC20ToERC20(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, SwapData[] _swapData)',
+]);
+
+/**
+ * A swap quote's call, decoded rather than trusted: it must pay `account`
+ * at least `minOut` of `to`, taking exactly `amount` of `from`. The quote
+ * comes through an exit and from LI.FI, and the account's post-quantum key
+ * signs it, so nothing in it is taken on faith: a receiver hidden anywhere
+ * else in the calldata, another token or a lower floor is refused here.
+ */
+export function checkSwapCall(data: Hex, expect: { readonly account: Address; readonly from: Address; readonly to: Address; readonly amount: bigint; readonly minOut: bigint }): void {
+  const no = (why: string): never => { throw new ProtocolFailure('INVALID_INPUT', `the swap quote ${why}`); };
+  let call: ReturnType<typeof decodeFunctionData<typeof LIFI_SWAP>>;
+  try { call = decodeFunctionData({ abi: LIFI_SWAP, data }); } catch { return no('is not a LI.FI token swap'); }
+  const [, , , receiver, minOut, swapData] = call.args;
+  const steps = Array.isArray(swapData) ? swapData : [swapData];
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  if (!same(receiver, expect.account)) no('pays someone other than this account');
+  if (minOut !== expect.minOut || minOut <= 0n) no('promises a different least than it says');
+  const first = steps[0];
+  const last = steps[steps.length - 1];
+  if (first === undefined || last === undefined) no('has no swap in it');
+  if (!same(first!.sendingAssetId, expect.from) || first!.fromAmount !== expect.amount) no('takes a different token or amount');
+  if (!same(last!.receivingAssetId, expect.to)) no('delivers a different token');
+}
 const POOL = parseAbi(['function deposit(bytes32)', 'function denomination() view returns (uint256)', 'function token() view returns (address)']);
 
 /** A PackedUserOperation without its signature: what the wallet is asked to sign. */
@@ -406,12 +436,16 @@ export function createPqAccountOps(options: {
 
     /**
      * A swap LI.FI quoted: approve its contract exactly `amount` of `token`,
-     * then its call, as ONE operation. The quote is checked by the caller.
+     * its call, and the approval back to nothing, as ONE operation. The call
+     * is decoded first (checkSwapCall): it must pay this account at least
+     * `quote.toAmountMin` of `to`. The router is checked by the caller.
      */
-    swap(token: Address, amount: bigint, quote: { readonly approvalAddress: Address; readonly to: Address; readonly data: Hex }): Promise<TxHash> {
+    swap(token: Address, amount: bigint, quote: { readonly approvalAddress: Address; readonly to: Address; readonly data: Hex; readonly toAmountMin: string }, to: Address): Promise<TxHash> {
+      checkSwapCall(quote.data, { account, from: token, to, amount, minOut: BigInt(quote.toAmountMin) });
       return this.execute([
         { to: token, data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [quote.approvalAddress, amount] }) as Hex },
         { to: quote.to, data: quote.data },
+        { to: token, data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [quote.approvalAddress, 0n] }) as Hex },
       ], token.toLowerCase() === deployment.tokens.usdc.address.toLowerCase() ? amount : 0n);
     },
 

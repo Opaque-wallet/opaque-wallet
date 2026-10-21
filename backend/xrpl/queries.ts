@@ -34,7 +34,7 @@ export interface TagState {
 }
 
 export interface XrplAnswererDeps {
-  registerTag(pool: string, tag: number, registration: TagRegistration, auth?: TagAuth): Promise<void>;
+  registerTag(pool: string, tag: number, registration: TagRegistration, auth?: TagAuth, payable?: boolean): Promise<void>;
   tagStatus(pool: string, tag: number): Promise<TagState>;
   isSpent(pool: string, nullifier: Nullifier): Promise<boolean>;
   /** Absent: Buy is not offered by this exit. */
@@ -65,7 +65,8 @@ export function createXrplAnswerer(deps: XrplAnswererDeps): XrplSend {
       const commitments = r['commitments'];
       if (typeof commitments !== 'object' || commitments === null) refuse('commitments are a list per note size');
       const auth = typeof r['reveal'] === 'string' ? { reveal: r['reveal'] } : typeof r['owner'] === 'string' ? { owner: r['owner'] } : undefined;
-      await deps.registerTag(pool, tag, commitments as TagRegistration, auth);
+      // Only a wallet that sized its notes for the payable split asks for it (pool.ts TagEvent).
+      await deps.registerTag(pool, tag, commitments as TagRegistration, auth, r['payable'] === true);
       return { pool, tag };
     },
     async TAG_STATUS(r) {
@@ -126,9 +127,13 @@ export async function xrplCall<T>(send: XrplSend, operation: XrplOperation, requ
   return answer.result as T;
 }
 
-/** `auth`: an owner anchor makes the tag a reusable address; a reveal tops one up. */
-export const registerTag = (send: XrplSend, pool: string, tag: number, commitments: Readonly<Record<string, readonly NoteCommitment[]>>, auth?: TagAuth) =>
-  xrplCall<{ pool: string; tag: number }>(send, 'REGISTER_TAG', { pool, tag, commitments, ...auth });
+/**
+ * `auth`: an owner anchor makes the tag a reusable address; a reveal tops one up.
+ * `payable`: payments from now on split so every amount stays payable; the
+ * wallet sized these notes for that split (notesForPayments counts both).
+ */
+export const registerTag = (send: XrplSend, pool: string, tag: number, commitments: Readonly<Record<string, readonly NoteCommitment[]>>, auth?: TagAuth, payable = false) =>
+  xrplCall<{ pool: string; tag: number }>(send, 'REGISTER_TAG', { pool, tag, commitments, ...auth, ...(payable ? { payable: true } : {}) });
 
 export const tagStatus = async (send: XrplSend, pool: string, tag: number): Promise<TagState> => {
   const s = await xrplCall<Omit<TagState, 'carried'> & { carried: string }>(send, 'TAG_STATUS', { pool, tag });

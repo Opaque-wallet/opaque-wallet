@@ -57,8 +57,11 @@ try {
   const address = String(await page.getAttribute('.deployer code', 'title'));
   const account = String(await page.textContent('#account-address'));
   check('New deployer lists a fresh address, not the account\'s own', /^0x[0-9a-fA-F]{40}$/.test(address) && address.toLowerCase() !== account.toLowerCase(), address);
+  // F-25 (overlord): nothing is read for it until asked, so an exit can't tie it to the account by timing.
+  check('its balance is not read until asked', String(await page.textContent('.deployer strong')).trim() === 'Check balance', String(await page.textContent('.deployer strong')));
+  await page.click('.deployer [data-do="balance"]');
   await page.waitForFunction(() => /USDC$/.test(document.querySelector('.deployer strong')?.textContent ?? ''), null, { timeout: 60_000 });
-  check('its balance is read through the mesh', true, String(await page.textContent('.deployer strong')));
+  check('and asked, it is read through the mesh', true, String(await page.textContent('.deployer strong')));
 
   // ── 2. its key, after the password ─────────────────────────────────────────
   await page.click('.deployer [data-do="show"]');

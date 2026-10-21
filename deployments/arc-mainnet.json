@@ -25,6 +25,11 @@
     }
   },
   "contracts": {
+    "create2Factory": {
+      "$comment": "The deterministic deployment proxy (Arachnid, keyless, the same address on every EVM chain). Its code was read on this network on 2026-10-21. Contracts (frontend/src/lib/contracts.ts) deploys through it, and only where it is set.",
+      "address": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "deployedAtBlock": 0
+    },
     "pqKeyRegistry": {
       "address": "0x33a9d3e188835e8287f55a1a8cb7bd6554ed2faf",
       "deployedAtBlock": 25919198,

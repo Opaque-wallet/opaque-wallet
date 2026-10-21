@@ -2,7 +2,7 @@
 // lib/xrpl-runtime.ts, which talks to this origin and Opaque's stack only.
 
 // First: it seals and opens what the wallet stores, so nothing reads storage before it.
-import { unlockGate } from './lib/lock.ts';
+import { confirmPassword, unlockGate } from './lib/lock.ts';
 import type { NoteSummary, UnixSeconds } from '@opaque/protocol-types';
 
 import { isAccount } from '../../backend/xrpl/protocol.ts';
@@ -684,6 +684,8 @@ function setupSwap(): void {
 
 // ── backup ────────────────────────────────────────────────────────────────
 async function onBackupExport(): Promise<void> {
+  // A file of the notes, under a passphrase of the holder's choosing: the password first.
+  if (!(await confirmPassword('save this browser\'s notes to a file'))) return;
   try {
     const blob = await wallet.exportBackup(el<HTMLInputElement>('backup-pass').value);
     const a = document.createElement('a');

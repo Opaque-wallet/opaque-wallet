@@ -55,6 +55,8 @@ export interface XrplStackConfig {
   readonly trustRoot: DirectoryTrustRoot;
   readonly cre: { readonly publicKey: `0x${string}`; readonly encryptionKeyId: string; readonly policyVersion: string };
   readonly buy: boolean;
+  /** The service splits payably when asked (backend/xrpl/stack.ts); absent on one from before. */
+  readonly payableSplit?: boolean;
   /** Set when the stack offers WalletConnect (lib/walletconnect.ts): its relay and Verify, through the stack. */
   readonly walletConnect?: WalletConnectConfig | null;
 }
@@ -374,7 +376,10 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
   async function liveSizes(p: XrplPoolDeployment): Promise<number[]> {
     const logs = await logsOf();
     const smallest = Math.min(...p.sizes);
-    return p.sizes.filter((size) => size === smallest || (logs.get(counterOf(scopeFor(p, size)))?.size ?? 0) >= RING - 1);
+    // A service from before the payable split splits largest first: over powers of ten
+    // alone (1, 10, 100…) that still leaves every amount payable, over 1-2-5 it doesn't.
+    const usable = cfg.payableSplit === true ? p.sizes : p.sizes.filter((size) => /^10*$/.test(String(size / smallest)));
+    return usable.filter((size) => size === smallest || (logs.get(counterOf(scopeFor(p, size)))?.size ?? 0) >= RING - 1);
   }
   /** Sizes whose ring a note can be spent from now: eight deposits, its own among them. */
   async function spendableSizes(p: XrplPoolDeployment): Promise<Set<number>> {
@@ -455,7 +460,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       if (s.registered || s.notes > 0) continue;
       if (!make) return null;
       try {
-        await registerTag(xrpl, p.account, tag, addressBatch(keys, p, i, Object.fromEntries((await liveSizes(p)).map((size) => [String(size), 0])), kind), { owner: linkAt(keys, p, i, CHAIN, kind) });
+        await registerTag(xrpl, p.account, tag, addressBatch(keys, p, i, Object.fromEntries((await liveSizes(p)).map((size) => [String(size), 0])), kind), { owner: linkAt(keys, p, i, CHAIN, kind) }, true);
         return { i, tag, synced: {} };
       } catch (error) {
         // Paid before anyone registered it: the next candidate.
@@ -509,7 +514,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       }
       const from = Object.fromEntries(Object.keys(batch).map((size) => [size, registered[size]!]));
       // Another browser of the phrase may top it up first: its link is then spent, and the next sync carries on.
-      const ok = await registerTag(xrpl, p.account, rec.tag, addressBatch(keys, p, rec.i, from, kind, batch), { reveal: linkAt(keys, p, rec.i, CHAIN - depth - 1, kind) }).then(() => true, () => false);
+      const ok = await registerTag(xrpl, p.account, rec.tag, addressBatch(keys, p, rec.i, from, kind, batch), { reveal: linkAt(keys, p, rec.i, CHAIN - depth - 1, kind) }, true).then(() => true, () => false);
       if (!ok) break;
       added = true;
       for (const [size, k] of Object.entries(batch)) registered[size] = registered[size]! + k;
@@ -538,7 +543,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       let room = 64;
       const counts = Object.fromEntries(Object.entries(short).map(([size, n]) => { const k = Math.min(n, room); room -= k; return [size, k]; }).filter(([, k]) => (k as number) > 0));
       const from = Object.fromEntries(Object.keys(counts).map((size) => [size, s.sizes[size]?.registered ?? 0]));
-      await registerTag(xrpl, p.account, rec!.tag, addressBatch(keys, p, rec!.i, from, 'swaps', counts), { reveal: linkAt(keys, p, rec!.i, CHAIN - s.owner.depth - 1, 'swaps') });
+      await registerTag(xrpl, p.account, rec!.tag, addressBatch(keys, p, rec!.i, from, 'swaps', counts), { reveal: linkAt(keys, p, rec!.i, CHAIN - s.owner.depth - 1, 'swaps') }, true);
     }
     throw new Error('could not make room on the swap tag: try again');
   }
@@ -637,7 +642,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       for (let attempt = 0; ; attempt++) {
         const tag = freshTag();
         try {
-          await registerTag(xrpl, p.account, tag, commitments);
+          await registerTag(xrpl, p.account, tag, commitments, undefined, true);
           const record: ReceiveTag = { symbol, pool: p.account, tag, createdAt: Date.now() };
           save(K.tags, [record, ...load<ReceiveTag[]>(K.tags, [])]);
           return record;

@@ -290,7 +290,7 @@ export function setupAccounts(): void {
   el('phrase-show').addEventListener('click', () => void (async () => {
     const list = el('phrase-words');
     const showing = list.hidden;
-    if (showing && !(await confirmPassword('your recovery phrase'))) return;
+    if (showing && !(await confirmPassword('show your recovery phrase'))) return;
     list.replaceChildren(...(showing ? (storedPhrase() ?? '').split(' ').map((w) => Object.assign(document.createElement('li'), { textContent: w })) : []));
     list.hidden = !showing;
     el('phrase-copy').hidden = !showing;
@@ -323,14 +323,17 @@ export function setupAccounts(): void {
     const account = page.account();
     if (account === null || account === 'browser') return;
     const showing = el('key-text').hidden;
-    if (showing && !(await confirmPassword('this account\'s key'))) return;
+    if (showing && !(await confirmPassword('show this account\'s key'))) return;
     el('key-text').textContent = showing ? accountKeyText(account) : '';
     el('key-text').hidden = !showing;
     el('key-copy').hidden = !showing;
     el('key-show').textContent = showing ? 'Hide account key' : 'Show account key';
   })());
   el('key-copy').addEventListener('click', () => copy(el('key-text').textContent ?? '', 'Account key', true));
+  // A passkey backup takes the phrase to wherever that passkey lives (a phone, a password manager):
+  // the password first, as for showing the phrase itself.
   el('passkey-go').addEventListener('click', () => void (async () => {
+    if (!(await confirmPassword('back this wallet up with a passkey'))) return;
     el<HTMLButtonElement>('passkey-go').disabled = true;
     setStatus('passkey-status', 'Follow your browser\'s passkey prompt…');
     try { await createBackup(page.backup); setStatus('passkey-status', ''); toast('Backed up with your passkey'); } catch (error) { setStatus('passkey-status', `Not backed up: ${(error as Error).message}`); }
@@ -339,6 +342,7 @@ export function setupAccounts(): void {
   })());
   el('passkey-remove').addEventListener('click', () => void (async () => {
     if (!confirm('Remove the passkey backup? Clearing this browser would then leave only your written recovery phrase.')) return;
+    if (!(await confirmPassword('remove the passkey backup'))) return;
     try { await removeBackup(page.backup); setStatus('passkey-status', 'Removed. Opaque no longer keeps a copy.'); } catch (error) { setStatus('passkey-status', `Not removed: ${(error as Error).message}`); }
     renderPasskey();
   })());
@@ -505,6 +509,7 @@ async function setupPasskey(): Promise<void> {
   const card = document.getElementById('passkey-card');
   const later = () => { try { return sessionStorage.getItem('opaque:passkey-card') === 'later'; } catch { return false; } };
   document.getElementById('passkey-card-go')?.addEventListener('click', () => void (async () => {
+    if (!(await confirmPassword('back this wallet up with a passkey'))) return;
     try { await createBackup(page.backup); card!.hidden = true; toast('Backed up with your passkey'); } catch (error) { toast(`Not backed up: ${(error as Error).message}`); }
   })());
   document.getElementById('passkey-card-x')?.addEventListener('click', () => { card!.hidden = true; try { sessionStorage.setItem('opaque:passkey-card', 'later'); } catch { /* fine */ } });

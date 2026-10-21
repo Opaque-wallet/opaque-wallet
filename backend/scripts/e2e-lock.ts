@@ -12,6 +12,14 @@
 //   6. a wallet from before passwords (its phrase in the clear) can't open until it sets one:
 //      the phrase is sealed on the spot, and the Arc page opens on it without asking
 //   7. the recovery phrase and the account key are shown only after the password, again
+//   overlord regressions (2026-10-21):
+//   8. F-8   a backup file is made only after the password, again
+//   9. F-19  Arc's wallet record no longer shows the account's address on disk; WalletConnect's records are sealed
+//  10. F-10  Lock now in one tab locks the others
+//  11. F-9   a page left keeps its session for seconds, not fifteen minutes
+//  12. F-22  a new password is a new data key: the old password and wrapped key open nothing after
+//  13. F-21  a browser holding only app accounts is made to set a password
+//  14. F-18  two tabs setting a password at once leave every record open under the one that won
 //
 // The origin defaults to https://www.opaque.credit; http://127.0.0.1:<port> is a vite dev server.
 
@@ -61,6 +69,44 @@ const arcKeys = (page: any): Promise<{ sealed: unknown }[]> => page.evaluate(asy
   }
   return out;
 });
+/**
+ * Opens every sealed record with `password` and the wrapped key on disk, by WebCrypto alone
+ * (not the lock's own code): how many open, how many don't, and the plain values by name.
+ */
+const openAllWith = (page: any, password: string): Promise<{ ok: number; failed: number; meta: { id: string; prev?: string }; plain: Record<string, string> }> => page.evaluate(async (pw: string) => {
+  const b = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const raw = (k: string) => (localStorage as unknown as Record<string, string | undefined>)[k];
+  const meta = JSON.parse(raw('opaque:lock:v1')!) as { id: string; salt: string; iterations: number; wrapped: string; prev?: string };
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const kek = await crypto.subtle.importKey('raw', await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: b(meta.salt), iterations: meta.iterations }, base, 256), 'AES-GCM', false, ['decrypt']);
+  const open = async (key: CryptoKey, box: Uint8Array) => new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: box.slice(0, 12) }, key, box.slice(12)));
+  let dataKey: CryptoKey;
+  try { dataKey = await crypto.subtle.importKey('raw', await open(kek, b(meta.wrapped)), 'AES-GCM', false, ['decrypt']); } catch { return { ok: 0, failed: -1, meta, plain: {} }; }
+  let ok = 0; let failed = 0; const plain: Record<string, string> = {};
+  for (const k of Object.keys(localStorage)) {
+    const v = raw(k)!;
+    if (!v.startsWith('sealed:v1:')) continue;
+    try { plain[k] = new TextDecoder().decode(await open(dataKey, b(v.slice(10)))); ok++; } catch { failed++; }
+  }
+  return { ok, failed, meta, plain };
+}, password);
+/** Arc's raw IndexedDB records of a store: what is on disk, not what the wallet reads. */
+const rawArc = (page: any, store: 'signers' | 'wallets'): Promise<Record<string, unknown>[]> => page.evaluate(async (name: string) => {
+  const out: Record<string, unknown>[] = [];
+  for (const { name: db } of await indexedDB.databases()) {
+    if (!db?.startsWith('opaque-pq-account-v1')) continue;
+    await new Promise<void>((resolve) => {
+      const r = indexedDB.open(db);
+      r.onsuccess = () => {
+        const d = r.result;
+        if (!d.objectStoreNames.contains(name)) { d.close(); resolve(); return; }
+        const all = d.transaction(name).objectStore(name).getAll();
+        all.onsuccess = () => { out.push(...(all.result as Record<string, unknown>[])); d.close(); resolve(); };
+      };
+    });
+  }
+  return out;
+}, store);
 const seedsOpen = (page: any): Promise<string> => page.evaluate(async () => {
   try { return (await (globalThis as any).opaque.exportBackup('a long enough passphrase')).size > 0 ? 'decrypted' : 'empty'; } catch (e) { return String((e as Error).message); }
 });
@@ -181,6 +227,124 @@ try {
   await old.waitForSelector('#confirm-password', { timeout: 30_000 });
   await old.click('#confirm-cancel');
   check('Show account key asks too; cancelled, it stays hidden', await old.evaluate(() => (document.getElementById('key-text') as HTMLElement).hidden && document.getElementById('confirm-password') === null), 'cancelled');
+  await old.keyboard.press('Escape');
+
+  // ── 8. F-8: a backup file only after the password ──────────────────────────
+  let downloaded = false;
+  old.on('download', () => { downloaded = true; });
+  await old.click('#account-button');
+  await old.fill('#backup-pass', 'a long enough passphrase');
+  await old.click('#backup-export');
+  // OMEGA's PoC: an unlocked wallet left in front of someone, who saves its notes under their own passphrase.
+  check('a backup file asks for the password first (F-8)', await old.waitForSelector('#confirm-password', { timeout: 30_000 }).then(() => true, () => false), 'asked');
+  await old.click('#confirm-cancel');
+  await old.waitForTimeout(1_000);
+  check('and cancelled, nothing is saved', !downloaded, 'no download');
+  await old.keyboard.press('Escape');
+  await old.goto(ARC);
+  await old.waitForFunction(ARC_READY, null, { timeout: 180_000 });
+  await old.waitForFunction(() => /^0x[0-9a-f]{40}$/i.test(document.getElementById('receive-address')?.textContent ?? ''), null, { timeout: 180_000 });
+  const arcAddress = String(await old.textContent('#receive-address')).toLowerCase();
+
+  // ── 9. F-19: Arc's wallet record and WalletConnect's records, sealed on disk ─
+  const wallets = await rawArc(old, 'wallets');
+  // OMEGA's PoC: indexedDB 'opaque-pq-account-v1' → wallets showed the Arc address in the clear.
+  check('Arc\'s wallet record keeps the account address sealed (F-19)', wallets.length > 0 && wallets.every((w) => w['sealed'] === 1 && String(w['accountAddress']).toLowerCase() !== arcAddress)
+    && !JSON.stringify(wallets, (_k, v) => (typeof v === 'bigint' ? String(v) : v)).toLowerCase().includes(arcAddress.slice(2)), `${wallets.length} record(s)`);
+  await old.evaluate(() => localStorage.setItem('opaque:wc:v1:probe', JSON.stringify({ topic: 'a WalletConnect session' })));
+  check('and WalletConnect\'s records are sealed like the rest', String(await onDisk(old, 'opaque:wc:v1:probe')).startsWith('sealed:v1:'), 'opaque:wc:v1:*');
+  await old.evaluate(() => localStorage.removeItem('opaque:wc:v1:probe'));
+
+  // ── 10. F-10: Lock now in one tab locks the others ─────────────────────────
+  const other = await old.context().newPage();
+  await other.goto(XRPL);
+  await unlockIfAsked(other);
+  await other.waitForFunction(READY, null, { timeout: 120_000 });
+  await old.click('#account-button');
+  await old.click('#lock-now');
+  // OMEGA's PoC: Lock now in one view left every other view open.
+  check('Lock now in one tab locks the other (F-10)', await other.waitForSelector('#lock-password', { timeout: 30_000 }).then(() => true, () => false), 'the other tab shows the lock screen');
+
+  // ── 11. F-9: a page left keeps its session for seconds ─────────────────────
+  await unlockIfAsked(other);
+  await other.waitForFunction(READY, null, { timeout: 120_000 });
+  const left = await other.evaluate(() => {
+    dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    return (JSON.parse(sessionStorage.getItem('opaque:unlocked:v1') ?? '{}') as { until?: number }).until! - Date.now();
+  });
+  // OMEGA's PoC: close the tab, Ctrl+Shift+T within fifteen minutes, and it opened unlocked.
+  check('a page left keeps its session ten seconds, not fifteen minutes (F-9)', left > 0 && left <= 10_000, `${Math.round(left / 1000)} s`);
+  await other.reload();
+  await unlockIfAsked(other);
+  await other.waitForFunction(READY, null, { timeout: 120_000 });
+
+  // ── 12. F-22: a new password, a new data key ───────────────────────────────
+  const before12 = await openAllWith(other, PASSWORD);
+  // The wrapped key as it is on disk now: what someone who copied it before the change would hold.
+  const oldMeta = JSON.parse(String(await onDisk(other, 'opaque:lock:v1'))) as { salt: string; iterations: number; wrapped: string };
+  await other.click('#account-button');
+  await other.click('#password-change');
+  await other.fill('#password-current', PASSWORD);
+  await other.fill('#password-next', 'a rotated password');
+  await other.fill('#password-again', 'a rotated password');
+  await other.click('#password-change-form button[type=submit]');
+  await other.waitForFunction(() => /^Changed/.test(document.getElementById('password-status')?.textContent ?? ''), null, { timeout: 120_000 });
+  const after12 = await openAllWith(other, 'a rotated password');
+  const stale = await other.evaluate(async (m: { salt: string; iterations: number; wrapped: string }) => {
+    // OMEGA's PoC: the old wrapped key and the old password, kept from before the change.
+    const b = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode('opaque test password'), 'PBKDF2', false, ['deriveBits']);
+    const kek = await crypto.subtle.importKey('raw', await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: b(m.salt), iterations: m.iterations }, base, 256), 'AES-GCM', false, ['decrypt']);
+    const w = b(m.wrapped);
+    const old = await crypto.subtle.importKey('raw', new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: w.slice(0, 12) }, kek, w.slice(12))), 'AES-GCM', false, ['decrypt']);
+    let opened = 0;
+    for (const k of Object.keys(localStorage)) {
+      const v = (localStorage as unknown as Record<string, string>)[k]!;
+      if (!v.startsWith('sealed:v1:')) continue;
+      const box = b(v.slice(10));
+      try { await crypto.subtle.decrypt({ name: 'AES-GCM', iv: box.slice(0, 12) }, old, box.slice(12)); opened++; } catch { /* sealed under the new key */ }
+    }
+    return opened;
+  }, oldMeta);
+  check('a new password is a new data key, every record moved to it (F-22)', after12.meta.id !== before12.meta.id && after12.failed === 0 && after12.ok === before12.ok && after12.meta.prev === undefined, `${after12.ok} records under the new key`);
+  check('and the old password with the old wrapped key opens none of them', stale === 0, `${stale} opened`);
+  const signers = await rawArc(other, 'signers');
+  check('Arc\'s keys moved too', signers.length > 0 && signers.every((r) => r['by'] === after12.meta.id), `${signers.length} keys`);
+
+  // ── 13. F-21: app accounts alone are a wallet ──────────────────────────────
+  const sitesOnly = await (await browser.newContext()).newPage();
+  await sitesOnly.goto(XRPL);
+  await acceptTerms(sitesOnly);
+  // OMEGA's PoC: a passkey restore whose spent notes were dropped leaves app accounts only.
+  await sitesOnly.evaluate(() => localStorage.setItem('opaque:xrpl-sites:v1', JSON.stringify({ 'https://app.example': { address: 'rApp', key: 'secret' } })));
+  await sitesOnly.goto(XRPL);
+  check('app accounts alone make it set a password (F-21)', await sitesOnly.waitForSelector('#lock-new', { timeout: 90_000 }).then(() => true, () => false), 'Set a password');
+
+  // ── 14. F-18: two tabs setting a password at once ──────────────────────────
+  const race = await browser.newContext();
+  const r1 = await race.newPage();
+  await r1.goto(XRPL);
+  await acceptTerms(r1);
+  await r1.evaluate((p: string) => {
+    localStorage.setItem('opaque:xrpl-phrase:v1', JSON.stringify(p));
+    localStorage.setItem('opaque:xrpl-accounts:v1', JSON.stringify({ count: 1, active: 0, balances: {}, imported: true, scanned: {} }));
+  }, phrase);
+  await r1.goto(XRPL);
+  const r2 = await race.newPage();
+  await r2.goto(XRPL);
+  for (const [tab, pw] of [[r1, 'race password one'], [r2, 'race password two']] as const) {
+    await tab.waitForSelector('#lock-new', { timeout: 90_000 });
+    await tab.fill('#lock-new', pw);
+    await tab.fill('#lock-new2', pw);
+  }
+  // OMEGA's PoC: both submitted within the time the password takes to stretch.
+  // Whichever finishes first, the other tab sees the new key and moves to the lock screen: its click may find nothing.
+  await Promise.allSettled([r1.click('#lock-new-go', { timeout: 10_000 }), r2.click('#lock-new-go', { timeout: 10_000 })]);
+  await r1.waitForTimeout(8_000);
+  const one = await openAllWith(r1, 'race password one');
+  const which = one.failed === -1 ? await openAllWith(r1, 'race password two') : one;
+  check('two tabs setting a password at once: every record opens under the one that won (F-18)', which.failed === 0 && which.ok > 0
+    && JSON.parse(which.plain['opaque:xrpl-phrase:v1'] ?? 'null') === phrase, `${which.ok} open, ${which.failed} orphaned`);
 } catch (error) {
   failures++;
   log(`FAIL  ${(error as Error).stack ?? error}`);

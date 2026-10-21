@@ -84,3 +84,30 @@ test('a swap\'s tag holds enough small notes for many small payments, in any ord
   assert.ok(need.get(1_000_000)! >= 12, `${need.get(1_000_000)} one-USDC notes`);
 });
 
+
+// F-29 (overlord): the ledger writes large IOU values in exponent form; quotes read them.
+test('AMM reserves written as "1.2e11" are read, not thrown on (F-29)', async () => {
+  const usd: XrplAsset = { kind: 'IOU', currency: 'USD', issuer: 'rDzYkrDBG8uLa5EotddkzhZnAuFXXxf8Bu' };
+  let asked: Record<string, unknown> = {};
+  // OMEGA's PoC: an AMM whose token reserve is "1.2e11".
+  const read: LedgerRead = async <T,>(_command: string, params: Record<string, unknown>) => {
+    asked = params;
+    return { amm: { amount: String(60_000_000_000n * UNIT), amount2: { value: '1.2e11' }, trading_fee: 500 } } as T;
+  };
+  const out = await quoteSwap(read, { kind: 'XRP' }, usd, 1_000n * UNIT);
+  // 1,000 XRP at 1:2, less the 0.5% fee: 1,990 USD, a hair under.
+  assert.ok(out > 1_989n * UNIT && out < 1_990n * UNIT, `1,000 XRP at 1:2 less 0.5% (${out})`);
+  // F-14: the reserves come from the validated ledger, not the open one.
+  assert.equal(asked['ledger_index'], 'validated');
+});
+
+// F-14 (overlord): an attester holds a swap to within 10% of its own quote, not half.
+test('a DeliverMin shaved below the floor is refused; the wallet\'s own slippage passes (F-14)', async () => {
+  const { ATTESTER_FLOOR_BPS, SWAP_SLIPPAGE_BPS } = await import('../swap.ts');
+  const fair = 1_000_000n;
+  const accepts = (min: bigint) => !(min * 10_000n < fair * (10_000n - ATTESTER_FLOOR_BPS));
+  // OMEGA's PoC: the executor lowers DeliverMin to fair / 2.
+  assert.equal(accepts(fair / 2n), false);
+  assert.equal(accepts((fair * (10_000n - SWAP_SLIPPAGE_BPS)) / 10_000n), true, 'what an honest wallet asks');
+  assert.equal(accepts(890_000n), false, '11% under: refused');
+});

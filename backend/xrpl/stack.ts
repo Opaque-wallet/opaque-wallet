@@ -115,7 +115,9 @@ const moonpaySecret = process.env['MOONPAY_SECRET_KEY'];
 // is kept. The first ones were kept here, and /v1/backup still serves them while
 // the store they moved to reads through.
 const backup = backupFromEnv(join(XRPL_STATE, 'backups'), PUBLIC_URL !== undefined);
-const firstBackups = backup.kept ? backup.send : createBackupStore(join(XRPL_STATE, 'backups'));
+// The first backups' store answers for them while they move; it takes no new ones, so
+// strangers can't fill the volume that holds this service's pool state.
+const firstBackups = backup.kept ? backup.send : createBackupStore(join(XRPL_STATE, 'backups'), { acceptNew: false });
 const exit = createExecutorServer({
   backup: backup.send,
   // Asked across the mesh, so the authority never sees who asked; the HTTP route stays for old clients.
@@ -219,6 +221,10 @@ const walletConfig = JSON.stringify({
   cre: { publicKey: intentKeys.publicKey, encryptionKeyId: KEY_ID, policyVersion: POLICY },
   credentialUrl: `${PUBLIC_URL ?? `http://${LOOPBACK}:${PORTS.credentials}`}/v1/credential`,
   buy: moonpayKey !== undefined && moonpaySecret !== undefined,
+  // This service splits a registration that asks for it payably (pool.ts TagEvent): a wallet
+  // uses every note size only where it does, since largest-first over 1-2-5 sizes leaves
+  // most amounts unpayable.
+  payableSplit: true,
   walletConnect: WC_PROJECT === undefined ? null : {
     projectId: WC_PROJECT, relayUrl: `${SELF.replace(/^http/, 'ws')}/v1/walletconnect`, verifyUrl: `${SELF}/v1/wc-verify`,
   },
