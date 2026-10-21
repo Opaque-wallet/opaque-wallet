@@ -4,7 +4,7 @@ Private XRP and RLUSD on the XRP Ledger, plus private access to XRPL dapps. Main
 
 Everything below runs against **XRPL testnet** today. Mainnet has no pools yet ([deployments/xrpl-mainnet.json](../deployments/xrpl-mainnet.json)).
 
-Testnet pools ([deployments/xrpl-testnet.json](../deployments/xrpl-testnet.json)) all use notes of 1, 10 and 100, and each pool's issuer is checked at setup:
+Testnet pools ([deployments/xrpl-testnet.json](../deployments/xrpl-testnet.json)) all use notes of 1, 2 and 5 of every power of ten, from 1 to 1,000,000, and each pool's issuer is checked at setup:
 
 | Pool | Asset | Issuer controls |
 |---|---|---|
@@ -20,7 +20,7 @@ Setup refuses an issuer that charges a transfer fee, which would break fixed not
 1. **Deposit.**
    - From anyone: a Payment to the pool account with a one-time **destination tag** the wallet registered first. Sources include an exchange, MoonPay or a friend.
    - From your own account: a Payment with `DestinationTag 0` and `InvoiceID` set to the note's commitment. This names the depositor.
-   - The pool counts `delivered_amount` and never `Amount`, splits it greedily into notes of 1, 10 and 100, and carries any remainder on the tag.
+   - The pool counts `delivered_amount` and never `Amount`, splits it into the tag's registered notes and carries any remainder on the tag. A registration made since the payable split (`ladder: true` in its history event) splits payably: each note at most half of what is left, so every whole amount stays payable (`splitAmount` in packages/protocol-types, shared with Arc's deposits); 95 XRP is 10 notes, 2,400 is 15, 1,000,000 is 24. Older registrations split largest first, the fewest notes, which leaves most amounts unpayable without change. A wallet registers notes only in sizes with seven deposits already (a ring to hide in) plus the smallest, so a big deposit splits into the largest sizes that have one. Each registration records the ledger it took effect after (`tags-<pool>.history.json`), so a payment splits only into notes registered before it, and a later top-up credits only what was carried: a note once credited stays credited. New testnet sizes are seeded with seven burned decoys by `xrpl/seed-rings.ts`.
 2. **Pay.** The browser builds the same 219-repetition ZKBoo ring proof as on Arc: "I own one of these 8 notes". The proof binds the recipient's account **and** tag. The spend is sealed to the CRE key and crosses the 3-hop mesh.
 3. **Release.** The CRE decision is unchanged from Arc: it picks the moment, and "send now" goes at once.
 4. **Settle.** Each attester checks, on its own:

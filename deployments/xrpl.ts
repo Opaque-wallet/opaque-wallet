@@ -52,7 +52,12 @@ export interface XrplDeployment {
 // XRPL's base58 alphabet; the checksum is checked where xrpl.js is loaded.
 const CLASSIC = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
 const CURRENCY = /^([A-Za-z0-9]{3}|[0-9A-F]{40})$/;
-const SIZES = new Set([1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000, 100_000_000]);
+// The protocol's DENOMINATIONS (packages/protocol-types), repeated: this file imports only JSON.
+const SIZES = new Set([
+  1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000, 100_000_000,
+  200_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 5_000_000_000, 10_000_000_000,
+  20_000_000_000, 50_000_000_000, 100_000_000_000, 200_000_000_000, 500_000_000_000, 1_000_000_000_000,
+]);
 
 const bad = (path: string, why: string): never => { throw new Error(`${FILE}: ${path} ${why}`); };
 

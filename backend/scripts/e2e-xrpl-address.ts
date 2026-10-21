@@ -11,6 +11,8 @@
 //      the next link of the address's hash chain: 285 XRP only if it did
 //   4. the account list shows the address under the account
 //   5. browser B, with only the phrase: the same address, and all 285 XRP
+//   6. with --large, 2,400 XRP paid to the address at once: credited exactly, as a
+//      ladder (17 notes, needs the 200, 500 and 1,000 rings): every amount payable
 //
 // Don't run it beside another faucet-using script: they compete for the faucet.
 
@@ -19,11 +21,14 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { xAddressToClassicAddress } from 'ripple-address-codec';
+import { Client, Wallet } from 'xrpl';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { createWallet, importWallet } from './xrpl-wallet-page.ts';
+import { createWallet, importWallet, unlockIfAsked } from './xrpl-wallet-page.ts';
+import { xrplDeployment } from '../../deployments/xrpl.ts';
 
-const PAGE = process.argv[2] ?? 'https://www.opaque.credit/testnet/xrpl';
+const PAGE = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit/testnet/xrpl';
+const LARGE = process.argv.includes('--large');
 const log = (s: string) => process.stdout.write(`${s}\n`);
 let failures = 0;
 const check = (name: string, ok: boolean, detail: string) => {
@@ -39,7 +44,8 @@ const executablePath = process.env['CHROMIUM']
 const browser = await chromium.launch({ ...(executablePath ? { executablePath } : { channel: 'chromium' }), headless: true });
 const origin = new URL(PAGE).origin;
 
-const balance = async (page: any) => String(await page.textContent('#balance-xrp'));
+// Without thousands separators: 2,685 reads as 2685.
+const balance = async (page: any) => String(await page.textContent('#balance-xrp')).replace(/,/g, '');
 /** Refreshes until the balance reads `want`, or two minutes pass. */
 async function settleTo(page: any, want: string): Promise<string> {
   for (let i = 0; i < 30 && (await balance(page)) !== want; i++) {
@@ -109,6 +115,26 @@ try {
   const restored = await settleTo(walletB, '285');
   check('the phrase brings back every note the address received', restored === '285', `${restored} XRP in ${Math.round((Date.now() - t0) / 1000)} s`);
   check('and the same address', (await addressOf(walletB)) === address, address);
+
+  // ── 6. a large deposit ─────────────────────────────────────────────────────
+  if (LARGE) {
+    const client = new Client(xrplDeployment.network.wss);
+    await client.connect();
+    const payer = Wallet.generate();
+    while (Number(await client.getXrpBalance(payer.address).catch(() => '0')) < 2_410) await client.fundWallet(payer).catch(() => new Promise((r) => setTimeout(r, 5_000)));
+    const count = async () => Number(/(\d+) private notes?/.exec(String(await walletA.textContent('#note-count')))?.[1] ?? NaN);
+    await unlockIfAsked(walletA);
+    const before = await count();
+    const r = await client.submitAndWait({ TransactionType: 'Payment', Account: payer.address, Destination: xAddressToClassicAddress(address).classicAddress, DestinationTag: tag, Amount: String(2_400_000_000) }, { autofill: true, wallet: payer });
+    await client.disconnect();
+    check('2,400 XRP paid to the address in one payment', (r.result.meta as { TransactionResult: string }).TransactionResult === 'tesSUCCESS', r.result.hash);
+    // Funding the payer takes minutes: the wallet may have locked itself meanwhile. Step 4 left Accounts open.
+    await unlockIfAsked(walletA);
+    await walletA.keyboard.press('Escape');
+    const got = await settleTo(walletA, '2685');
+    const added = (await count()) - before;
+    check('credited exactly, as a ladder of notes that can pay any amount', got === '2685' && added <= 20, `${got} XRP; ${added} new notes`);
+  }
 } catch (error) {
   failures++;
   log(`FAIL  ${(error as Error).stack ?? error}`);

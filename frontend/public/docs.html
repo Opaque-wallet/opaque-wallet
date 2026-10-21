@@ -343,13 +343,14 @@ echo "$BYTECODE${ARGS#0x}"          <span class="c"># paste this into Contracts 
       <div class="table"><table>
         <thead><tr><th>Asset</th><th>Pool account</th><th>Note sizes</th></tr></thead>
         <tbody>
-          <tr><td>XRP</td><td><code>rw5r7pX37iAtLEh1VZdciHaFpduftUtjYe</code></td><td>1, 10, 100</td></tr>
-          <tr><td>RLUSD</td><td><code>rPNFdbacMgCk6diE8wtyBxh3ggro2QLWK5</code></td><td>1, 10, 100</td></tr>
-          <tr><td>USDC</td><td><code>rfyGTnEH8fLeucbBxxpy24dsgXoFQnHJMZ</code></td><td>1, 10, 100</td></tr>
-          <tr><td>tMPT</td><td><code>r9J16ivxW5WcED3u5rscm4AhW6W2fPo9L9</code></td><td>1, 10, 100</td></tr>
+          <tr><td>XRP</td><td><code>rw5r7pX37iAtLEh1VZdciHaFpduftUtjYe</code></td><td>1, 2, 5 … 1,000,000</td></tr>
+          <tr><td>RLUSD</td><td><code>rPNFdbacMgCk6diE8wtyBxh3ggro2QLWK5</code></td><td>1, 2, 5 … 1,000,000</td></tr>
+          <tr><td>USDC</td><td><code>rfyGTnEH8fLeucbBxxpy24dsgXoFQnHJMZ</code></td><td>1, 2, 5 … 1,000,000</td></tr>
+          <tr><td>tMPT</td><td><code>r9J16ivxW5WcED3u5rscm4AhW6W2fPo9L9</code></td><td>1, 2, 5 … 1,000,000</td></tr>
         </tbody>
       </table></div>
       <p>Each XRPL pool's master key is off; three attesters sign its payouts, any two together.</p>
+      <p>Note sizes on the XRP Ledger run 1, 2 and 5 of every power of ten, from 1 to 1,000,000. A deposit splits so that every whole amount up to it can be paid exactly: each note is at most half of what is left. 95 XRP becomes 20, 20, 20, 10, 10, 5, 5, 2, 2 and 1 (10 notes), 2,400 XRP 15 notes and 1,000,000 XRP 24. Notes are spent whole with no change, so the fewest, biggest notes would leave most amounts unpayable: 50 + 20 + 20 + 5 can't make 10. Arc deposits split the same way. A size takes deposits once seven others are in it, so a note always has a ring to hide in. Until a large size has seven deposits, a big deposit splits into the largest sizes that do. On testnet, the new sizes start with seven decoy deposits from Opaque.</p>
     </section>
 
     <section id="faq">

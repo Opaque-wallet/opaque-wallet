@@ -10,6 +10,7 @@
 
 import {
   ProtocolFailure,
+  splitAmount,
   type Address,
   type EncryptedIntent,
   type GraphSelectionClient,
@@ -66,29 +67,52 @@ export function decodeQueryResult<K extends MeshQuery['kind']>(
  */
 export const MAX_NOTES_PER_DEPOSIT = 27;
 
+/** Past this many units, the table below would take too much memory: largeAmount instead. */
+const TABLE_LIMIT = 100_000;
+
 /**
- * The fewest notes that make `amount` exactly, largest first: denomination →
- * count, all in whole USDC. At most `have` of each when given. undefined when
- * nothing makes it — a note is spent whole, with no change (§6.6).
+ * An exact amount from the notes held, largest notes first, backing off one
+ * at a time when what is left cannot be made. Not always the fewest notes, but
+ * near it with sizes of 1, 2 and 5 a decade, and no memory the size of the amount.
+ * ponytail: gives up after 200,000 steps; a smarter search if that is ever hit.
+ */
+function largeAmount(amount: number, sizes: readonly number[], have: ReadonlyMap<number, number>): Map<number, number> | undefined {
+  const cap: number[] = [];
+  for (let i = sizes.length - 1, sum = 0; i >= 0; i--) cap[i] = sum += (have.get(sizes[i]!) ?? 0) * sizes[i]!;
+  const pick = new Map<number, number>();
+  let steps = 0;
+  const go = (i: number, rest: number): boolean => {
+    if (rest === 0) return true;
+    if (i === sizes.length || rest > cap[i]! || ++steps > 200_000) return false;
+    const d = sizes[i]!;
+    for (let k = Math.min(have.get(d) ?? 0, Math.floor(rest / d)); k >= 0; k--) {
+      if (k > 0) pick.set(d, k); else pick.delete(d);
+      if (go(i + 1, rest - k * d)) return true;
+    }
+    return false;
+  };
+  return go(0, amount) ? pick : undefined;
+}
+
+/**
+ * Notes that make `amount` exactly: denomination → count, all in whole units.
+ * undefined when nothing makes it — a note is spent whole, with no change (§6.6).
  *
- * Without `have` (a deposit, any number of each) greedy is the fewest: the
- * 1/2/5/10/20/50/100 system is canonical, checked to 1000 in ring-client's
- * greedy test. With `have` (a send, from what is held) greedy is not even
- * exact — a 50 and three 20s make 60 only as 3×20 — so that case is solved
- * outright: the fewest notes by dynamic programming over the amount.
+ * Without `have` (a deposit, any number of each): the payable split
+ * (protocol-types splitAmount), so every amount up to it can be paid after.
+ * With `have` (a send, from what is held): the fewest notes, solved outright,
+ * since greedy is not even exact there (a 50 and three 20s make 60 only as
+ * 3×20): dynamic programming over the amount, or largeAmount past TABLE_LIMIT.
  */
 export function makeAmount(amount: number, denominations: readonly number[], have?: ReadonlyMap<number, number>): Map<number, number> | undefined {
   const sizes = [...denominations].sort((a, b) => b - a);
+  // Without notes to choose from, how a deposit should split: so every amount up to it is payable.
   if (have === undefined) {
     const out = new Map<number, number>();
-    let rest = amount;
-    for (const d of sizes) {
-      const take = Math.floor(rest / d);
-      if (take > 0) out.set(d, take);
-      rest -= take * d;
-    }
-    return rest === 0 ? out : undefined;
+    const rest = splitAmount(BigInt(amount), sizes, true, (d) => { out.set(d, (out.get(d) ?? 0) + 1); return true; });
+    return rest === 0n ? out : undefined;
   }
+  if (amount > TABLE_LIMIT) return largeAmount(amount, sizes, have);
   // best[x]: fewest notes making x from the sizes so far; take[i][x]: how many
   // of sizes[i] that used. ponytail: O(amount × notes held), fine to thousands.
   let best = Array<number>(amount + 1).fill(Infinity);

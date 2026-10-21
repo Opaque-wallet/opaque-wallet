@@ -21,7 +21,7 @@ import { Client } from 'xrpl';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { xrplDeployment } from '../../deployments/xrpl.ts';
-import { createWallet, importWallet } from './xrpl-wallet-page.ts';
+import { createWallet, importWallet, PASSWORD } from './xrpl-wallet-page.ts';
 
 const PAGE = process.argv[2] ?? 'https://www.opaque.credit/testnet/xrpl.html';
 const log = (s: string) => process.stdout.write(`${s}\n`);
@@ -64,8 +64,12 @@ try {
   check('A: 95 private XRP from the faucet', (await settleTo(a, (n) => n === 95)) === 95, String(await a.textContent('#note-count')));
   await a.click('#account-button');
   await a.click('#key-show');
+  // Shown only after the password, again.
+  await a.fill('#confirm-password', PASSWORD);
+  await a.click('#confirm-go');
+  await a.waitForFunction(() => !(document.getElementById('key-text') as HTMLElement).hidden, null, { timeout: 60_000 });
   const key = String(await a.textContent('#key-text')).trim();
-  check('A: Account 1\'s key, shown on request', /^opq1[0-9a-f]{72}$/.test(key), `${key.slice(0, 10)}…`);
+  check('A: Account 1\'s key, shown on request, after the password', /^opq1[0-9a-f]{72}$/.test(key), `${key.slice(0, 10)}…`);
 
   // ── 2. browser B: the key alone ────────────────────────────────────────────
   const b = await (await browser.newContext()).newPage();

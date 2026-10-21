@@ -134,7 +134,7 @@ async function renderBalances(notes?: readonly NoteSummary[]): Promise<void> {
     notesHeld += held.length;
     const row = document.createElement('div');
     row.className = 'asset';
-    const sizes = p.sizes.map((s) => `${held.filter((n) => n.scope.denomination === s).length}×${s / UNIT}`).join(' · ');
+    const sizes = p.sizes.map((s) => [held.filter((n) => n.scope.denomination === s).length, s / UNIT] as const).filter(([n]) => n > 0).map(([n, s]) => `${n}×${s}`).join(' · ') || 'none';
     row.innerHTML = `${badge(p.symbol)}<span><b></b><small></small></span><span class="asset-value"><b></b><small></small></span>`;
     row.querySelector('span > b')!.textContent = p.symbol;
     row.querySelector('span > small')!.textContent = { XRP: 'XRP Ledger native', IOU: 'Trust-line token', MPT: 'Multi-Purpose Token' }[p.asset.kind];

@@ -45,11 +45,45 @@ export type Usdc6 = Brand<bigint, 'Usdc6'>;
 export type NativeWei = Brand<bigint, 'NativeWei'>;
 
 /** Public value buckets. A ring is formed only within one bucket. */
-/** Fixed public note values, expressed in USDC's six-decimal integer units. */
-export type Denomination = 1_000_000 | 2_000_000 | 5_000_000 | 10_000_000 | 20_000_000 | 50_000_000 | 100_000_000;
-export const DENOMINATIONS: readonly Denomination[] = Object.freeze([
+/**
+ * Fixed public note values, in six-decimal units: 1, 2 and 5 of each power of
+ * ten from 1 to 1,000,000, so any whole amount takes at most three notes a
+ * decade. Arc deploys pools for 1 to 100; the XRP Ledger's pools take them all.
+ */
+export const DENOMINATIONS = Object.freeze([
   1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000, 100_000_000,
-]);
+  200_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 5_000_000_000, 10_000_000_000,
+  20_000_000_000, 50_000_000_000, 100_000_000_000, 200_000_000_000, 500_000_000_000, 1_000_000_000_000,
+] as const);
+export type Denomination = (typeof DENOMINATIONS)[number];
+
+/**
+ * How an amount splits into notes, taking each with `take` (false when that
+ * size has none left); returns what is left over.
+ *
+ * Notes are spent whole, with no change, so how a deposit splits decides what
+ * it can pay. Largest first gives the fewest notes but leaves most amounts
+ * unpayable: 50 + 20 + 20 + 5 can't make 10. `payable` keeps every note at
+ * most half of what is left (rounded up), so each is no more than one unit
+ * over the notes after it, and every whole amount up to the total can be paid
+ * exactly: 95 is 20 20 20 10 10 5 5 2 2 1, 2,400 is 15 notes and 1,000,000 is 24.
+ * Whatever the sizes on hand cannot place that way goes largest first.
+ */
+export function splitAmount(amount: bigint, sizes: readonly number[], payable: boolean, take: (size: number) => boolean): bigint {
+  const descending = [...sizes].sort((a, b) => b - a);
+  if (descending.length === 0) return amount;
+  const step = BigInt(descending[descending.length - 1]!);
+  let remaining = amount;
+  if (payable) {
+    for (let i = 0; i < descending.length && remaining > 0n; ) {
+      const size = descending[i]!;
+      if (2n * BigInt(size) > remaining + step || !take(size)) i++;
+      else remaining -= BigInt(size);
+    }
+  }
+  for (const size of descending) while (remaining >= BigInt(size) && take(size)) remaining -= BigInt(size);
+  return remaining;
+}
 
 // ── domain separation ─────────────────────────────────────────────────────
 //

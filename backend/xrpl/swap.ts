@@ -16,7 +16,7 @@
 
 import { ProtocolFailure } from '@opaque/protocol-types';
 
-import { UNIT, type XrplAsset } from './protocol.ts';
+import { splitAmount, UNIT, type XrplAsset } from './protocol.ts';
 
 /** A ledger read: rippled's command and its parameters, answered with its result. */
 export type LedgerRead = <T>(command: string, params: Record<string, unknown>) => Promise<T>;
@@ -125,19 +125,14 @@ export function notesForPayments(outs: readonly bigint[], sizes: readonly number
   const padded = outs.map((o) => (o * (10_000n + headroomBps)) / 10_000n);
   const orders = [padded, [...padded].reverse(), [...padded].sort((a, b) => (a < b ? -1 : 1)), [...padded].sort((a, b) => (a > b ? -1 : 1))];
   const need = new Map(descending.map((s) => [s, 0]));
-  for (const order of orders) {
-    const counts = new Map(descending.map((s) => [s, 0]));
-    let carried = 0n;
-    for (const out of order) {
-      let remaining = carried + out;
-      for (const s of descending) {
-        const k = remaining / BigInt(s);
-        counts.set(s, counts.get(s)! + Number(k));
-        remaining -= k * BigInt(s);
-      }
-      carried = remaining;
+  // Split greedily or as a ladder, whichever the tag's registrations say: enough for both.
+  for (const ladder of [false, true]) {
+    for (const order of orders) {
+      const counts = new Map(descending.map((s) => [s, 0]));
+      let carried = 0n;
+      for (const out of order) carried = splitAmount(carried + out, descending, ladder, (s) => { counts.set(s, counts.get(s)! + 1); return true; });
+      for (const s of descending) need.set(s, Math.max(need.get(s)!, counts.get(s)!));
     }
-    for (const s of descending) need.set(s, Math.max(need.get(s)!, counts.get(s)!));
   }
   // One spare of the smallest, for what the last payments leave over together.
   const smallest = descending[descending.length - 1]!;

@@ -92,6 +92,8 @@ const PROBE_GAP = 64;
 const CHAIN = 4096;
 /** A size tops up when fewer of its notes than this are left: one payment can take 9 of a smaller size. */
 const LOW = 9;
+/** A ring's members: the note spent and seven others of its size. */
+const RING = 8;
 /** Where an address is kept: which of its candidate tags it took, and how far its notes are synced. */
 interface AddressRecord { readonly i: number; readonly tag: number; readonly synced: Readonly<Record<string, number>> }
 /** An account's reusable address for one asset: the pool's address and a tag only this account can top up. */
@@ -363,6 +365,22 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     }
     return logs.sets;
   };
+  /**
+   * The sizes a deposit may land in: those whose pool holds at least seven
+   * other deposits, so a new note has a ring to hide in at once, and the
+   * smallest, so a deposit always lands somewhere. A large size with no ring
+   * yet takes nothing: a big deposit splits into the largest sizes that have one.
+   */
+  async function liveSizes(p: XrplPoolDeployment): Promise<number[]> {
+    const logs = await logsOf();
+    const smallest = Math.min(...p.sizes);
+    return p.sizes.filter((size) => size === smallest || (logs.get(counterOf(scopeFor(p, size)))?.size ?? 0) >= RING - 1);
+  }
+  /** Sizes whose ring a note can be spent from now: eight deposits, its own among them. */
+  async function spendableSizes(p: XrplPoolDeployment): Promise<Set<number>> {
+    const logs = await logsOf();
+    return new Set(p.sizes.filter((size) => (logs.get(counterOf(scopeFor(p, size)))?.size ?? 0) >= RING));
+  }
   /** Which numbers of a scope the pool's log holds, deriving until `gap` in a row are absent. */
   async function scan(keys: AccountKeys, scope: PoolScope, from: number, gap = SCAN_GAP): Promise<number[]> {
     const listed = (await logsOf()).get(counterOf(scope)) ?? new Set<string>();
@@ -437,7 +455,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       if (s.registered || s.notes > 0) continue;
       if (!make) return null;
       try {
-        await registerTag(xrpl, p.account, tag, addressBatch(keys, p, i, Object.fromEntries(p.sizes.map((size) => [String(size), 0])), kind), { owner: linkAt(keys, p, i, CHAIN, kind) });
+        await registerTag(xrpl, p.account, tag, addressBatch(keys, p, i, Object.fromEntries((await liveSizes(p)).map((size) => [String(size), 0])), kind), { owner: linkAt(keys, p, i, CHAIN, kind) });
         return { i, tag, synced: {} };
       } catch (error) {
         // Paid before anyone registered it: the next candidate.
@@ -450,7 +468,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
    * Keeps the notes payments have credited to an owned tag, and tops it up
    * when a size runs low, revealing the next link. Returns the notes it kept.
    */
-  async function syncAddress(keys: AccountKeys, p: XrplPoolDeployment, rec: AddressRecord, kind: TagKind = 'address'): Promise<number> {
+  async function syncAddress(keys: AccountKeys, p: XrplPoolDeployment, rec: AddressRecord, kind: TagKind = 'address', again = true): Promise<number> {
     const s = await tagStatus(xrpl, p.account, rec.tag);
     const have = new Set((await vault.list()).map((n) => n.commitment as string));
     const synced = { ...rec.synced };
@@ -466,13 +484,38 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       synced[String(size)] = Math.max(synced[String(size)] ?? 0, credited);
     }
     saveRecord(kind, p.account, { ...rec, synced });
-    const low = p.sizes.filter((size) => { const z = s.sizes[String(size)]; return z !== undefined && z.registered - z.credited < LOW; });
-    if (low.length > 0 && s.owner !== null) {
-      const from = Object.fromEntries(low.map((size) => [String(size), s.sizes[String(size)]!.registered]));
-      // Another browser of the phrase may top it up first; its link is then spent, and the next sync sees its notes.
-      await registerTag(xrpl, p.account, rec.tag, addressBatch(keys, p, rec.i, from, kind), { reveal: linkAt(keys, p, rec.i, CHAIN - s.owner.depth - 1, kind) }).catch(() => undefined);
+    if (s.owner === null) return kept;
+    const live = await liveSizes(p);
+    const left = (size: number) => { const z = s.sizes[String(size)]; return (z?.registered ?? 0) - (z?.credited ?? 0); };
+    // What it carries (a payment larger than its notes) needs notes of its own; so does a size running low.
+    const forCarry = s.carried > 0n ? notesForPayments([s.carried], live, 0n) : new Map<number, number>();
+    const counts = Object.fromEntries(live.flatMap((size) => {
+      const want = Math.max((forCarry.get(size) ?? 0) - left(size), left(size) < LOW ? Math.min(20, Math.floor(64 / live.length)) : 0);
+      return want > 0 ? [[String(size), want]] : [];
+    }));
+    // All of it now, 64 a registration and one link each, largest sizes first: a big deposit is credited in one sync.
+    const registered = Object.fromEntries(live.map((size) => [String(size), s.sizes[String(size)]?.registered ?? 0]));
+    const queue = Object.entries(counts).sort((a, b) => Number(b[0]) - Number(a[0]));
+    let added = false;
+    for (let depth = s.owner.depth; queue.length > 0 && depth < CHAIN - 1; depth++) {
+      let room = 64;
+      const batch: Record<string, number> = {};
+      while (room > 0 && queue.length > 0) {
+        const [size, n] = queue[0]!;
+        const k = Math.min(n, room);
+        batch[size] = k;
+        room -= k;
+        if (k === n) queue.shift(); else queue[0] = [size, n - k];
+      }
+      const from = Object.fromEntries(Object.keys(batch).map((size) => [size, registered[size]!]));
+      // Another browser of the phrase may top it up first: its link is then spent, and the next sync carries on.
+      const ok = await registerTag(xrpl, p.account, rec.tag, addressBatch(keys, p, rec.i, from, kind, batch), { reveal: linkAt(keys, p, rec.i, CHAIN - depth - 1, kind) }).then(() => true, () => false);
+      if (!ok) break;
+      added = true;
+      for (const [size, k] of Object.entries(batch)) registered[size] = registered[size]! + k;
     }
-    return kept;
+    // What the new notes credited from what it carried, kept now rather than at the next sync.
+    return added && again ? kept + await syncAddress(keys, p, { ...rec, synced }, kind, false) : kept;
   }
   /**
    * The swap tag on `p`, made the first time, with at least `need[size]`
@@ -573,11 +616,14 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
 
     async receive(symbol, expected = 0, wanted) {
       const p = poolBySymbol(symbol);
-      const sizes = [...p.sizes].sort((a, b) => b - a);
-      // Enough of each smaller size for any remainder (9), and of the largest
-      // for what is expected plus one; 64 at most per registration. A swap
-      // says what it needs instead: its payments arrive one per note.
-      const counts = wanted ?? new Map(sizes.map((s, i) => [s, i === 0 ? Math.min(64 - 9 * (sizes.length - 1), Math.ceil(expected * UNIT / s) + 1) : 9]));
+      const live = (await liveSizes(p)).sort((a, b) => b - a);
+      // What is expected, in live sizes, and one spare of each for a payment a
+      // little different; with nothing expected, an even share. 64 at most per
+      // registration. A swap says what it needs instead: its payments arrive one per note.
+      const forExpected = expected > 0 ? notesForPayments([BigInt(Math.round(expected * UNIT))], live, 0n) : undefined;
+      const share = Math.max(1, Math.floor(64 / live.length));
+      const counts = wanted ?? new Map(live.map((s) => [s, forExpected === undefined ? share : (forExpected.get(s) ?? 0) + 1]));
+      if ([...counts.values()].reduce((n, c) => n + c, 0) > 64) throw new Error(`that is more notes than one deposit tag holds: use your address instead, which takes any amount`);
       const mint = async () => {
         const commitments: Record<string, NoteSummary['commitment'][]> = {};
         for (const [size, n] of counts) {
@@ -630,8 +676,10 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     async plan(symbol, amount) {
       const p = poolBySymbol(symbol);
       const have = new Map<number, number>();
+      // A note in a size with no full ring yet waits: no proof could hide it.
+      const ready = await spendableSizes(p);
       for (const n of await vault.list()) {
-        if (n.state === 'AVAILABLE' && accountOf(n.scope.pool) === p.account) have.set(n.scope.denomination / UNIT, (have.get(n.scope.denomination / UNIT) ?? 0) + 1);
+        if (n.state === 'AVAILABLE' && accountOf(n.scope.pool) === p.account && ready.has(n.scope.denomination)) have.set(n.scope.denomination / UNIT, (have.get(n.scope.denomination / UNIT) ?? 0) + 1);
       }
       return makeAmount(amount, p.sizes.map((s) => s / UNIT), have);
     },
@@ -686,7 +734,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       const nets = [...plan].flatMap(([size, count]) => Array.from({ length: count }, () => BigInt(size * UNIT) - BigInt(a.spendFee)));
       const read = <T,>(command: string, params: Record<string, unknown>) => meshLedger(xrpl).request<T>(command, params);
       const { each, total } = await quoteNotes(read, a.asset, b.asset, nets);
-      const tagNotes = notesForPayments(each, b.sizes);
+      const tagNotes = notesForPayments(each, await liveSizes(b));
       if ([...tagNotes.values()].reduce((n, c) => n + c, 0) > 64) throw new Error(`that swap would arrive as more notes than one tag holds: swap it in two parts`);
       return { out: total, least: each.reduce((sum, e) => sum + deliverMinOf(e), 0n), fees: BigInt(a.spendFee) * BigInt(nets.length), notes: nets.length, each, tagNotes };
     },

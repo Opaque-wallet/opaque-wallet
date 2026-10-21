@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { Denomination } from '@opaque/protocol-types';
+import { DENOMINATIONS, type Denomination } from '@opaque/protocol-types';
 import { greedyDecompose, greedySelectNotes } from '../src/greedy.ts';
 
 test('greedy decomposition takes the maximum count at each descending denomination', () => {
@@ -16,11 +16,11 @@ test('greedy selection minimizes selected eligible notes and refuses an exact pa
   assert.throws(() => greedySelectNotes(47_000_000n, [20_000_000, 20_000_000, 5_000_000] as Denomination[]), /cannot cover/);
 });
 
-test('the approved seven-bucket policy is greedy-optimal through the deposit limit', () => {
-  const buckets = [1, 2, 5, 10, 20, 50, 100];
-  const best = Array<number>(1_001).fill(Number.POSITIVE_INFINITY);
+test('the 1-2-5 ladder of buckets is greedy-optimal', () => {
+  const buckets = DENOMINATIONS.map((d) => d / 1_000_000);
+  const best = Array<number>(5_001).fill(Number.POSITIVE_INFINITY);
   best[0] = 0;
-  for (let amount = 1; amount <= 1_000; amount++) {
+  for (let amount = 1; amount <= 5_000; amount++) {
     best[amount] = Math.min(...buckets.filter((bucket) => bucket <= amount).map((bucket) => best[amount - bucket]! + 1));
     assert.equal(greedyDecompose(BigInt(amount * 1_000_000)).length, best[amount], `${amount} USDC`);
   }

@@ -15,7 +15,7 @@ import { createAttester, attesterChain, nextSignersOf, type Attester, type XrplS
 import { checkProposal, payoutBatch, rotationOf, signerListOf, type Payout } from '../batch.ts';
 import { keyChain } from '../keys.ts';
 import { createPoolSource, creditDeposits, incomingOf, type IncomingPayment } from '../pool.ts';
-import { amountOf, recipientFor, scopeOf, unitsDelivered, unitsOfDecimal, type XrplAsset } from '../protocol.ts';
+import { amountOf, recipientFor, scopeOf, splitAmount, unitsDelivered, unitsOfDecimal, type XrplAsset } from '../protocol.ts';
 import { createXrplAnswerer } from '../queries.ts';
 import { toHex } from '@opaque/protocol-types/codecs.js';
 
@@ -291,6 +291,71 @@ test('a reusable address takes more notes from its owner\'s next link, and from 
   assert.throws(() => source.registerTag(500, { [String(XRP)]: [c(9)] }, { reveal: chain[1]! }), /another tag/, 'a top-up names only fresh commitments');
   assert.deepEqual(source.owner(500), { anchor: chain[2], depth: 1 }, 'a refused top-up spends no link');
   assert.throws(() => source.registerTag(502, { [String(XRP)]: [c(11)] }, { owner: 'not a hash' }), /32-byte hash/);
+});
+
+test('a note once credited stays credited, whatever a later registration adds', () => {
+  // 250 into one 100, nine 10s and nine 1s: 51 carried. A top-up then adds two 100s,
+  // five 10s and a 1. Re-split from scratch, the 250 would take three 100s and drop
+  // the 10s and 1s a wallet had already kept; with the history it keeps them, and
+  // only the 51 it carried is credited.
+  const ones = Array.from({ length: 10 }, (_, i) => c(100 + i));
+  const tens = Array.from({ length: 14 }, (_, i) => c(200 + i));
+  const hundreds = [c(300), c(301), c(302)];
+  const first = { [String(100 * XRP)]: hundreds.slice(0, 1), [String(10 * XRP)]: tens.slice(0, 9), [String(XRP)]: ones.slice(0, 9) };
+  const topped = { [String(100 * XRP)]: hundreds, [String(10 * XRP)]: tens, [String(XRP)]: ones };
+  const payments = [pay({ tag: 9, units: 250n * BigInt(XRP), ledgerIndex: 20 })];
+  const before = creditDeposits(payments, SIZES, new Map([[9, first]]), new Map([[9, [{ at: 10, len: { [String(100 * XRP)]: 1, [String(10 * XRP)]: 9, [String(XRP)]: 9 } }]]]));
+  assert.equal(before.carried.get(9), 51n * BigInt(XRP));
+  const kept = before.deposits.map((d) => d.commitment);
+
+  const history = new Map([[9, [
+    { at: 10, len: { [String(100 * XRP)]: 1, [String(10 * XRP)]: 9, [String(XRP)]: 9 } },
+    { at: 30, len: { [String(100 * XRP)]: 3, [String(10 * XRP)]: 14, [String(XRP)]: 10 } },
+  ]]]);
+  const after = creditDeposits(payments, SIZES, new Map([[9, topped]]), history);
+  assert.ok(kept.every((k) => after.deposits.some((d) => d.commitment === k)), 'every note credited before is credited still');
+  assert.equal(after.deposits.reduce((n, d) => n + BigInt(d.denomination), 0n), 250n * BigInt(XRP));
+  assert.equal(after.carried.get(9), 0n);
+  // Without the history, the same tags re-split the 250 and drop what was kept: the bug this prevents.
+  const resplit = creditDeposits(payments, SIZES, new Map([[9, topped]]));
+  assert.ok(kept.some((k) => !resplit.deposits.some((d) => d.commitment === k)));
+});
+
+test('a payable split keeps every amount payable, in about four notes a power of ten', () => {
+  const ladder = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000, 1_000_000].map((u) => u * XRP);
+  const notes = (units: number, asLadder: boolean) => {
+    const out: number[] = [];
+    assert.equal(splitAmount(BigInt(units * XRP), ladder, asLadder, (size) => { out.push(size / XRP); return true; }), 0n);
+    return out;
+  };
+  assert.deepEqual(notes(95, false), [50, 20, 20, 5], 'greedy: the fewest notes, and 10 is not payable from them');
+  const ninetyFive = notes(95, true);
+  assert.equal(ninetyFive.length, 10);
+  // Every whole amount from 1 to 95 is a sum of some of them.
+  const payable = new Set([0]);
+  for (const n of ninetyFive) for (const x of [...payable]) payable.add(x + n);
+  assert.ok(Array.from({ length: 95 }, (_, i) => i + 1).every((a) => payable.has(a)));
+  assert.equal(notes(2_400, true).length, 15);
+  assert.deepEqual(notes(1_000_000, true), [500_000, 200_000, 100_000, 100_000, 50_000, 20_000, 10_000, 10_000, 5_000, 2_000, 1_000, 1_000, 500, 200, 100, 100, 50, 20, 10, 10, 5, 2, 2, 1]);
+  assert.deepEqual(notes(2, true), [1, 1], '2 is 1 + 1, so 1 stays payable');
+});
+
+test('a tag registered for a ladder splits its payments as one; one from before, largest first', () => {
+  const sizes = [XRP, 2 * XRP, 5 * XRP, 10 * XRP, 20 * XRP, 50 * XRP];
+  const list = Object.fromEntries(sizes.map((size, k) => [String(size), Array.from({ length: 6 }, (_, i) => c(1000 * (k + 1) + i))]));
+  const len = Object.fromEntries(sizes.map((size) => [String(size), 6]));
+  const units = (log: ReturnType<typeof creditDeposits>) => log.deposits.map((d) => d.denomination / XRP).sort((a, b) => b - a);
+  const paid = [pay({ tag: 4, units: 95n * BigInt(XRP), ledgerIndex: 20 })];
+  assert.deepEqual(units(creditDeposits(paid, sizes, new Map([[4, list]]), new Map([[4, [{ at: 10, len, ladder: true as const }]]]))), [20, 20, 20, 10, 10, 5, 5, 2, 2, 1]);
+  assert.deepEqual(units(creditDeposits(paid, sizes, new Map([[4, list]]), new Map([[4, [{ at: 10, len }]]]))), [50, 20, 20, 5]);
+});
+
+test('a payment splits only into notes registered before it', () => {
+  const list = { [String(100 * XRP)]: [c(1)], [String(10 * XRP)]: Array.from({ length: 10 }, (_, i) => c(10 + i)) };
+  const history = new Map([[5, [{ at: 10, len: { [String(10 * XRP)]: 10 } }, { at: 40, len: { [String(100 * XRP)]: 1, [String(10 * XRP)]: 10 } }]]]);
+  // Paid at ledger 20, before the 100 was registered at 40: ten 10s, not one 100.
+  const log = creditDeposits([pay({ tag: 5, units: 100n * BigInt(XRP), ledgerIndex: 20 })], SIZES, new Map([[5, list]]), history);
+  assert.deepEqual(log.deposits.map((d) => d.denomination), Array(10).fill(10 * XRP));
 });
 
 test('a top-up credits what a reusable address was carrying', () => {

@@ -35,7 +35,7 @@ import type { Client } from 'xrpl';
 import { ProtocolFailure, type NoteCommitment, type Nullifier, type PoolScope, type RingSnapshot, type UnixSeconds } from '@opaque/protocol-types';
 import { asNoteCommitment } from '@opaque/protocol-types/codecs.js';
 
-import { commitmentOfInvoice, credentialTypeOf, INVOICE_TAG, unitsDelivered, type XrplAsset } from './protocol.ts';
+import { commitmentOfInvoice, credentialTypeOf, INVOICE_TAG, splitAmount, unitsDelivered, type XrplAsset } from './protocol.ts';
 
 export interface IncomingPayment {
   readonly hash: string;
@@ -58,6 +58,12 @@ export interface Deposit {
 
 /** Per note size (as a decimal string of units), the commitments to credit, in order. */
 export type TagRegistration = Readonly<Record<string, readonly NoteCommitment[]>>;
+/**
+ * When a tag's notes took effect: after ledger `at`, each size's list was `len`
+ * long. `ladder`: payments from then on split payably (protocol-types
+ * splitAmount), so every amount stays payable; before it, largest first.
+ */
+export interface TagEvent { readonly at: number; readonly len: Readonly<Record<string, number>>; readonly ladder?: true }
 /** A reusable tag's owner: the current end of its hash chain, and how many top-ups it has taken. */
 export interface TagOwner { readonly anchor: string; readonly depth: number }
 /** A first registration may name an owner; a top-up reveals the next link instead. */
@@ -83,10 +89,19 @@ const sha256Hex = (hex: string) => `0x${createHash('sha256').update(Buffer.from(
 
 const refuse = (message: string): never => { throw new ProtocolFailure('INVALID_INPUT', message); };
 
+/**
+ * The pool's notes, from its payments and the tags' registrations. A tag with
+ * a history takes its notes as they were registered: a payment splits only
+ * into notes registered before it, and a later registration credits only what
+ * was carried. So a note, once credited, stays credited, whatever is added
+ * after. A tag from before histories takes every note it holds from the start,
+ * as it always did.
+ */
 export function creditDeposits(
   payments: readonly IncomingPayment[],
   sizes: readonly number[],
   tags: ReadonlyMap<number, TagRegistration>,
+  history: ReadonlyMap<number, readonly TagEvent[]> = new Map(),
 ): DepositLog {
   const descending = [...sizes].sort((a, b) => b - a);
   const deposits: Deposit[] = [];
@@ -97,6 +112,44 @@ export function creditDeposits(
   const credit = (p: IncomingPayment, commitment: NoteCommitment, denomination: number) => {
     credited.add(commitment);
     deposits.push({ commitment, denomination, ledgerIndex: p.ledgerIndex, hash: p.hash, from: p.from, tag: p.tag });
+  };
+
+  // Per tag: how many of each size it may take so far (tags with a history), and the last payment.
+  const avail = new Map<number, Readonly<Record<string, number>>>();
+  const ladderOf = new Map<number, boolean>();
+  const applied = new Map<number, number>();
+  const last = new Map<number, IncomingPayment>();
+  /** Into the tag's next notes, as its latest registration says (greedy or ladder); what is left over. */
+  const split = (tag: number, registration: TagRegistration, p: IncomingPayment, from: bigint): bigint => {
+    const next = nextOf.get(tag) ?? new Map<number, number>();
+    nextOf.set(tag, next);
+    const take = (size: number): boolean => {
+      const list = registration[String(size)] ?? [];
+      const limit = history.has(tag) ? Math.min(list.length, avail.get(tag)?.[String(size)] ?? 0) : list.length;
+      while ((next.get(size) ?? 0) < limit) {
+        const commitment = list[next.get(size) ?? 0]!;
+        next.set(size, (next.get(size) ?? 0) + 1);
+        // A commitment credited once already would be a second note nobody can
+        // spend (one secret, one nullifier): skip it, keep the value.
+        if (credited.has(commitment)) continue;
+        credit(p, commitment, size);
+        return true;
+      }
+      return false;
+    };
+    return splitAmount(from, descending, ladderOf.get(tag) === true, take);
+  };
+  /** Applies the tag's registrations made before ledger `until`, each crediting what was carried. */
+  const advance = (tag: number, registration: TagRegistration, until: number) => {
+    const events = history.get(tag) ?? [];
+    let i = applied.get(tag) ?? 0;
+    for (; i < events.length && events[i]!.at < until; i++) {
+      avail.set(tag, events[i]!.len);
+      ladderOf.set(tag, events[i]!.ladder === true);
+      const p = last.get(tag);
+      if (p !== undefined && (carried.get(tag) ?? 0n) > 0n) carried.set(tag, split(tag, registration, p, carried.get(tag)!));
+    }
+    applied.set(tag, i);
   };
 
   for (const p of payments) {
@@ -113,23 +166,12 @@ export function creditDeposits(
       continue;
     }
     const tag = p.tag!;
-    const next = nextOf.get(tag) ?? new Map<number, number>();
-    nextOf.set(tag, next);
-    let remaining = (carried.get(tag) ?? 0n) + p.units;
-    for (const size of descending) {
-      const list = registration[String(size)] ?? [];
-      while (remaining >= BigInt(size) && (next.get(size) ?? 0) < list.length) {
-        const commitment = list[next.get(size) ?? 0]!;
-        next.set(size, (next.get(size) ?? 0) + 1);
-        // A commitment credited once already would be a second note nobody can
-        // spend (one secret, one nullifier): skip it, keep the value.
-        if (credited.has(commitment)) continue;
-        credit(p, commitment, size);
-        remaining -= BigInt(size);
-      }
-    }
-    carried.set(tag, remaining);
+    advance(tag, registration, p.ledgerIndex);
+    last.set(tag, p);
+    carried.set(tag, split(tag, registration, p, (carried.get(tag) ?? 0n) + p.units));
   }
+  // Registrations after the last payment to a tag credit what it carried.
+  for (const [tag, registration] of tags) advance(tag, registration, Infinity);
   return { deposits, carried, unmatched };
 }
 
@@ -230,16 +272,25 @@ export function createPoolSource(options: { readonly client: Client; readonly co
       ? Object.entries(JSON.parse(readFileSync(ownerFile, 'utf8')) as Record<string, TagOwner>).map(([t, o]) => [Number(t), o])
       : [],
   );
+  // When each tag's notes took effect (creditDeposits), so a later registration never re-splits an earlier payment.
+  const historyFile = options.tagFile?.replace(/\.json$/, '.history.json');
+  const history = new Map<number, TagEvent[]>(
+    historyFile !== undefined && existsSync(historyFile)
+      ? Object.entries(JSON.parse(readFileSync(historyFile, 'utf8')) as Record<string, TagEvent[]>).map(([t, h]) => [Number(t), h])
+      : [],
+  );
+  const lengths = (r: TagRegistration) => Object.fromEntries(Object.entries(r).map(([size, list]) => [size, list.length]));
   const persist = () => {
     if (options.tagFile !== undefined) writeFileSync(options.tagFile, JSON.stringify(Object.fromEntries(tags)), { mode: 0o600 });
     if (ownerFile !== undefined) writeFileSync(ownerFile, JSON.stringify(Object.fromEntries(owners)), { mode: 0o600 });
+    if (historyFile !== undefined) writeFileSync(historyFile, JSON.stringify(Object.fromEntries(history)), { mode: 0o600 });
   };
   const rings = new Map<string, number>();
   let through = config.deployedAtLedger - 1;
-  let current: DepositLog = creditDeposits([], config.sizes, tags);
+  let current: DepositLog = creditDeposits([], config.sizes, tags, history);
   let inFlight: Promise<void> | undefined;
 
-  const recompute = () => { current = creditDeposits(payments, config.sizes, tags); };
+  const recompute = () => { current = creditDeposits(payments, config.sizes, tags, history); };
 
   async function read(): Promise<void> {
     let marker: unknown;
@@ -312,9 +363,14 @@ export function createPoolSource(options: { readonly client: Client; readonly co
         const merged: Record<string, readonly NoteCommitment[]> = { ...before };
         for (const [size, list] of Object.entries(registration)) merged[size] = [...(before[size] ?? []), ...list];
         tags.set(tag, merged);
+        // Taking effect after every payment read so far (the caller syncs first). A tag from
+        // before histories keeps what it held as registered from the start.
+        const events = history.get(tag) ?? [{ at: 0, len: lengths(before) }];
+        history.set(tag, [...events, { at: through, len: lengths(merged), ladder: true }]);
         owners.set(tag, { anchor: (auth as { reveal: string }).reveal, depth: owners.get(tag)!.depth + 1 });
       } else {
         tags.set(tag, registration);
+        history.set(tag, [{ at: through, len: lengths(registration), ladder: true }]);
         if (auth !== undefined) owners.set(tag, { anchor: (auth as { owner: string }).owner, depth: 0 });
       }
       persist();

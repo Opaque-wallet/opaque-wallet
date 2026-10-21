@@ -173,3 +173,7 @@ export type { Denomination };
 
 /** An address and its destination tag as one string (XLS-5), which most XRPL wallets and exchanges take. */
 export const xAddressOf = (account: string, tag: number, test: boolean): string => classicAddressToXAddress(account, tag, test);
+
+
+/** protocol-types' split, where XRPL code looks for it: `true` is the payable split. */
+export { splitAmount } from '@opaque/protocol-types';
