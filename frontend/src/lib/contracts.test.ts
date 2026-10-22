@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { asHexBytes, CREATE2_FACTORY, create2Address, deployment } from './contracts.ts';
+import { asHexBytes, CREATE2_FACTORY, create2Address, deployment, riskOfCall } from './contracts.ts';
 
 const zero32 = `0x${'00'.repeat(32)}` as const;
 
@@ -46,4 +46,25 @@ test('the CREATE2 factory is the one pinned for this network (F-23)', async () =
   const { deployment } = await import('../../../deployments/index.ts');
   assert.equal(CREATE2_FACTORY, deployment.contracts.create2Factory?.address);
   assert.equal(CREATE2_FACTORY, '0x4e59b44847b379578588920ca78fbf26c0b4956c');
+});
+
+// overlord F-40 (2026-10-22): NFTs, Permit2 and ERC-1363 hand tokens over too.
+test('F-40: NFT, Permit2 and transfer-and-call hand-overs are said in words', () => {
+  const w = (hex: string) => hex.padStart(64, '0');
+  const a = (n: string) => w(n.repeat(40));
+  const cases: [string, RegExp][] = [
+    [`0x42842e0e${a('1')}${a('2')}${w('7')}`, /moves NFT #7/],
+    [`0xb88d4fde${a('1')}${a('2')}${w('7')}${w('80')}${w('0')}`, /moves NFT #7/],
+    [`0xf242432a${a('1')}${a('2')}${w('7')}${w('3')}${w('a0')}${w('0')}`, /moves 3 of token #7/],
+    [`0x2eb2c2d6${a('1')}${a('2')}${w('a0')}${w('c0')}${w('e0')}`, /batch/],
+    [`0x87517c45${a('3')}${a('e')}${'f'.repeat(64)}${w('1')}`, /through Permit2/],
+    [`0x36c78516${a('1')}${a('e')}${w('5')}${a('3')}`, /through Permit2/],
+    [`0x1296ee62${a('e')}${w('5')}`, /sends 5 units .* and calls it/],
+    [`0x4000aea0${a('e')}${w('5')}${w('60')}${w('0')}`, /and calls it/],
+    [`0x3177029f${a('e')}${w('5')}`, /lets 0xe{40} spend 5 units/],
+    [`0xcae9ca51${a('e')}${w('5')}${w('60')}${w('0')}`, /and calls it/],
+    [`0xd8fbe994${a('1')}${a('e')}${w('5')}`, /moves 5 units/],
+    [`0xc1d34b89${a('1')}${a('e')}${w('5')}${w('80')}${w('0')}`, /and calls it/],
+  ];
+  for (const [data, said] of cases) assert.match(riskOfCall('0x3600000000000000000000000000000000000000', data, { '0x3600000000000000000000000000000000000000': 'USDC' }) ?? 'null', said, data.slice(0, 10));
 });

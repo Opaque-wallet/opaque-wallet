@@ -1,0 +1,21 @@
+{
+  "name": "@opaque/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Opaque's private, post-quantum payments from Node: Arc and XRPL, the keys and proofs on the caller's machine.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "e2e:arc": "node test/e2e-arc.ts"
+  },
+  "dependencies": {
+    "@opaque/protocol-types": "file:../protocol-types"
+  }
+}

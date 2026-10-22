@@ -1,12 +1,14 @@
 # Packages: Shared Libraries
 
-> **Three TypeScript packages the wallet, the backend and the subgraph all build on. No build step.**
+> **TypeScript packages the wallet, the backend and the subgraph build on, and the two Opaque offers developers. No build step in the repo; `scripts/build-dist.ts` bundles the SDK and MCP server for a company to install.**
 
 | Package | Folder | What it is | Tests |
 |---|---|---|---|
 | `@opaque/protocol-types` | [`protocol-types/`](protocol-types/) | The shared contract: types, runtime codecs, error codes | 16 |
 | `@opaque/pq-wallet` | [`pq-wallet/`](pq-wallet/) | FORS+C signatures and the wallet SDK ([README](pq-wallet/README.md)) | 88, 2 skipped |
 | `@opaque/ring-client` | [`ring-client/`](ring-client/) | The note vault and decoy selection | 6 |
+| `@opaque/sdk` | [`sdk/`](sdk/) | Private payments from Node: the wallet's runtimes, keys in an encrypted file ([README](sdk/README.md)) | 6, e2e on Arc testnet |
+| `@opaque/mcp` | [`mcp/`](mcp/) | The SDK as an MCP server for AI agents, with spending limits ([README](mcp/README.md)) | 13, e2e on Arc testnet |
 
 ## protocol-types
 

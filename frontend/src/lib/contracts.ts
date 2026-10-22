@@ -68,6 +68,15 @@ export function riskOfCall(to: string, data: string, names: Readonly<Record<stri
     case '0xd505accf': return `This signs a permit letting ${addressAt(data, 1)} spend ${amountAt(data, 2)} units of ${token}.`;
     case '0xa22cb465': return `This ${BigInt(`0x${word(data, 1) || '0'}`) === 0n ? 'removes' : 'gives'} ${addressAt(data, 0)} control of every token this account holds in ${token}.`;
     case '0x205c2878': return `This draws ${amountAt(data, 1)} of this account's gas money out of the EntryPoint, to ${addressAt(data, 0)}.`;
+    // NFTs (ERC-721, ERC-1155), Permit2, and ERC-1363's transfer-and-call: the same hand-overs, other spellings.
+    case '0x42842e0e': case '0xb88d4fde': return `This moves NFT #${amountAt(data, 2)} of ${token} from ${addressAt(data, 0)} to ${addressAt(data, 1)}.`;
+    case '0xf242432a': return `This moves ${amountAt(data, 3)} of token #${amountAt(data, 2)} in ${token} from ${addressAt(data, 0)} to ${addressAt(data, 1)}.`;
+    case '0x2eb2c2d6': return `This moves a batch of ${token} tokens from ${addressAt(data, 0)} to ${addressAt(data, 1)}.`;
+    case '0x87517c45': return `This lets ${addressAt(data, 1)} spend ${amountAt(data, 2)} units of ${names[addressAt(data, 0)] ?? addressAt(data, 0)} through Permit2, from this account.`;
+    case '0x36c78516': return `This moves ${amountAt(data, 2)} units of ${names[addressAt(data, 3)] ?? addressAt(data, 3)} from ${addressAt(data, 0)} to ${addressAt(data, 1)} through Permit2.`;
+    case '0x1296ee62': case '0x4000aea0': return `This sends ${amountAt(data, 1)} units of ${token} from this account to ${addressAt(data, 0)}, and calls it.`;
+    case '0x3177029f': case '0xcae9ca51': return `This lets ${addressAt(data, 0)} spend ${amountAt(data, 1)} units of ${token} from this account, and calls it.`;
+    case '0xd8fbe994': case '0xc1d34b89': return `This moves ${amountAt(data, 2)} units of ${token} from ${addressAt(data, 0)} to ${addressAt(data, 1)}, and calls it.`;
     default: return null;
   }
 }

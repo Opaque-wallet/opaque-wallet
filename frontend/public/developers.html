@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opaque API</title>
+<meta name="description" content="The SDK and MCP server behind the Opaque wallet: private, post-quantum payments on Arc and the XRP Ledger for wallets, fintechs, stablecoins and AI agents.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&family=Quicksand:wght@700&display=swap">
+<link rel="stylesheet" href="/docs.css">
+<style>
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; padding: 0; list-style: none; }
+  .chips li { margin: 0; padding: 6px 14px; border: 1px solid rgba(255, 160, 82, 0.32); border-radius: 999px; background: var(--tint); color: var(--soft); font-size: 14px; font-weight: 500; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .btn { display: inline-flex; align-items: center; min-height: 46px; padding: 0 22px; border-radius: 999px; font-weight: 600; font-size: 15px; text-decoration: none; }
+  .btn.primary { background: var(--orange); color: var(--ink); }
+  .btn.primary:hover { background: var(--soft); color: var(--ink); }
+  .btn.ghost { border: 1px solid rgba(244, 239, 233, 0.28); color: var(--cream); }
+  .btn.ghost:hover { border-color: var(--cream); color: var(--cream); }
+
+  /* The stack, top to bottom: your app, Opaque on your machine, the network, the chains. */
+  .stack { position: relative; display: grid; gap: 14px; margin: 34px 0 0; padding: 0; list-style: none; }
+  .stack::before { content: ""; position: absolute; left: 27px; top: 28px; bottom: 28px; width: 2px; background: linear-gradient(var(--orange), rgba(255, 122, 24, 0.15)); }
+  .stack li { position: relative; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 16px; align-items: center; margin: 0; padding: 16px 18px 16px 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+  .stack li.here { border-color: rgba(255, 160, 82, 0.45); background: linear-gradient(160deg, rgba(255, 122, 24, 0.14), transparent 70%), var(--surface); }
+  .stack i { position: relative; justify-self: center; width: 14px; height: 14px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 6px var(--ink), 0 0 0 7px rgba(255, 122, 24, 0.45); }
+  .stack b { display: block; color: var(--cream); font-weight: 600; }
+  .stack span { color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+  .stack em { float: right; margin-left: 12px; color: var(--soft); font-size: 12.5px; font-style: normal; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  @media (max-width: 560px) { .stack em { float: none; display: block; margin: 0 0 2px; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/" aria-label="opaque, home"><img src="/logo.png" alt="opaque" width="942" height="200"><span>API</span></a>
+  <nav><a href="/docs">Docs</a><a href="https://x.com/Opaquecredit" target="_blank" rel="noopener noreferrer">Talk to us ↗</a><a class="go" href="#quickstart">Start building</a></nav>
+</header>
+
+<div class="layout">
+  <button class="toc-toggle" id="toc-toggle" type="button" aria-expanded="false" aria-controls="toc">Contents</button>
+  <aside class="toc" id="toc" aria-label="Contents">
+    <p>Start</p>
+    <a href="#overview">What it is</a>
+    <a href="#who">Who it's for</a>
+    <a href="#quickstart">Quickstart</a>
+    <p>SDK</p>
+    <a href="#wallets">Wallets and accounts</a>
+    <a href="#arc">Arc</a>
+    <a href="#xrpl">XRP Ledger</a>
+    <a href="#contracts">Deployers and contracts</a>
+    <p>Agents</p>
+    <a href="#mcp">MCP server</a>
+    <a href="#tools">Tools</a>
+    <a href="#limits">Limits and approval</a>
+    <p>Underneath</p>
+    <a href="#network">The network</a>
+    <a href="#trust">Who sees what</a>
+    <a href="#access">Access</a>
+  </aside>
+
+  <main>
+    <div class="hero" id="overview">
+      <p class="eyebrow">Opaque API</p>
+      <h1>Private payments, inside your app.</h1>
+      <p class="lede">The SDK and MCP server behind the Opaque wallet. Give your users, your treasury or your agents private, post-quantum payments on Arc and the XRP Ledger. The keys and the proofs run on your machine, never on ours.</p>
+      <ul class="chips" aria-label="Built for"><li>Wallets</li><li>Fintechs</li><li>Stablecoins</li><li>Agents</li></ul>
+      <div class="actions">
+        <a class="btn primary" href="#quickstart">Start building →</a>
+        <a class="btn ghost" href="https://x.com/Opaquecredit" target="_blank" rel="noopener noreferrer">Talk to us ↗</a>
+      </div>
+      <ol class="stack" aria-label="How it fits together">
+        <li><i></i><div><em>Yours</em><b>Your app or agent</b><span>Calls the SDK, or the MCP server's tools.</span></div></li>
+        <li class="here"><i></i><div><em>On your machine</em><b>Opaque SDK · MCP server</b><span>The account key, the notes, the ring proofs. Nothing that can spend leaves this process.</span></div></li>
+        <li><i></i><div><em>Opaque's network</em><b>Six relays, three hops</b><span>Every read and payment onion-routed: the services learn what was asked, never who asked it.</span></div></li>
+        <li><i></i><div><em>On chain</em><b>Arc · XRP Ledger</b><span>Paid from a shared pool, through a ring of eight. Nothing on chain points back to the sender.</span></div></li>
+      </ol>
+    </div>
+
+    <section id="who">
+      <h2>Who it's for</h2>
+      <p class="sub">The same private payments the wallet makes, from your code.</p>
+      <div class="cards">
+        <div class="card"><b>Wallets</b><span>A private balance beside the public one. Your users deposit, send and swap without their history on display.</span></div>
+        <div class="card"><b>Fintechs</b><span>Payouts, payroll and supplier payments that don't publish who paid whom, or how much you hold.</span></div>
+        <div class="card"><b>Stablecoins</b><span>Private transfers for holders of USDC, EURC, RLUSD and tokens on the XRP Ledger, from pools of each asset.</span></div>
+        <div class="card"><b>Agents</b><span>An MCP server: an agent pays, deploys contracts and funds deployers from a budget of its own, within limits you set.</span></div>
+      </div>
+    </section>
+
+    <section id="quickstart">
+      <h2>Quickstart</h2>
+      <p class="sub">Node 22.18 or later. A wallet is a folder: an encrypted file holding one account, opened by one process at a time.</p>
+<pre><code>import { createWallet } from '@opaque/sdk';
+
+const wallet = await createWallet({ dir: './.opaque', password: process.env.OPAQUE_PASSWORD, network: 'testnet' });
+const arc = await wallet.arc();
+
+console.log(arc.address);                     <span class="c">// send USDC here (faucet.circle.com on testnet)</span>
+await arc.deposit(10);                        <span class="c">// 10 USDC → private notes, one signature</span>
+const [payment] = await arc.send('0x5e2b…', 5); <span class="c">// through a ring of 8, across the relays</span>
+console.log(await arc.status(payment.handle)); <span class="c">// … { state: 'SETTLED' }</span></code></pre>
+      <p>The same wallet on the XRP Ledger:</p>
+<pre><code>const xrpl = await wallet.xrpl();
+const { xAddress } = await xrpl.address('XRP');   <span class="c">// payments to it become notes</span>
+await xrpl.send('XRP', 25, 'r…recipient', { tag: 12 });</code></pre>
+      <div class="note"><strong>Payments are whole notes.</strong> Each amount is made from notes of fixed sizes, spent whole with no change, each with its own proof (a few seconds) and upload. <code>send</code> returns once they're submitted; settlement follows within seconds to minutes.</div>
+    </section>
+
+    <section id="wallets">
+      <h2>Wallets and accounts</h2>
+      <p class="sub">One wallet holds one account. Give each app or agent an account of its own.</p>
+      <div class="table"><table>
+        <thead><tr><th>Call</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>createWallet({ dir, password, network })</code></td><td>A new account, sealed in <code>dir</code> under <code>password</code> (scrypt, AES-256-GCM). Or bring one: <code>accountKey: 'opq1…'</code>, or <code>phrase</code> and <code>account</code>.</td></tr>
+          <tr><td><code>openWallet({ dir, password })</code></td><td>Opens it again. A second process is refused while one holds it.</td></tr>
+          <tr><td><code>wallet.accountKey()</code></td><td>The account's key, <code>opq1…</code>: its backup, and whoever holds it can spend it.</td></tr>
+          <tr><td><code>wallet.data.get(name)</code>, <code>.set(name, value)</code></td><td>Your own records, sealed in the same file.</td></tr>
+          <tr><td><code>wallet.close()</code></td><td>Lets the wallet go, for another process to open.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note"><strong>Why an account each.</strong> An Arc account signs with few-time post-quantum keys and keeps a log of every signature. Two programs signing for one account could use a key twice, so the SDK keeps one process per wallet, and you keep one host per account.</div>
+    </section>
+
+    <section id="arc">
+      <h2>Arc</h2>
+      <p class="sub">USDC, in private notes. The account is an ERC-4337 account whose key is post-quantum (FORS+C), checked on chain.</p>
+      <div class="table"><table>
+        <thead><tr><th>Call</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>arc.address</code></td><td>The account's public address: send USDC here, from anywhere.</td></tr>
+          <tr><td><code>arc.balance()</code></td><td><code>{ private, waiting, notes, public }</code> in USDC. <code>waiting</code>: notes whose pool doesn't hold a full ring yet.</td></tr>
+          <tr><td><code>arc.deposit(usdc)</code></td><td>The address's USDC into notes, in one operation the account's key signs. Public, like any deposit.</td></tr>
+          <tr><td><code>arc.send(to, usdc, { waitForPrivacy, deadline })</code></td><td>A private payment from notes. Returns a handle per note.</td></tr>
+          <tr><td><code>arc.status(handle)</code></td><td>Where a payment is: <code>WAITING_FOR_PRIVACY</code> … <code>SETTLED</code> or <code>FAILED</code>.</td></tr>
+          <tr><td><code>arc.activity()</code></td><td>Payments sent, newest first.</td></tr>
+          <tr><td><code>arc.swapQuote(from, to, amount)</code>, <code>arc.swap(…)</code></td><td>Tokens at the address, through LI.FI. The route is asked across the relays and checked before the key signs: this account receives at least the minimum shown.</td></tr>
+          <tr><td><code>arc.withdraw(to)</code></td><td>Everything at the address (not the notes) to <code>to</code>.</td></tr>
+          <tr><td><code>arc.rescan()</code></td><td>Finds notes of this account made on another host.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="xrpl">
+      <h2>XRP Ledger</h2>
+      <p class="sub">XRP, RLUSD, USDC and an MPT, in private notes. Testnet today.</p>
+      <div class="table"><table>
+        <thead><tr><th>Call</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>xrpl.address(symbol)</code></td><td><code>{ xAddress, account, tag }</code>: a reusable deposit address. What's paid to it becomes this account's notes.</td></tr>
+          <tr><td><code>xrpl.balance(symbol)</code></td><td><code>{ amount, notes }</code>, checked against the ledger.</td></tr>
+          <tr><td><code>xrpl.send(symbol, amount, to, { tag, waitForPrivacy, deadline })</code></td><td>A private payment to any XRPL account, each note through a ring.</td></tr>
+          <tr><td><code>xrpl.settled(sent)</code></td><td>Waits until every note of a payment has an outcome.</td></tr>
+          <tr><td><code>xrpl.swapQuote(from, to, amount)</code>, <code>xrpl.swap(…)</code></td><td>A private swap through the ledger's AMMs: notes in, fresh notes of the other asset out, nothing linking the two.</td></tr>
+          <tr><td><code>xrpl.activity()</code>, <code>xrpl.recover()</code></td><td>Payments sent; deposits found since the last look.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="contracts">
+      <h2>Deployers and contracts</h2>
+      <p class="sub">Deploy without tying the contract to your treasury, or deploy from an account no classical key controls.</p>
+      <div class="table"><table>
+        <thead><tr><th>Call</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>arc.nextDeployer()</code>, <code>arc.deployer(i)</code></td><td><code>{ index, address, key }</code>: a plain Arc key for forge or hardhat, drawn from the account. One per project.</td></tr>
+          <tr><td><code>arc.fundDeployer(i, usdc)</code></td><td>Pays it privately: on chain, the pool funded it.</td></tr>
+          <tr><td><code>arc.deploy(initcode, salt?)</code></td><td>Deploys from the account itself through the CREATE2 factory, signed by its post-quantum key. <code>{ address, tx }</code>, the address known before it's sent.</td></tr>
+          <tr><td><code>arc.call(to, data)</code></td><td>Calls a contract from the account. One that hands its tokens over (approve, transfer, permit) is refused unless <code>{ allowRisk: true }</code>.</td></tr>
+          <tr><td><code>arc.riskOf(to, data)</code></td><td>What a call would hand over, in words, or null.</td></tr>
+        </tbody>
+      </table></div>
+<pre><code>const d = await arc.nextDeployer();
+await arc.fundDeployer(d.index, 2);   <span class="c">// private: nothing on chain ties it to you</span>
+<span class="c">// PRIVATE_KEY=d.key forge script Deploy --rpc-url https://rpc.testnet.arc.io --broadcast</span></code></pre>
+      <p>A deployer's key is an ordinary key, not a post-quantum one: fund it with what a deploy costs. A contract that must outlive a quantum computer is deployed with <code>arc.deploy</code> and owned by the account.</p>
+    </section>
+
+    <section id="mcp">
+      <h2>MCP server</h2>
+      <p class="sub">Opaque for AI agents: a local MCP server holding a wallet of the agent's own.</p>
+<pre><code>opaque-mcp init                                          <span class="c"># an account of the agent's own, with limits</span>
+security add-generic-password -s opaque-mcp -a "$USER" -T "" -w   <span class="c"># its password, in your keychain</span>
+claude mcp add opaque -- opaque-mcp serve --password-command "security find-generic-password -s opaque-mcp -w"</code></pre>
+      <p>Any MCP client starts it the same way:</p>
+<pre><code>{ "mcpServers": { "opaque": {
+    "command": "opaque-mcp",
+    "args": ["serve", "--password-command", "security find-generic-password -s opaque-mcp -w"] } } }</code></pre>
+      <ol class="steps">
+        <li><strong>It runs on your machine</strong>, over stdio. The agent sees amounts, addresses and handles. It never sees a key, a note or a phrase.</li>
+        <li><strong>Its account is its budget.</strong> Fund it with what you'd let the agent spend. Your own wallet's accounts are never in reach.</li>
+        <li><strong>It pays within limits</strong> you set, and asks you in the client before anything larger.</li>
+      </ol>
+      <p>With <code>-T ""</code>, the keychain asks you each time anything reads the password: once when the server starts, and again if the agent ever tries. Never put the password in the client's config file, where an agent that runs commands can read it.</p>
+    </section>
+
+    <section id="tools">
+      <h2>Tools</h2>
+      <div class="table"><table>
+        <thead><tr><th>Tool</th><th>What the agent can do</th></tr></thead>
+        <tbody>
+          <tr><td><code>wallet_info</code></td><td>Network, Arc address, limits and what's been paid today</td></tr>
+          <tr><td><code>arc_balance</code>, <code>arc_deposit</code></td><td>Read the balance; turn public USDC into notes</td></tr>
+          <tr><td><code>arc_send</code>, <code>payment_status</code>, <code>arc_activity</code></td><td>Pay privately, within limits; follow it to settlement</td></tr>
+          <tr><td><code>get_deployer</code>, <code>fund_deployer</code></td><td>A fresh deployer address; fund it privately</td></tr>
+          <tr><td><code>get_deployer_key</code></td><td>Writes <code>PRIVATE_KEY</code> into a git-ignored <code>.env</code> only you can read, after you approve. The key never enters the conversation.</td></tr>
+          <tr><td><code>arc_deploy</code>, <code>arc_call</code>, <code>contract_risk</code></td><td>Deploy and call from the post-quantum account. A call that hands tokens over, or any call to a contract the agent didn't deploy, asks you first</td></tr>
+          <tr><td><code>arc_swap_quote</code>, <code>arc_swap</code></td><td>Swap tokens at the address through LI.FI; larger swaps ask you</td></tr>
+          <tr><td><code>arc_withdraw</code></td><td>Everything at the address to one place; always asks you</td></tr>
+          <tr><td><code>xrpl_balance</code>, <code>xrpl_deposit_address</code>, <code>xrpl_send</code>, <code>xrpl_activity</code></td><td>The same on the XRP Ledger</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="limits">
+      <h2>Limits and approval</h2>
+      <p class="sub">Kept in the agent's wallet, under its password: its tools read them, never change them.</p>
+      <div class="table"><table>
+        <thead><tr><th>Asset</th><th>Per payment</th><th>Per day</th><th>Asks you above</th></tr></thead>
+        <tbody>
+          <tr><td><code>arc:USDC</code></td><td>10</td><td>50</td><td>5</td></tr>
+          <tr><td><code>xrpl:XRP</code></td><td>20</td><td>100</td><td>10</td></tr>
+          <tr><td><code>xrpl:RLUSD</code>, <code>xrpl:USDC</code></td><td>10</td><td>50</td><td>5</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li>An asset with no limit can't be paid. A list of <code>recipients</code> narrows who can be paid, besides the agent's own deployers (one whose key was written out counts as anyone else).</li>
+        <li>Account operations (deposit, deploy, call, swap, withdraw) are capped too: 20 a day unless you set <code>operationsPerDay</code>. Each costs gas and one of the key's signatures; the key rotates itself before it runs out.</li>
+        <li>Above <em>asks you above</em>, the server asks you in the client (MCP elicitation), and the agent can't answer for you. A client that can't ask gets a refusal.</li>
+        <li><code>opaque-mcp policy --set policy.json</code> changes them, with the password. <code>opaque-mcp deployer-key 0</code> shows a deployer's key in your terminal, even while the server runs.</li>
+      </ul>
+      <div class="note"><strong>The boundary.</strong> Limits stop an agent that's been misled through its tools. An agent that can also run commands as you (Claude Code can) can read what you can: keep the password in a keychain entry that asks you, and fund the agent's account with only what you'd let it spend. That account is what caps the loss.</div>
+    </section>
+
+    <section id="network">
+      <h2>The network</h2>
+      <p class="sub">What the SDK talks to, so you don't have to.</p>
+      <p>Every read and payment crosses three of Opaque's six relays, onion-wrapped (ML-KEM-768, AES-256-GCM) and padded to a fixed size, to an exit that answers queries and takes payments. Each relay's key comes from a directory signed down from a root built into the SDK, never from the network. Proofs are about 1 MB and go in chunks.</p>
+      <p><strong>There is no API key.</strong> A key would tie every request to the company that sent it, and through it to their users. Rate limits and proof of work keep the services up instead.</p>
+    </section>
+
+    <section id="trust">
+      <h2>Who sees what</h2>
+      <div class="table"><table>
+        <thead><tr><th>What</th><th>Who can see it</th></tr></thead>
+        <tbody>
+          <tr><td>Keys, note secrets, proofs before they're sent</td><td>Your process only</td></tr>
+          <tr><td>Which note paid</td><td>Nobody: one of eight of the same size</td></tr>
+          <tr><td>A deposit, and a payment's recipient and amount</td><td>Everyone, on chain: a payment comes from the pool</td></tr>
+          <tr><td>Your server's IP</td><td>The first relay. The services see the last one</td></tr>
+          <tr><td>What a read asks about</td><td>The exit, but not who asked</td></tr>
+        </tbody>
+      </table></div>
+      <p>Opaque runs every relay today, so Opaque could link them; the <a href="/docs#privacy">docs</a> say what else holds and doesn't.</p>
+    </section>
+
+    <section id="access">
+      <h2>Access</h2>
+      <p>The SDK and MCP server are licensed to companies building wallets, payments, stablecoins and agents. Build on testnet first; Arc mainnet is live for USDC.</p>
+      <div class="actions"><a class="btn primary" href="https://x.com/Opaquecredit" target="_blank" rel="noopener noreferrer">Talk to us ↗</a><a class="btn ghost" href="/testnet/app">Try the wallet on testnet</a></div>
+    </section>
+
+    <footer><span>© 2026 Opaque</span><a href="/">Home</a><a href="/docs">Docs</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>
+  </main>
+</div>
+
+<script>
+  // The contents button on a phone, and the section you're reading marked in the list.
+  const toc = document.getElementById('toc');
+  const toggle = document.getElementById('toc-toggle');
+  toggle.addEventListener('click', () => { const open = toc.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)); });
+  toc.addEventListener('click', (e) => { if (e.target instanceof HTMLAnchorElement && innerWidth <= 900) { toc.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); } });
+  const links = new Map([...toc.querySelectorAll('a')].map((a) => [a.getAttribute('href').slice(1), a]));
+  const seen = new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) { for (const a of links.values()) a.classList.remove('here'); links.get(entry.target.id)?.classList.add('here'); }
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  for (const id of links.keys()) { const s = document.getElementById(id); if (s) seen.observe(s); }
+</script>
+</body>
+</html>

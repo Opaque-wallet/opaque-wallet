@@ -36,6 +36,7 @@ import { planSweep, runSweep, sweepKey, type SweepPlan } from '../../../backend/
 import { deliverMinOf, notesForPayments, quoteNotes, xrpPriceIn } from '../../../backend/xrpl/swap.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient, type NoteVault } from '../../../packages/ring-client/src/index.ts';
+import type { RingProver } from '../../../packages/ring-client/src/ring-client.ts';
 import { xrplDeployment, xrplMeshTrustRoot, type XrplPoolDeployment } from '../../../deployments/xrpl.ts';
 import { keyFrom } from './backup.ts';
 import { createWorkerProver } from './prover.ts';
@@ -112,7 +113,7 @@ const LANES = 2;
 /** What a payment that chose to wait asks of the pool's privacy score. */
 const WAIT_SCORE = 5_000;
 
-export async function loadXrplStack(url: string = import.meta.env['VITE_XRPL_STACK_URL'] ?? 'xrpl-stack.json'): Promise<XrplStackConfig> {
+export async function loadXrplStack(url: string = import.meta.env?.['VITE_XRPL_STACK_URL'] ?? 'xrpl-stack.json'): Promise<XrplStackConfig> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -276,7 +277,7 @@ function meshOf(cfg: XrplStackConfig) {
   const relayHealth = createGraphHealth({ fetchSnapshot: async () => (await query<RelaySnapshot>({ kind: 'RELAY_SNAPSHOT' })).value });
   // VERIFY FIRST: throws before any relay is contacted if the directory does
   // not chain to the root. Only a dev server's wallet takes the stack's root.
-  const devRoot = import.meta.env.DEV ? cfg.trustRoot : undefined;
+  const devRoot = import.meta.env?.DEV ? cfg.trustRoot : undefined;
   const { signed, root } = chainTo(cfg.directoryChain ?? [cfg.signedDirectory], devRoot ?? xrplMeshTrustRoot() as DirectoryTrustRoot);
   const bootstrap = createMeshBootstrap({
     root, signed, pathPolicy: new MarkovPathPolicy(), health: relayHealth.health,
@@ -285,7 +286,8 @@ function meshOf(cfg: XrplStackConfig) {
   const query = async <T>(request: Parameters<typeof bootstrap.transport.query>[0]) =>
     (await bootstrap.transport.query(request, await bootstrap.pathFor())) as unknown as { value: T };
   void relayHealth.refresh();
-  setInterval(() => void relayHealth.refresh(), 120_000);
+  // Never what keeps a Node process (packages/sdk) running.
+  (setInterval(() => void relayHealth.refresh(), 120_000) as { unref?: () => void }).unref?.();
   return { bootstrap, query };
 }
 let pageQuery: (<T>(request: MeshQuery) => Promise<{ value: T }>) | undefined;
@@ -296,7 +298,7 @@ export const backupTransport = (): BackupTransport => async (operation, encodedR
   return (await query<Hex>({ kind: 'BACKUP', operation, encodedRequest })).value;
 };
 
-export async function startXrplWallet(config?: XrplStackConfig, account: AccountKeys | null = null): Promise<XrplWallet> {
+export async function startXrplWallet(config?: XrplStackConfig, account: AccountKeys | null = null, host: { readonly prover?: () => RingProver } = {}): Promise<XrplWallet> {
   const cfg = config ?? (await loadXrplStack());
   const K = storageOf(account);
 
@@ -338,7 +340,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       isNullifierSpent: (scope, nullifier) => nullifierSpent(xrpl, accountOf(scope.pool), nullifier),
     },
   });
-  const ringClient = createRingClient(vault, createWorkerProver());
+  const ringClient = createRingClient(vault, (host.prover ?? createWorkerProver)());
 
   const counterOf = (scope: PoolScope) => `${accountOf(scope.pool)}/${scope.denomination}`;
   const drawFor = (keys: AccountKeys, scope: PoolScope, i: number) => stream(keys.key, `note/${xrplDeployment.network.name}/${accountOf(scope.pool)}/${scope.denomination}/${i}`);

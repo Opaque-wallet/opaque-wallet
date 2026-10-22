@@ -19,6 +19,10 @@ indexer/target/
 
 # npm pack artifacts
 nonce0-*.tgz
+# the SDK and MCP server as built for a company (packages/scripts/build-dist.ts)
+packages/sdk/dist/
+packages/mcp/dist/
+packages/*/opaque-*.tgz
 
 .DS_Store
 

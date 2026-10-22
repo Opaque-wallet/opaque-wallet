@@ -1,0 +1,26 @@
+{
+  "name": "@opaque/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Opaque for AI agents: an MCP server, run locally, that pays privately from an account of the agent's own, within limits you set.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "opaque-mcp": "./src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "e2e": "node test/e2e-mcp.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@opaque/sdk": "file:../sdk",
+    "zod": "^3.25.0"
+  }
+}

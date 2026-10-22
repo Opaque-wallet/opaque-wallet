@@ -11,10 +11,9 @@
 import type { Bytes32 } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
-import type { IndexedDbSignerStore } from '../../../packages/pq-wallet/src/indexeddb-store.ts';
 import { SealedSignerStore } from './lock.ts';
-import { exportSigner, restoreSigner, type ExportedSigner } from '../../../packages/pq-wallet/src/signer-state.ts';
-import type { WalletRecord } from '../../../packages/pq-wallet/src/wallet-state.ts';
+import { exportSigner, restoreSigner, type ExportedSigner, type SignerStore } from '../../../packages/pq-wallet/src/signer-state.ts';
+import type { WalletRecord, WalletStateStore } from '../../../packages/pq-wallet/src/wallet-state.ts';
 import { NETWORK } from '../../../deployments/index.ts';
 import { scoped } from './storage-name.ts';
 
@@ -51,7 +50,7 @@ export async function keyFrom(passphrase: string, salt: Uint8Array<ArrayBuffer>)
 }
 
 /** The encrypted backup, as a file to save. */
-export async function exportBackup(store: IndexedDbSignerStore, passphrase: string): Promise<Blob> {
+export async function exportBackup(store: SignerStore & WalletStateStore, passphrase: string): Promise<Blob> {
   const wallet = await store.readWallet(WALLET_ID);
   if (wallet === undefined) throw new Error('this browser holds no account to back up');
   const ids = [wallet.active, wallet.next, ...(wallet.pendingRotation ? [wallet.pendingRotation.next] : [])] as Bytes32[];

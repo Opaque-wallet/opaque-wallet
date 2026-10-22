@@ -54,6 +54,9 @@ import { capabilitiesOf } from '../../../backend/chain/pool.ts';
 import { readOne, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient } from '../../../packages/ring-client/src/index.ts';
+import type { RingProver } from '../../../packages/ring-client/src/ring-client.ts';
+import type { RestorableSignerStore } from '../../../packages/pq-wallet/src/signer-state.ts';
+import type { WalletStateStore } from '../../../packages/pq-wallet/src/wallet-state.ts';
 import { SealedSignerStore } from './lock.ts';
 import { adoptWallet, createPqWallet } from '../../../packages/pq-wallet/src/wallet.ts';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
@@ -100,8 +103,8 @@ function savePinnedRoot(root: DirectoryTrustRoot): void {
 // network's hosted stack (services.meshExitUrl in deployments/). VITE_STACK_URL
 // overrides either, e.g. for the extension. docs/hosting.md.
 const defaultStackUrl = (): string =>
-  import.meta.env.DEV ? 'stack.json' : `${new URL(requireService('meshExitUrl')).origin}/stack.json`;
-export async function loadStack(url: string = import.meta.env['VITE_STACK_URL'] ?? defaultStackUrl()): Promise<StackConfig> {
+  import.meta.env?.DEV ? 'stack.json' : `${new URL(requireService('meshExitUrl')).origin}/stack.json`;
+export async function loadStack(url: string = import.meta.env?.['VITE_STACK_URL'] ?? defaultStackUrl()): Promise<StackConfig> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -187,7 +190,7 @@ function meshOf(cfg: StackConfig) {
   // remembers the furthest root it has accepted, so a server cannot roll it
   // back to an older directory. Only a dev server's wallet takes the root the
   // server sends, for the random mesh a local stack makes.
-  const devRoot = import.meta.env.DEV ? cfg.trustRoot : undefined;
+  const devRoot = import.meta.env?.DEV ? cfg.trustRoot : undefined;
   const { signed, root } = chainTo(cfg.directoryChain ?? [cfg.signedDirectory], devRoot ?? pinnedRoot());
   if (devRoot === undefined) savePinnedRoot(root);
   const bootstrap = createMeshBootstrap({
@@ -203,7 +206,8 @@ function meshOf(cfg: StackConfig) {
   // Until the first answer, every relay weighs the same. The polls double as
   // cover traffic (§7.5).
   void relayHealth.refresh();
-  setInterval(() => void relayHealth.refresh(), 120_000);
+  // Never what keeps a Node process (packages/sdk) running.
+  (setInterval(() => void relayHealth.refresh(), 120_000) as { unref?: () => void }).unref?.();
   return { bootstrap, query };
 }
 let pageQuery: (<T>(request: MeshQuery) => Promise<{ value: T }>) | undefined;
@@ -214,7 +218,17 @@ export const backupTransport = (): BackupTransport => async (operation, encodedR
   return (await query<Hex>({ kind: 'BACKUP', operation, encodedRequest })).value;
 };
 
-export async function startWallet(config?: StackConfig, account: AccountKeys | 'browser' = 'browser'): Promise<WalletRuntime> {
+/**
+ * What a host other than a page supplies (packages/sdk, in Node): where the
+ * account's keys are kept, and the prover. A page leaves both out: IndexedDB
+ * under the lock, and a Web Worker.
+ */
+export interface RuntimeHost {
+  readonly keys?: (name: string) => RestorableSignerStore & WalletStateStore;
+  readonly prover?: () => RingProver;
+}
+
+export async function startWallet(config?: StackConfig, account: AccountKeys | 'browser' = 'browser', host: RuntimeHost = {}): Promise<WalletRuntime> {
   const cfg = config ?? (await loadStack());
   const scopes: readonly PoolScope[] = deployment.pools
     .filter((p) => p.proofMode === 'RING_8')
@@ -241,7 +255,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
   // A phrase account's keys are drawn from the phrase, so this store is only
   // their copy and signing log here; the browser account's exist nowhere else.
   const names = arcStorageOf(account, keyStoreName());
-  const keys = new SealedSignerStore(names.keys);
+  const keys = host.keys?.(names.keys) ?? new SealedSignerStore(names.keys);
   const walletOptions = livePqWalletOptions({
     signerStore: keys, walletStore: keys, publicClient: browserPool.publicClient, payer: browserPayer(undefined), walletRpc,
     ...(account === 'browser' ? {} : { seedFor: (epoch: bigint) => forsSeed(account, epoch) }),
@@ -281,7 +295,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       },
     }),
   });
-  const ring = createRingClient(vault, createWorkerProver());
+  const ring = createRingClient(vault, (host.prover ?? createWorkerProver)());
 
   const credentials = new Map<string, string>();
   const sealIntent = createIntentSealer({
