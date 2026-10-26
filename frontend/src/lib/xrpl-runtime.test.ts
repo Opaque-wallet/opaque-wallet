@@ -127,3 +127,28 @@ test('F-62: close() stops the relays\' poll and the prover', async () => {
     mock.timers.reset();
   }
 });
+
+test('a payment tries again when a relay drops the connection, whatever words the runtime uses', async () => {
+  // Node says `fetch failed` where a browser says `Failed to fetch`; the relay
+  // client now hands both on as a retryable MESH_UNAVAILABLE. The retry knew
+  // only the browsers' words, so in the SDK and MCP one dropped connection
+  // failed the note outright (seen live, 2026-10-26).
+  items.clear();
+  const bigints = (_k: string, v: unknown) => (typeof v === 'bigint' ? `${v}n` : v);
+  items.set(`opaque:xrpl:${account.id}:notes:v1`, JSON.stringify({ 'note-0': { id: 'note-0', scope, commitment: mine(0), secret: toHex(secretOf(0)), state: 'AVAILABLE', depositTx: null, createdAtBlock: 1n, reservation: null } }, bigints));
+  let tries = 0;
+  const { mesh } = relays(async (r) => {
+    if (r.kind === 'RING_SNAPSHOT') return ringOf(r.scope, [mine(0), ...others]);
+    if (r.kind === 'CREDENTIAL') {
+      tries++;
+      const { ProtocolFailure } = await import('@opaque/protocol-types');
+      throw new ProtocolFailure('MESH_UNAVAILABLE', 'the connection to a relay dropped (fetch failed)', true);
+    }
+    return offline();
+  });
+  const wallet = await startXrplWallet(CONFIG, account, { prover, mesh });
+  const sent = await wallet.send({ symbol: pool.symbol, amount: size / 1_000_000, destination: { account: 'rrrrrrrrrrrrrrrrrrrrrhoLvTp', tag: null }, waitForPrivacy: false, deadline: BigInt(Math.floor(Date.now() / 1000) + 600) as never });
+  assert.equal(tries, 3, 'tried, then twice more');
+  assert.equal(sent.notes[0]!.state, 'FAILED', 'and only then given up');
+  wallet.close();
+});

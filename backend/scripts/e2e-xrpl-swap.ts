@@ -93,8 +93,11 @@ try {
   check('the USDC arrived as private notes, at least the minimum', usdc >= q1.least, `${usdc} USDC`);
 
   // ── 3. USDC → RLUSD, through XRP ───────────────────────────────────────────
-  const q2 = await quote(page, 'USDC', 'RLUSD', 10);
-  check('10 USDC → RLUSD quotes through XRP', /through XRP/.test(String(await page.textContent('#swap-route'))) && q2.least > 0, `${q2.button}; at least ${q2.least} RLUSD`);
+  // What step 2 brought, up to 10: at XRP's price on the day, 15 XRP may buy a
+  // little under 10 USDC, and notes are whole units.
+  const tokens = Math.min(10, Math.floor(usdc));
+  const q2 = await quote(page, 'USDC', 'RLUSD', tokens);
+  check(`${tokens} USDC → RLUSD quotes through XRP`, /through XRP/.test(String(await page.textContent('#swap-route'))) && q2.least > 0, `${q2.button}; at least ${q2.least} RLUSD`);
   await page.click('#swap-go');
   await page.waitForFunction(() => ['✓', '!'].includes(document.getElementById('swap-eta')?.textContent ?? ''), null, { timeout: 600_000 });
   log(`      ${await page.textContent('#swap-progress-text')}`);

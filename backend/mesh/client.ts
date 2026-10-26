@@ -111,6 +111,10 @@ export function createMeshTransport(options: MeshClientOptions = {}): PrivacyTra
       return await call(signal);
     } catch (error) {
       if (signal.aborted) throw new ProtocolFailure('MESH_UNAVAILABLE', 'a relay did not answer in time', true);
+      // fetch rejects with a TypeError when the connection drops, worded by the
+      // runtime ("Failed to fetch", "fetch failed", "Load failed"): one answer,
+      // retryable, for every caller to recognise.
+      if (error instanceof TypeError) throw new ProtocolFailure('MESH_UNAVAILABLE', `the connection to a relay dropped (${error.message})`, true);
       throw error;
     }
   }

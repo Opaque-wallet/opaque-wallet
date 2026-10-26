@@ -239,3 +239,19 @@ test('a relay that accepts and then stalls cannot hang the wallet (F-63b)', asyn
   const intent = { encryptedPayload: `0x${'ab'.repeat(20_000)}` } as never;
   await assert.rejects(uploading.submitIntent(intent, path), retryable);
 });
+
+test('a connection a relay drops is a retryable relay failure, in Node\'s words as in a browser\'s', async () => {
+  // Seen live (2026-10-26): `fetch failed` / ECONNRESET from a proxy on the way
+  // reached the wallet as a bare TypeError, which the payment's retry did not
+  // recognise (it knew only the browsers' wording), so one blip failed a note.
+  const path = [1, 2, 3].map((n) => {
+    const keys = generateRelayKeypair(1n);
+    return nodeFor({ id: `R${n}`, endpoint: `https://r${n}.invalid/v1/relay`, kemPublicKey: keys.publicKey, keyEpoch: 1n, operatorId: `op${n}` });
+  }) as unknown as RelayPath;
+  const reset = (async () => {
+    throw new TypeError('fetch failed', { cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }) });
+  }) as unknown as typeof fetch;
+  const retryable = (error: unknown) => error instanceof ProtocolFailure && error.code === 'MESH_UNAVAILABLE' && error.retryable && /dropped/.test(error.message);
+  await assert.rejects(createMeshTransport({ pollTimeoutMs: 50, fetchImpl: reset }).query({ kind: 'RELAY_SNAPSHOT' }, path), retryable);
+  await assert.rejects(createMeshTransport({ pollTimeoutMs: 50, fetchImpl: reset }).submitIntent({ encryptedPayload: `0x${'ab'.repeat(20_000)}` } as never, path), retryable);
+});

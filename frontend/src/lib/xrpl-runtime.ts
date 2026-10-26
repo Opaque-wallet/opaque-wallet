@@ -661,7 +661,8 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
         let ref: IntentRef;
         for (let attempt = 0; ; attempt++) {
           try { ref = await payNote(note, entry.reservation, destination, waitForPrivacy ? WAIT_SCORE : 0, deadline, mins?.[i]); break; } catch (error) {
-            if (attempt >= 2 || !/failed to fetch|networkerror|load failed|network connection/i.test((error as Error).message)) throw error;
+            const dropped = (error as { code?: string; retryable?: boolean }).code === 'MESH_UNAVAILABLE' && (error as { retryable?: boolean }).retryable === true;
+            if (attempt >= 2 || !(dropped || /failed to fetch|networkerror|load failed|network connection/i.test((error as Error).message))) throw error;
             onProgress?.(`note ${i + 1}/${picked.length}: the connection dropped, trying again…`);
             await new Promise((resolve) => setTimeout(resolve, 2_000 * (attempt + 1)));
           }
