@@ -10,7 +10,7 @@ import { fromHex } from '@opaque/protocol-types/codecs.js';
 import { createMeshTransport } from '../client.ts';
 import { encodeAnswer } from '../queries.ts';
 import { buildLocalMesh, serveLocalMesh } from '../local-mesh.ts';
-import type { MeshMessageKind } from '../transport.ts';
+import { generateRelayKeypair, type MeshMessageKind } from '../transport.ts';
 
 const score = (n: number) => n as unknown as PrivacyScore;
 
@@ -201,4 +201,41 @@ test('a timeout is retryable, not a silent empty answer', async () => {
   } finally {
     await mesh.close();
   }
+});
+
+// ── overlord regressions ────────────────────────────────────────────────────
+
+test('a relay that accepts and then stalls cannot hang the wallet (F-63b)', async () => {
+  const path = [1, 2, 3].map((n) => {
+    const keys = generateRelayKeypair(1n);
+    return nodeFor({ id: `R${n}`, endpoint: `https://r${n}.invalid/v1/relay`, kemPublicKey: keys.publicKey, keyEpoch: 1n, operatorId: `op${n}` });
+  }) as unknown as RelayPath;
+  // OMEGA's PoC: a relay that takes the connection and never answers. This
+  // one answers only when the caller gives up, and refuses a caller that
+  // never would — that call would hang the test as it hangs the wallet.
+  const stall = (accept: (url: string, init?: RequestInit) => boolean) =>
+    (async (url: string, init?: RequestInit) => {
+      if (accept(url, init)) return new Response('{}', { status: 202 });
+      const signal = init?.signal;
+      if (!signal) throw new Error('a fetch with no timeout');
+      // The open socket a real stalled fetch holds, without which Node exits
+      // before AbortSignal.timeout's unref'd timer fires.
+      const socket = setInterval(() => {}, 1_000);
+      return await new Promise<Response>((_, reject) => signal.addEventListener('abort', () => {
+        clearInterval(socket);
+        reject(signal.reason);
+      }));
+    }) as unknown as typeof fetch;
+  const retryable = (error: unknown) => error instanceof ProtocolFailure && error.code === 'MESH_UNAVAILABLE' && error.retryable;
+
+  // Hop 1 stalls on the POST itself.
+  const posting = createMeshTransport({ pollTimeoutMs: 50, fetchImpl: stall(() => false) });
+  await assert.rejects(posting.query({ kind: 'RELAY_SNAPSHOT' }, path), retryable);
+  // Hop 1 accepts; the drop relay stalls on the poll.
+  const polling = createMeshTransport({ pollTimeoutMs: 50, fetchImpl: stall((_url, init) => init?.method === 'POST') });
+  await assert.rejects(polling.query({ kind: 'RELAY_SNAPSHOT' }, path), retryable);
+  // A chunk of an intent upload, after the note is reserved: one-way, so no poll to time it.
+  const uploading = createMeshTransport({ pollTimeoutMs: 50, fetchImpl: stall(() => false) });
+  const intent = { encryptedPayload: `0x${'ab'.repeat(20_000)}` } as never;
+  await assert.rejects(uploading.submitIntent(intent, path), retryable);
 });

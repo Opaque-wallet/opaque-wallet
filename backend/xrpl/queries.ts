@@ -56,6 +56,8 @@ export const READ_COMMANDS = new Set([
   'account_info', 'account_lines', 'account_objects', 'account_offers', 'account_nfts', 'book_offers', 'amm_info',
   'nft_sell_offers', 'nft_buy_offers', 'ledger_entry', 'fee', 'ledger_current', 'server_state', 'tx',
 ]);
+/** What a request carries beside its parameters, as xrpl.js and rippled read it. */
+const PLUMBING = ['command', 'id', 'api_version'];
 
 export function createXrplAnswerer(deps: XrplAnswererDeps): XrplSend {
   const handlers: Record<XrplOperation, (r: Record<string, unknown>) => Promise<unknown>> = {
@@ -88,7 +90,10 @@ export function createXrplAnswerer(deps: XrplAnswererDeps): XrplSend {
       const command = str(r['command'], 'command');
       if (!READ_COMMANDS.has(command)) refuse(`READ does not answer ${command}`);
       const params = r['params'] ?? {};
-      if (typeof params !== 'object' || params === null || Array.isArray(params) || 'command' in params) refuse('params is an object');
+      if (typeof params !== 'object' || params === null || Array.isArray(params)) refuse('params is an object');
+      // The request's own envelope is the exit's: an `id` would name the request on its one
+      // ledger socket, where it can collide with the exit's own (F-65).
+      if (PLUMBING.some((key) => key in (params as object))) refuse(`params may not set ${PLUMBING.join(', ')}`);
       if (deps.read === undefined) refuse('this exit does not answer READ');
       return deps.read!(command, params as Record<string, unknown>);
     },

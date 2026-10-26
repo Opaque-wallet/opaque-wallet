@@ -2,10 +2,14 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 
-import type { IntentId, PrivateSpend, TxHash, UnixSeconds } from '@opaque/protocol-types';
+import { custom, encodeAbiParameters, encodeFunctionResult, toFunctionSelector, toHex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 
+import { ProtocolFailure, type IntentId, type PrivateSpend, type TxHash, type UnixSeconds } from '@opaque/protocol-types';
+
+import { ARC, POOL_ABI, createPoolClient, poolSubmitter } from '../../chain/pool.ts';
 import { issueRelease } from '../../cre/release.ts';
-import { createEgress } from '../egress.ts';
+import { createEgress, egressClient } from '../egress.ts';
 
 const secret = new TextEncoder().encode('workflow-to-egress');
 const NOW = 1_760_000_000n as UnixSeconds;
@@ -294,4 +298,59 @@ test('a genuine authorization list settles as one batch', async () => {
   assert.equal(answer.status, 202, JSON.stringify(answer.json));
   assert.equal(batches.length, 1, 'one release is one settlement transaction');
   assert.equal(batches[0]!.length, 2);
+});
+
+// ── F-56: what the settler hears back ─────────────────────────────────────
+
+/** egressClient against this egress, without a socket. */
+const clientOf = (egress: ReturnType<typeof createEgress>) =>
+  egressClient('http://egress.invalid/v1/release', (async (_url: string, init: RequestInit) => {
+    const answer = await post(egress, String(init.body));
+    return new Response(JSON.stringify(answer.json), { status: answer.status });
+  }) as unknown as typeof fetch);
+
+const refusal = (code: string, retryable: boolean) => (error: unknown) =>
+  error instanceof ProtocolFailure && error.code === code && error.retryable === retryable;
+
+test('F56_the_egress_verdict_reaches_the_settler_final_or_not', async () => {
+  // The PoC: every refusal reached the settler as a plain Error, never final,
+  // so an expired release, or a spend the pool refuses, was retried every ten
+  // seconds for as long as the process ran.
+  const late = createEgress({ secret, now: () => (NOW + 900n) as UnixSeconds, submitter: { submit: async () => assert.fail('an expired release is never sent') } });
+  await assert.rejects(clientOf(late)(releaseFor('intent-late')), refusal('EXPIRED', false));
+
+  const refusing = createEgress({
+    secret, now: () => NOW,
+    submitter: { submit: async () => { throw new ProtocolFailure('SETTLEMENT_REVERTED', 'the pool refuses this transaction (BadSignature)', false); } },
+  });
+  await assert.rejects(clientOf(refusing)(releaseFor('intent-refused')), refusal('SETTLEMENT_REVERTED', false));
+
+  // One it does not explain may have a transaction behind it: worth another try.
+  await assert.rejects(clientOf(harness({ fail: true }).egress)(releaseFor('intent-unknown')), refusal('SETTLEMENT_REVERTED', true));
+  assert.match(await clientOf(harness().egress)(releaseFor('intent-ok')), /^0x[0-9a-f]{64}$/);
+});
+
+test('F56_the_pool_refusing_a_spend_in_simulation_is_final', async () => {
+  // A spend the pool reverts in simulation was sent back as a plain error, the
+  // same as an RPC that blinked, and retried for as long as the process ran.
+  const capabilities = toFunctionSelector('capabilities()');
+  const rpc = custom({
+    async request({ method, params }: { method: string; params?: unknown }) {
+      if (method === 'eth_chainId') return toHex(ARC.id);
+      const data = ((params as [{ data?: string }?])?.[0]?.data) ?? '';
+      if (method === 'eth_call' && data.startsWith(capabilities)) {
+        return encodeFunctionResult({ abi: POOL_ABI, functionName: 'capabilities', result: { proofMode: 0, ringSize: 8, verifierId: `0x${'44'.repeat(32)}`, denomination: 1_000_000n, requiresCommitReveal: false } as never });
+      }
+      if (method === 'eth_call') {
+        // Error("NullifierAlreadySpent"), as a node returns a revert.
+        throw Object.assign(new Error('execution reverted'), { code: 3, data: `0x08c379a0${encodeAbiParameters([{ type: 'string' }], ['NullifierAlreadySpent']).slice(2)}` });
+      }
+      throw Object.assign(new Error(`no ${method} here`), { code: -32601 });
+    },
+  }, { retryCount: 0 });
+  const account = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
+  const submitter = poolSubmitter(createPoolClient({ account, transport: rpc, offChain: { pqWallet: 'LIVE', graph: 'LIVE', confidentialExecution: 'SIMULATED', policyScope: 'CRE_WORKFLOW_ONLY' } }));
+  const ring = { ...spend, mode: 'RING_8', ring: Array.from({ length: 8 }, (_, i) => `0x${String(i + 1).padStart(64, '0')}`) } as unknown as PrivateSpend;
+  await assert.rejects(submitter.submit(ring), (error: unknown) =>
+    error instanceof ProtocolFailure && error.code === 'SETTLEMENT_REVERTED' && !error.retryable && /NullifierAlreadySpent/.test(error.publicMessage));
 });

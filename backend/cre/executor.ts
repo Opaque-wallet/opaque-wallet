@@ -26,7 +26,7 @@
 // policy outcome to a caller who is only entitled to know that their payment
 // has not settled yet.
 
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import {
   ProtocolFailure,
@@ -56,16 +56,12 @@ export interface OpaqueExecutor extends PrivacyTimedExecutor {
 }
 
 /**
- * Constant-time compare over the handle, so a caller cannot narrow a valid
- * handle byte by byte from response timing. Length is compared first and
- * separately: the loop cannot leak a length it never reads.
+ * Handles are looked up by their SHA-256, never by themselves: what the lookup
+ * compares is a digest a caller cannot steer, so a valid handle cannot be
+ * narrowed byte by byte from response timing, and no lookup walks every
+ * handle there is (F-51).
  */
-function handleMatches(a: string, b: string): boolean {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}
+const digestOf = (handle: string): string => createHash('sha256').update(handle, 'utf8').digest('hex');
 
 export function createExecutor(options: ExecutorOptions = {}): OpaqueExecutor {
   const {
@@ -77,11 +73,18 @@ export function createExecutor(options: ExecutorOptions = {}): OpaqueExecutor {
     newStatusHandle = () => randomBytes(32).toString('hex') as StatusHandle,
   } = options;
 
-  const byHandle = new Map<StatusHandle, IntentId>();
+  const byHandle = new Map<string, IntentId>();
   // One handle per idempotency key, so a resubmission returns the SAME
   // capability rather than minting a second one for a payment that already
   // exists — two live handles for one intent is two things to leak.
   const handleForIntent = new Map<IntentId, StatusHandle>();
+  // An intent the store has forgotten takes its handle with it.
+  store.onForget((intentId) => {
+    const handle = handleForIntent.get(intentId);
+    if (handle === undefined) return;
+    byHandle.delete(digestOf(handle));
+    handleForIntent.delete(intentId);
+  });
 
   return {
     store,
@@ -103,18 +106,13 @@ export function createExecutor(options: ExecutorOptions = {}): OpaqueExecutor {
       if (existing !== undefined) return { intentId: record.intentId, statusHandle: existing };
 
       const statusHandle = newStatusHandle();
-      byHandle.set(statusHandle, record.intentId);
+      byHandle.set(digestOf(statusHandle), record.intentId);
       handleForIntent.set(record.intentId, statusHandle);
       return { intentId: record.intentId, statusHandle };
     },
 
     async getStatus(handle: StatusHandle): Promise<IntentStatus> {
-      // Scanned rather than looked up, so an unknown handle costs the same as
-      // a known one. The map is bounded by live intents.
-      let intentId: IntentId | undefined;
-      for (const [known, id] of byHandle) {
-        if (handleMatches(known, handle)) intentId = id;
-      }
+      const intentId = byHandle.get(digestOf(String(handle)));
       if (intentId === undefined) {
         // One message for unknown, malformed and revoked alike. Telling the
         // caller which would turn this into an oracle for handles that exist.

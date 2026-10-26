@@ -248,3 +248,21 @@ test('F-43: tools that pay or sign say so; reads say they only read', async () =
   for (const n of ['arc_balance', 'wallet_info', 'payment_status', 'contract_risk']) assert.equal(tools.get(n)?.readOnlyHint, true, n);
   assert.equal(tools.get('get_deployer')?.readOnlyHint, false);
 });
+
+// ── overlord F-46 (2026-10-26) ──────────────────────────────────────────────
+
+test('F-46: payments under askAbove, sent side by side, still keep to the day\'s limit', async () => {
+  const { wallet, sent } = fakeWallet({ policy: { ...DEFAULT_POLICY, limits: { 'arc:USDC': { perPayment: 10, perDay: 20, askAbove: 5 } } } });
+  // Whether the notes can pay is asked across the network: here every payment waits there together, then all go on.
+  let release!: () => void;
+  const checked = new Promise<void>((r) => { release = r; });
+  let asked = 0;
+  Object.assign(await wallet.arc(), { canPay: async () => { asked++; await checked; return true; } });
+  const { call } = await connect(wallet);
+  const all = Promise.all(Array.from({ length: 10 }, () => call('arc_send', { to: TO, usdc: 5 })));
+  while (asked < 10) await new Promise((r) => setImmediate(r));
+  release();
+  const results = await all;
+  assert.equal(sent.length, 4, `${sent.length} payments of 5 went against a day of 20`);
+  assert.equal(results.filter((r) => r.error && /over the 20 a day may be/.test(r.text)).length, 6);
+});

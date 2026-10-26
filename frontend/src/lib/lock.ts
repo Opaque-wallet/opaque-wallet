@@ -36,6 +36,8 @@ const LOCKED = 'opaque:locked-at:v1';
 const HANDOVER_MS = 10_000;
 const SEALED = 'sealed:v1:';
 const IDLE_MS = 15 * 60_000;
+/** How long the old key outlives a change of password: past any write another tab sealed before it saw the change. */
+const MOVE_GRACE_MS = 60_000;
 const ITERATIONS = 600_000;
 export const MIN_PASSWORD = 8;
 
@@ -48,6 +50,8 @@ interface Meta {
    * the move is done (a crash mid-way is finished at the next unlock).
    */
   readonly prev?: string; readonly prevId?: string;
+  /** When every record was first moved to the new key: the old one is kept a while after (moveRecords). */
+  readonly movedAt?: number;
 }
 
 const utf8 = (s: string) => new TextEncoder().encode(s);
@@ -263,8 +267,8 @@ export async function setPassword(password: string): Promise<void> {
  * A new password, and a new data key with it: what was sealed under the old
  * one is sealed again under the new, so an old copy of the wrapped key and the
  * old password open nothing written after. The old key is kept, sealed under
- * the new, until every record has moved (moveRecords); a crash in between is
- * finished at the next unlock.
+ * the new, until every record has moved and a while after (moveRecords); a
+ * crash in between is finished at the next unlock.
  */
 export async function changePassword(current: string, next: string): Promise<void> {
   const m = meta();
@@ -282,7 +286,7 @@ export async function changePassword(current: string, next: string): Promise<voi
   await moveRecords();
 }
 
-/** Seals every record under this tab's data key, from the previous one; then forgets the previous key. */
+/** Seals every record under this tab's data key, from the previous one; then, past the grace, forgets the previous key. */
 async function moveRecords(): Promise<void> {
   const m = meta();
   if (m === null || m.prev === undefined || dataKey === null) return;
@@ -294,7 +298,12 @@ async function moveRecords(): Promise<void> {
   }
   await eachArcRecord((r) => (r.sealed === 1 && r.by !== keyId ? sealRecord(openRecord(r)!) : undefined));
   await eachArcEntry('wallets', (r, id) => { const w = r as SealedWallet; return w.sealed === 1 && w.by !== keyId ? sealWallet(id, openWallet(id, w)!) : undefined; });
-  const { prev: _, prevId: __, ...done } = m;
+  // The old key goes only at a move a while later (the next unlock past the
+  // grace): a tab that sealed a record under it before it saw the new password
+  // may land it after this pass, and with the key gone, nothing could open it (F-67).
+  if (m.movedAt === undefined) { native!.set.call(localStorage, META, JSON.stringify({ ...m, movedAt: Date.now() })); return; }
+  if (Date.now() - m.movedAt < MOVE_GRACE_MS) return;
+  const { prev: _, prevId: __, movedAt: ___, ...done } = m;
   native!.set.call(localStorage, META, JSON.stringify(done));
   prevKey = null;
 }

@@ -308,6 +308,12 @@ export function buildOnion(input: {
   return layer;
 }
 
+/**
+ * The longest a relay accepts a layer for, in seconds. Clients send 600
+ * (client.ts); the rest is room for a wallet whose clock runs ahead.
+ */
+export const MAX_ENVELOPE_LIFETIME_SECONDS = 3_600n;
+
 export interface ReplayCache {
   /** True if this id was already seen. Records it either way. */
   seen(hopLocalId: string, expiresAt: bigint): boolean;
@@ -378,11 +384,20 @@ export function peelLayer(input: {
   if (BigInt(envelope.expiresAt) <= now) {
     throw new ProtocolFailure('EXPIRED', 'envelope has expired');
   }
+
+  // Authenticated BEFORE it is recorded. Recorded first, a header anyone can
+  // write with no key and no tag claimed a replay slot until an expiry of its
+  // own choosing, and 100,000 of them locked every real frame out (F-48).
+  const plaintext = open(envelope, input.secretKey);
+  // And no slot is held for longer than a message may live. Refused, not
+  // clamped: an entry clamped short would be forgotten while its envelope
+  // could still be replayed.
+  if (BigInt(envelope.expiresAt) > now + MAX_ENVELOPE_LIFETIME_SECONDS) {
+    throw new ProtocolFailure('INVALID_INPUT', 'envelope expires too far ahead');
+  }
   if (replayCache.seen(envelope.hopLocalId, BigInt(envelope.expiresAt))) {
     throw new ProtocolFailure('INVALID_INPUT', 'envelope has already been processed');
   }
-
-  const plaintext = open(envelope, input.secretKey);
 
   // An inner layer is another frame; the innermost is a padded JSON payload.
   // The frame's first byte is its version marker, so the two are told apart

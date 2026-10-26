@@ -19,6 +19,7 @@ import { timingSafeEqual } from 'node:crypto';
 
 import {
   ProtocolFailure,
+  TERMINAL_INTENT_STATES,
   type ApprovedRelease,
   type IntentId,
   type PoolScope,
@@ -50,16 +51,41 @@ export interface SettlerOptions {
   readonly attester?: {
     /** One attester can serve several pools: then, the identity for the spend's pool. */
     readonly identity: AttesterIdentity | ((scope: PoolScope) => AttesterIdentity);
-    readonly current: () => Promise<{ readonly forsSeed: Uint8Array; readonly useCount: bigint }>;
+    /** The key and index to sign with; `reserve` counts the signature first (attester-keys.ts). */
+    readonly current: () => Promise<{ readonly forsSeed: Uint8Array; readonly useCount: bigint; readonly generation?: number; readonly reserve?: () => void }>;
+    /**
+     * The registry's index, read and nothing else: what the settler watches for
+     * a signature to be consumed. Absent, current() is asked, and current()
+     * rotates near the end of a key's budget, on whatever a stale node says.
+     */
+    readonly observe?: () => Promise<{ readonly useCount: bigint; readonly generation?: number }>;
   };
+  /**
+   * Asked before the attester signs: throws a final refusal for a spend the
+   * pool would revert, a ring member it never saw or a spent note
+   * (chain/pool.ts assertSpendable). An attestation that can never land still
+   * costs the few-time key a use.
+   */
+  readonly spendable?: (spend: PrivateSpend) => Promise<void>;
   /** Hands a release to the egress and returns the broadcast tx. */
   readonly deliver: (release: ApprovedRelease) => Promise<TxHash>;
   /** What the chain says that tx did — required before anything is SETTLED. */
   readonly evidence: (txHash: TxHash, release: ApprovedRelease) => Promise<SettlementEvidence>;
+  /**
+   * Arc's delivery: evidence() reads a receipt, so it answers only once the
+   * chain has decided and throws until then; and the egress answers a release
+   * it has sent before with that same transaction. A failed verdict then ends
+   * the intent, and a broadcast is reconciled, never sent again (F-56). Unset
+   * (XRPL), a failed verdict may only mean "not found yet", and a retry pays
+   * afresh.
+   */
+  readonly receiptEvidence?: boolean;
   readonly nullifierSpent: (spend: PrivateSpend) => Promise<boolean>;
   /** Told when a settlement fails and will be retried. Never given a recipient. */
   readonly onError?: (intentId: IntentId, error: unknown) => void;
   readonly now?: () => UnixSeconds;
+  /** Injected so tests do not wait on real time. */
+  readonly sleep?: (ms: number) => Promise<void>;
 }
 
 export interface Settler {
@@ -97,12 +123,22 @@ export function pendingForCre(executor: OpaqueExecutor, now: UnixSeconds, maxByt
 /**
  * Refusals no retry can change, raised before anything was broadcast: the
  * proof is bad, the note was already spent (an XRPL attester checks the
- * ledger's credential before it signs), or the chain says the payment can
- * never land (a non-retryable SETTLEMENT_REVERTED, from a dry run).
+ * ledger's credential before it signs), the note is already being paid by
+ * another intent, the release's window has closed, or the chain says the
+ * payment can never land (a non-retryable SETTLEMENT_REVERTED, from a dry run).
  */
-const isFinal = (error: unknown): error is ProtocolFailure & { code: 'PROOF_REJECTED' | 'NULLIFIER_SPENT' | 'SETTLEMENT_REVERTED' } =>
+const isFinal = (error: unknown): error is ProtocolFailure & { code: 'PROOF_REJECTED' | 'NULLIFIER_SPENT' | 'NOTE_RESERVED' | 'EXPIRED' | 'SETTLEMENT_REVERTED' } =>
   error instanceof ProtocolFailure && (error.code === 'PROOF_REJECTED' || error.code === 'NULLIFIER_SPENT'
+    || error.code === 'NOTE_RESERVED' || error.code === 'EXPIRED'
     || (error.code === 'SETTLEMENT_REVERTED' && !error.retryable));
+
+/** Where an attestation was signed: the registry index it is good for, and the key. */
+type Signed = { readonly useCount: bigint; readonly generation?: number };
+
+/** How many times a held turn looks for a signature to be consumed, a second apart. */
+const CONSUME_TRIES = 15;
+/** A broadcast whose index another signature has since consumed is dropped once seen so this long apart. */
+const DROPPED_AFTER_SECONDS = 60;
 
 const tagMatches = (expected: string, actual: unknown): boolean => {
   if (typeof actual !== 'string' || !/^0x[0-9a-f]{64}$/.test(actual)) return false;
@@ -113,9 +149,25 @@ export function createSettler(options: SettlerOptions): Settler {
   const { executor } = options;
   const store = executor.store;
   const now = options.now ?? (() => BigInt(Math.floor(Date.now() / 1000)) as UnixSeconds);
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const identityFor = (scope: PoolScope): AttesterIdentity =>
     typeof options.attester!.identity === 'function' ? options.attester!.identity(scope) : options.attester!.identity;
+  // Per intent, and gone with it (retry() prunes): when it was last tried, the
+  // note each attestation in flight spends, and when a broadcast was first seen dropped.
   const lastTry = new Map<IntentId, number>();
+  const attesting = new Map<string, IntentId>();
+  const dropped = new Map<IntentId, number>();
+  // Per note, the times it was attested in the last day (F-68). A note is paid
+  // with one attestation; one whose spend the pool refuses after the signature
+  // check (a recipient the token will not pay, say) ends with the note unspent,
+  // and every new intent for it cost the key another signature for one deposit.
+  const attestedAt = new Map<string, number[]>();
+  const ATTESTATIONS_PER_NOTE = 2;
+  const NOTE_WINDOW = 86_400;
+  const live = (intentId: IntentId): boolean => {
+    const record = store.get(intentId);
+    return record !== undefined && !TERMINAL_INTENT_STATES.includes(record.state);
+  };
 
   // ONE ATTESTATION AT A TIME, FROM SIGNING TO A LANDED TRANSACTION.
   //
@@ -136,16 +188,17 @@ export function createSettler(options: SettlerOptions): Settler {
   /**
    * A load-balanced RPC can answer from before the block that consumed an index,
    * and the next attestation would sign that index again. Hold the turn until
-   * the registry shows it moved, or a rotation replaced the key.
-   * ponytail: reads through current(), which rotates near the end of a key's
-   * budget; a stale read there reverts the rotation, which is retried next turn.
-   * Give the settler a plain state read if that starts showing up.
+   * the registry shows it moved, or a rotation replaced the key. Read plainly,
+   * never through current(), which rotates on what a stale node says. Giving up
+   * is safe: the next signature is counted against the key (attester-keys.ts),
+   * at worst it signs an index again and reverts.
    */
-  async function untilConsumed(used: { readonly useCount: bigint; readonly generation?: number }): Promise<void> {
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const seen = await options.attester!.current() as { readonly useCount: bigint; readonly generation?: number };
-      if (seen.generation !== used.generation || seen.useCount > used.useCount) return;
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
+  async function untilConsumed(used: Signed): Promise<void> {
+    const read = options.attester!.observe ?? options.attester!.current;
+    for (let attempt = 0; attempt < CONSUME_TRIES; attempt++) {
+      const seen = await read().catch(() => undefined);
+      if (seen !== undefined && (seen.generation !== used.generation || seen.useCount > used.useCount)) return;
+      await sleep(1_000);
     }
   }
 
@@ -171,12 +224,34 @@ export function createSettler(options: SettlerOptions): Settler {
     store.recordBroadcast(intentId, txHash, now());
     // SETTLED only on evidence that THIS release's spend succeeded. A spent
     // nullifier alone is not proof — the pool is permissionless.
-    store.reconcile({
-      intentId,
-      evidence: await options.evidence(txHash, release),
-      nullifierSpent: await options.nullifierSpent(release.spend),
-      now: now(),
-    });
+    const evidence = await options.evidence(txHash, release);
+    const spent = await options.nullifierSpent(release.spend);
+    const after = store.reconcile({ intentId, evidence, nullifierSpent: spent, now: now() });
+    // Mined and failed, and the note unspent: that transaction is over, and the
+    // egress answers this release with its hash rather than send it again, so
+    // nothing more can come of this intent (F-56). It ends; the note is free.
+    if (options.receiptEvidence === true && after.state !== 'SETTLED' && !spent) {
+      refuse(intentId, 'SETTLEMENT_REVERTED', 'the settlement transaction failed on chain; the note was not spent');
+    }
+  }
+
+  /**
+   * One delivery, in the attester's turn, holding the turn while the signature
+   * it carries may yet land: when it settled, and when delivery failed in a way
+   * that may have left a transaction behind (F-45). A final refusal comes before
+   * anything is broadcast.
+   */
+  async function deliverHolding(intentId: IntentId, release: ApprovedRelease, signed: Signed | undefined): Promise<void> {
+    let outstanding = true;
+    try {
+      await deliver(intentId, release);
+      outstanding = store.get(intentId)?.state === 'SETTLED';
+    } catch (error) {
+      outstanding = !isFinal(error);
+      throw error;
+    } finally {
+      if (signed !== undefined && outstanding) await untilConsumed(signed);
+    }
   }
 
   async function settle(decision: Decision): Promise<void> {
@@ -222,19 +297,38 @@ export function createSettler(options: SettlerOptions): Settler {
       const checked = spend;
       await oneAtATime(async () => {
         const at = now();
-        const key = options.attester === undefined ? undefined : await options.attester.current();
-        const attested = key === undefined
-          ? { ...checked, ...beside } as PrivateSpend
-          : attestRingSpend({ spend: checked, identity: identityFor(checked.scope), ...key });
+        let attested = { ...checked, ...beside } as PrivateSpend;
+        let signed: Signed | undefined;
+        if (options.attester !== undefined) {
+          // One note, one attestation in flight: a second intent for a note
+          // this process has signed for, and not yet seen settle or fail, would
+          // be a second signature for a spend only one of can land (F-45).
+          const nullifier = String(checked.nullifier).toLowerCase();
+          const holder = attesting.get(nullifier);
+          if (holder !== undefined && holder !== intentId && live(holder)) {
+            throw new ProtocolFailure('NOTE_RESERVED', 'another payment of this note is already under way');
+          }
+          const recent = (attestedAt.get(nullifier) ?? []).filter((t) => t > Number(at) - NOTE_WINDOW);
+          if (recent.length >= ATTESTATIONS_PER_NOTE) {
+            throw new ProtocolFailure('NOTE_RESERVED', 'this note was attested twice today and paid neither time; try again tomorrow');
+          }
+          // Read in this turn, right before signing: nothing can sign for this
+          // note between the read and the signature.
+          await options.spendable?.(checked);
+          const key = await options.attester.current();
+          attested = attestRingSpend({ spend: checked, identity: identityFor(checked.scope), ...key });
+          attesting.set(nullifier, intentId);
+          attestedAt.set(nullifier, [...recent, Number(at)]);
+          signed = { useCount: key.useCount, ...(key.generation === undefined ? {} : { generation: key.generation }) };
+        }
         const release = issueRelease({
           intentId, spend: attested, policyVersion: options.policyVersion,
           issuedAt: at, ttlSeconds: options.releaseTtlSeconds, secret: options.credentialMac,
         });
         // Authorised BEFORE delivery: the outbox is created in the same step as
         // the transition that permits it, so a crash cannot mint a second one.
-        store.authorize({ intentId, release, now: at });
-        await deliver(intentId, release);
-        if (key !== undefined && store.get(intentId)?.state === 'SETTLED') await untilConsumed(key);
+        store.authorize({ intentId, release, now: at, ...(signed === undefined ? {} : { attestation: signed }) });
+        await deliverHolding(intentId, release, signed);
       });
     } catch (error) {
       options.onError?.(intentId, error);
@@ -245,36 +339,90 @@ export function createSettler(options: SettlerOptions): Settler {
     }
   }
 
+  /**
+   * A broadcast with no verdict yet, looked at again, outside the attester's
+   * turn: nothing here signs, and a transaction that never lands must not hold
+   * up the ones that will (F-56). It is never sent again (the egress would hand
+   * back the same hash); it ends when the chain says: settled, mined and
+   * failed, or dropped. Dropped means the index its attestation was signed for
+   * has been consumed by another, so it can never verify, seen twice a minute
+   * apart so that one node behind the others cannot end a payment that landed.
+   */
+  async function reconcileBroadcast(record: IntentRecord, broadcast: TxHash, outbox: ApprovedRelease): Promise<void> {
+    const intentId = record.intentId;
+    const evidence = await options.evidence(broadcast, outbox).catch(() => null);
+    const spent = await options.nullifierSpent(outbox.spend);
+    const after = store.reconcile({ intentId, evidence, nullifierSpent: spent, now: now() });
+    if (after.state === 'SETTLED' || spent) return;
+    if (evidence !== null) {
+      refuse(intentId, 'SETTLEMENT_REVERTED', 'the settlement transaction failed on chain; the note was not spent');
+      return;
+    }
+    if (record.attestation === undefined || options.attester === undefined) return;
+    const seen = await (options.attester.observe ?? options.attester.current)();
+    if (seen.generation === record.attestation.generation && seen.useCount <= record.attestation.useCount) {
+      dropped.delete(intentId);
+      return;
+    }
+    const first = dropped.get(intentId);
+    if (first === undefined) dropped.set(intentId, Number(now()));
+    else if (Number(now()) - first >= DROPPED_AFTER_SECONDS) {
+      refuse(intentId, 'SETTLEMENT_REVERTED', 'the settlement transaction was dropped and can no longer land; the note was not spent');
+    }
+  }
+
   async function retry(): Promise<void> {
-    for (const record of executor.pending(now())) {
+    const records = executor.pending(now());
+    const ids = new Set(records.map((r) => r.intentId));
+    for (const id of [...lastTry.keys()]) if (!ids.has(id)) lastTry.delete(id);
+    for (const id of [...dropped.keys()]) if (!ids.has(id)) dropped.delete(id);
+    for (const [nullifier, id] of [...attesting]) if (!ids.has(id)) attesting.delete(nullifier);
+    const since = Number(now()) - NOTE_WINDOW;
+    for (const [nullifier, times] of [...attestedAt]) if (times.every((t) => t <= since)) attestedAt.delete(nullifier);
+
+    for (const record of records) {
       if (record.outbox === undefined) continue;
-      if (Date.now() - (lastTry.get(record.intentId) ?? 0) < 10_000) continue;
+      // Ten seconds, doubling with each attempt, to ten minutes: a payment
+      // waiting on the chain is looked at often, one that keeps failing less.
+      const at = Number(now()) * 1000;
+      const backoff = Math.min(10_000 * 2 ** Math.max(0, record.attempts - 1), 600_000);
+      if (at - (lastTry.get(record.intentId) ?? 0) < backoff) continue;
       if (!store.claimAttempt(record.intentId)) continue;
-      lastTry.set(record.intentId, Date.now());
+      lastTry.set(record.intentId, at);
+      const outbox = record.outbox;
       try {
-        // A broadcast already made may have landed: look before resending.
-        // If the note is spent, the receipt says whether it was this release.
+        if (record.broadcast !== undefined && options.receiptEvidence === true) {
+          await reconcileBroadcast(record, record.broadcast, outbox);
+          continue;
+        }
         if (record.broadcast !== undefined) {
-          const spent = await options.nullifierSpent(record.outbox.spend);
+          // A broadcast already made may have landed: look before paying again.
+          // If the note is spent, the receipt says whether it was this release.
+          const spent = await options.nullifierSpent(outbox.spend);
           const after = store.reconcile({
             intentId: record.intentId,
-            evidence: spent ? await options.evidence(record.broadcast, record.outbox) : null,
+            evidence: spent ? await options.evidence(record.broadcast, outbox) : null,
             nullifierSpent: spent,
             now: now(),
           });
           if (spent || after.state !== 'RETRYING') continue;
+        } else if (options.receiptEvidence === true && await options.nullifierSpent(outbox.spend)) {
+          // Nothing on record as sent, and the note is spent anyway: sent again,
+          // the pool would refuse it, and that refusal would end a payment that
+          // may be this one. Wait for the chain to say whose spend it was.
+          store.reconcile({ intentId: record.intentId, evidence: null, nullifierSpent: true, now: now() });
+          continue;
         }
         // In turn with fresh attestations: this re-sends one already signed, and
         // must not race a new one for the same index. It deliberately does not
         // call current() first — that can rotate, consuming the very index this
         // stored attestation was signed for.
-        const outbox = record.outbox;
-        await oneAtATime(() => deliver(record.intentId, outbox));
+        await oneAtATime(() => deliverHolding(record.intentId, outbox, record.attestation));
       } catch (error) {
         options.onError?.(record.intentId, error);
         // Nothing of this intent's was ever broadcast, so a refusal now is not
         // about a transaction of its own that may yet land.
-        if (record.broadcast === undefined && isFinal(error)) refuse(record.intentId, error.code, error.message);
+        if (store.get(record.intentId)?.broadcast === undefined && isFinal(error)) refuse(record.intentId, error.code, error.message);
       } finally {
         store.releaseClaim(record.intentId);
       }

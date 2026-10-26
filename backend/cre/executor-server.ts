@@ -144,10 +144,28 @@ function reviveIntent(raw: unknown): EncryptedIntent {
   if (envelope !== undefined && (typeof envelope !== 'string' || !/^0x[0-9a-f]*$/.test(envelope) || envelope.length > 2 + 2 * MAX_ENVELOPE_BYTES)) {
     throw new ProtocolFailure('INVALID_INPUT', 'creEnvelope must be hex, at most 4 KiB');
   }
+  // The intent's own fields and nothing else, each short: whatever a caller
+  // adds would otherwise be held for as long as the intent is (F-51).
+  const text = (key: string, max: number): string => {
+    const value = held[key];
+    if (typeof value !== 'string' || value.length === 0 || value.length > max) {
+      throw new ProtocolFailure('INVALID_INPUT', `${key} must be a string of at most ${max} characters`);
+    }
+    return value;
+  };
+  if (typeof heldScope['pool'] !== 'string' || heldScope['pool'].length > 42 || typeof heldScope['denomination'] !== 'number' || typeof held['minPrivacyScore'] !== 'number') {
+    throw new ProtocolFailure('INVALID_INPUT', 'an intent names its pool, denomination and privacy score');
+  }
   return {
-    ...held,
+    version: text('version', 32),
+    scope: { chainId: BigInt(String(heldScope['chainId'] ?? '0')), pool: heldScope['pool'], denomination: heldScope['denomination'] },
+    encryptedPayload: held['encryptedPayload'],
+    ...(envelope === undefined ? {} : { creEnvelope: envelope }),
+    encryptionKeyId: text('encryptionKeyId', 64),
+    spendHash: text('spendHash', 66),
+    minPrivacyScore: held['minPrivacyScore'],
     deadline: decimal('deadline') as UnixSeconds,
-    scope: { ...heldScope, chainId: BigInt(String(heldScope['chainId'] ?? '0')) },
+    idempotencyKey: text('idempotencyKey', 256),
   } as unknown as EncryptedIntent;
 }
 

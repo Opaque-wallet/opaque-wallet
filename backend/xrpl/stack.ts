@@ -31,7 +31,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type RequestListener, type ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
 import type { Duplex } from 'node:stream';
-import { connect as connectTls } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 
 import type { RelaySnapshot, UnixSeconds } from '@opaque/protocol-types';
@@ -51,6 +50,7 @@ import type { MeshMessageKind } from '../mesh/transport.ts';
 import { MOONPAY_LIVE, MOONPAY_SANDBOX } from '../onramp/moonpay.ts';
 import { startXrpl, XRPL_STATE, xrplAnswerer, xrplScopes } from './node.ts';
 import { accountOf } from './protocol.ts';
+import { relayTunnel } from './tunnel.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, '..', '..', 'frontend', 'public', 'xrpl-stack.json');
@@ -77,7 +77,11 @@ if (!existsSync(macFile)) writeFileSync(macFile, toHex(crypto.getRandomValues(ne
 const intentKeys = JSON.parse(readFileSync(keyFile, 'utf8')) as { publicKey: `0x${string}`; secretKey: `0x${string}` };
 const credentialMac = Uint8Array.from(Buffer.from(readFileSync(macFile, 'utf8').trim().slice(2), 'hex'));
 
-const node = await startXrpl({ log });
+const node = await startXrpl({
+  log,
+  // Its one ledger connection gone for minutes: exit, and Railway's restart reconnects from scratch (F-53).
+  onLedgerDown: () => { log('  the ledger has been unreachable for 5 minutes: exiting so the host restarts this service'); process.exit(69); },
+});
 for (const pool of node.pools.values()) await pool.source.sync();
 
 // Hosted: every relay key and directory derives from XRPL_MESH_MASTER, week by
@@ -184,20 +188,7 @@ const WC_RELAY = 'relay.walletconnect.org';
 const WC_VERIFY = 'https://verify.walletconnect.org';
 const SELF = PUBLIC_URL ?? `http://${LOOPBACK}:${PORT}`;
 
-function tunnelRelay(req: IncomingMessage, socket: Duplex, head: Buffer): void {
-  const query = (req.url ?? '').slice('/v1/walletconnect'.length);
-  const key = req.headers['sec-websocket-key'];
-  if (typeof key !== 'string' || !/^(\?\S*)?$/.test(query)) { socket.destroy(); return; }
-  const upstream = connectTls({ host: WC_RELAY, port: 443, servername: WC_RELAY }, () => {
-    // Only what the handshake needs: none of the user's origin, cookies, agent or address.
-    upstream.write(`GET /${query} HTTP/1.1\r\nHost: ${WC_RELAY}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n\r\n`);
-    if (head.length > 0) upstream.write(head);
-    socket.pipe(upstream).pipe(socket);
-  });
-  const close = () => { socket.destroy(); upstream.destroy(); };
-  upstream.on('error', close).on('close', close);
-  socket.on('error', close).on('close', close);
-}
+const tunnel = relayTunnel({ host: WC_RELAY });
 
 /** GET /v1/wc-verify/attestation/<hash> and /v1/wc-verify/v3/public-key, and nothing else. */
 async function proxyVerify(url: string, res: ServerResponse): Promise<void> {
@@ -253,7 +244,7 @@ const router = PORT === undefined ? undefined : createServer((req, res) => {
   res.writeHead(404); res.end();
 });
 router?.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-  if (WC_PROJECT !== undefined && (req.url ?? '').startsWith('/v1/walletconnect')) tunnelRelay(req, socket, head);
+  if (WC_PROJECT !== undefined && (req.url ?? '').startsWith('/v1/walletconnect')) tunnel.handle(req, socket, head);
   else socket.destroy();
 });
 if (router) await new Promise<void>((r) => router.listen(Number(PORT), '0.0.0.0', r));

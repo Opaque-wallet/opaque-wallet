@@ -44,5 +44,13 @@ export function nodeProver(): RingProver {
   return {
     prove: (input) => call<PrivateSpend>('prove', input),
     verify: (spend) => call<boolean>('verify', spend),
+    // The wallet's close(): its thread goes, and whatever waits on it fails rather than hangs.
+    close: async () => {
+      const w = worker;
+      worker = undefined;
+      for (const waiting of pending.values()) waiting.reject(new Error('the wallet was closed'));
+      pending.clear();
+      await w?.terminate();
+    },
   };
 }

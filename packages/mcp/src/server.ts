@@ -118,20 +118,20 @@ export function createOpaqueServer(wallet: OpaqueWallet): McpServer {
   /**
    * A payment out, within the policy: its limits first, then whether the notes
    * can make it (`payable`: nothing is asked or counted for one that can't be
-   * sent). Judged again after any question (others may have been paid while it
-   * was asked), then counted at once, before it is sent, and kept counted if
-   * it fails: one that left despite an error must count.
+   * sent), then the person if it is over askAbove. Judged again after both,
+   * with nothing awaited between that and the count: others may have been
+   * paid while the notes were checked or the person was asked (F-35, F-46).
+   * Counted before it is sent, and kept counted if it fails: one that left
+   * despite an error must count.
    */
   async function pay<T>(spend: { readonly asset: string; readonly amount: number; readonly to: string; readonly own?: boolean }, what: string, payable: () => Promise<boolean>, go: () => Promise<T>): Promise<T> {
     const verdict = judge(policy(), spends(), spend, Date.now());
     if (!verdict.ok) throw new Error(`Not paid: ${verdict.why}.`);
     if (!(await payable())) throw new Error(`Not paid: the spendable notes can't make exactly ${spend.amount} (each is sent whole). Check the balance.`);
-    if (verdict.ask) {
-      await askOrRefuse(`Opaque: ${what}?`, `${spend.amount} ${spend.asset}, over the ${policy().limits[spend.asset]!.askAbove} it may pay alone,`);
-      const again = judge(policy(), spends(), spend, Date.now());
-      if (!again.ok) throw new Error(`Not paid: ${again.why}.`);
-    }
+    if (verdict.ask) await askOrRefuse(`Opaque: ${what}?`, `${spend.amount} ${spend.asset}, over the ${policy().limits[spend.asset]!.askAbove} it may pay alone,`);
     const now = Date.now();
+    const again = judge(policy(), spends(), spend, now);
+    if (!again.ok) throw new Error(`Not paid: ${again.why}.`);
     wallet.data.set(SPENT, JSON.stringify([...spends().filter((s) => now - s.at < DAY_MS), { at: now, asset: spend.asset, amount: spend.amount, to: spend.to }]));
     return go();
   }

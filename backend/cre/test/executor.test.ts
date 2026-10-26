@@ -11,6 +11,7 @@ import {
 } from '@opaque/protocol-types';
 
 import { createExecutor } from '../executor.ts';
+import { IntentStore } from '../intent-store.ts';
 
 const NOW = 1_760_000_000n as UnixSeconds;
 const failure = (code: string) => (error: unknown) =>
@@ -160,4 +161,74 @@ test('a settled intent leaves the queue; a past-deadline one does NOT', async ()
   // so dropping it here would strand exactly the payments that most need to go.
   const late = (NOW + 7200n) as UnixSeconds;
   assert.equal(ex.pending(late).length, 1);
+});
+
+// ── F-51: bounded, because anyone can submit ─────────────────────────────
+
+const bounded = (limits: ConstructorParameters<typeof IntentStore>[0], now: () => UnixSeconds = () => NOW) => {
+  let n = 0;
+  return createExecutor({
+    store: new IntentStore(limits), now,
+    newIntentId: () => `intent-${++n}` as IntentId,
+    newStatusHandle: () => `handle-${n}`.padEnd(64, 'x') as StatusHandle,
+  });
+};
+
+test('F51_undecided_intents_are_capped_and_the_next_is_refused_retryably', async () => {
+  // The PoC: /v1/mesh/payment is public, and every intent posted there was held
+  // for good, ciphertext and all, until the process ran out of memory and lost
+  // every payment in flight with it.
+  const ex = bounded({ maxUndecided: 2 });
+  const first = await ex.submit(intentFor('cap-1'));
+  await ex.submit(intentFor('cap-2'));
+  await assert.rejects(ex.submit(intentFor('cap-3')), (e: unknown) => e instanceof ProtocolFailure && e.code === 'MESH_UNAVAILABLE' && e.retryable);
+  // Asking again for one it holds is still answered.
+  assert.deepEqual(await ex.submit(intentFor('cap-1')), first);
+  // And a decided one makes room.
+  ex.store.fail(first.intentId, { code: 'POLICY_DENIED', retryable: false, publicMessage: 'no' }, NOW);
+  await ex.submit(intentFor('cap-3'));
+});
+
+test('F51_an_ended_intent_lets_go_of_its_ciphertext_at_once', async () => {
+  const ex = executor();
+  const ref = await ex.submit({ ...intentFor('drop-1'), creEnvelope: `0x${'ee'.repeat(2_000)}` } as EncryptedIntent);
+  ex.store.fail(ref.intentId, { code: 'POLICY_DENIED', retryable: false, publicMessage: 'no' }, NOW);
+  const held = ex.store.get(ref.intentId)!;
+  assert.equal(held.intent.encryptedPayload, '0x', 'the ciphertext is gone');
+  assert.equal(held.intent.creEnvelope, undefined, 'and so is the envelope');
+  assert.equal((await ex.getStatus(ref.statusHandle)).state, 'FAILED', 'the status is still there to read');
+});
+
+test('F51_an_ended_intent_is_forgotten_after_its_retention_and_its_handle_with_it', async () => {
+  let at = NOW;
+  const ex = bounded({ retainSeconds: 3_600n }, () => at);
+  const old = await ex.submit(intentFor('old-1'));
+  ex.store.fail(old.intentId, { code: 'POLICY_DENIED', retryable: false, publicMessage: 'no' }, NOW);
+  at = (NOW + 3_601n) as UnixSeconds;
+  await ex.submit(intentFor('new-1', 7_200n));
+  assert.equal(ex.store.get(old.intentId), undefined, 'forgotten');
+  // Refused exactly like a handle that never existed: no oracle for what was.
+  const [gone, never] = await Promise.all([
+    ex.getStatus(old.statusHandle).catch((e: ProtocolFailure) => e.publicMessage),
+    ex.getStatus('z'.repeat(64) as StatusHandle).catch((e: ProtocolFailure) => e.publicMessage),
+  ]);
+  assert.equal(gone, never);
+});
+
+test('F51_an_intent_no_decision_came_for_ends_a_day_past_its_deadline', async () => {
+  const ex = executor();
+  const ref = await ex.submit(intentFor('late-1'));
+  const deadline = NOW + 3600n;
+  assert.equal(ex.pending((deadline + 86_400n) as UnixSeconds).length, 1, 'a day past it, still waiting');
+  assert.equal(ex.pending((deadline + 86_401n) as UnixSeconds).length, 0);
+  const status = await ex.getStatus(ref.statusHandle);
+  assert.equal(status.state, 'FAILED');
+  assert.equal(status.error?.code, 'EXPIRED');
+});
+
+test('F51_an_intent_being_acted_on_is_never_expired_under_it', async () => {
+  const ex = executor();
+  const ref = await ex.submit(intentFor('held-1'));
+  assert.ok(ex.store.claimAttempt(ref.intentId));
+  assert.equal(ex.pending((NOW + 3600n + 86_401n) as UnixSeconds).length, 1);
 });

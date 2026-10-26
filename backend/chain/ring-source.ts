@@ -72,6 +72,8 @@ export function createChainRingSource(options: ChainRingSourceOptions): ChainRin
   let servedAt: UnixSeconds | undefined;
   let caughtUp = false;
   let scanning: Promise<bigint> | undefined;
+  let seeding: Promise<void> | undefined;
+  let tailing: Promise<bigint> | undefined;
 
   const sameScope = (s: PoolScope): boolean =>
     s.pool.toLowerCase() === scope.pool.toLowerCase() && BigInt(s.chainId) === BigInt(scope.chainId)
@@ -124,15 +126,33 @@ export function createChainRingSource(options: ChainRingSourceOptions): ChainRin
     // Windows starting at each indexed deposit, merged. The index picks
     // where to look; what is there is the chain's, so a member it invents
     // is never added.
+    // No window past the head: the RPC refuses one, and a deposit in the
+    // last WINDOW blocks would fail every seed of its pool.
+    const head = await publicClient.getBlockNumber();
+    const through = BigInt(indexed.indexedThroughBlock) < head ? BigInt(indexed.indexedThroughBlock) : head;
     const blocks = [...new Set(indexed.candidates.map((c) => BigInt(c.enrolledAtBlock)))]
-      .filter((b) => b >= options.deployedAtBlock).sort((a, b) => (a < b ? -1 : 1));
+      .filter((b) => b >= options.deployedAtBlock && b <= through).sort((a, b) => (a < b ? -1 : 1));
     for (let i = 0; i < blocks.length;) {
       const from = blocks[i]!;
       while (i < blocks.length && blocks[i]! < from + WINDOW) i++;
-      await read(from, from + WINDOW - 1n);
+      await read(from, from + WINDOW - 1n > through ? through : from + WINDOW - 1n);
     }
-    if (!caughtUp) [servedThrough, servedAt] = [BigInt(indexed.indexedThroughBlock), now()];
+    if (!caughtUp) [servedThrough, servedAt] = [through, now()];
   }
+
+  // Seeded, not caught up: the blocks since, read on request, so a deposit
+  // made after boot is in the ring before backfill() reaches it (hours on a
+  // long chain; a wallet that can't see its deposit draws its number again).
+  // One at a time; a refused read serves what was read.
+  const tail = (): Promise<bigint> => (tailing ??= (async () => {
+    const head = await publicClient.getBlockNumber();
+    for (let from = servedThrough! + 1n; from <= head && !caughtUp; from += WINDOW) {
+      const to = from + WINDOW - 1n > head ? head : from + WINDOW - 1n;
+      await read(from, to);
+      if (!caughtUp) [servedThrough, servedAt] = [to, now()];
+    }
+    return servedThrough!;
+  })().catch(() => servedThrough!).finally(() => { tailing = undefined; }));
 
   async function backfill(retryMs = 5_000): Promise<void> {
     while (!caughtUp) {
@@ -147,9 +167,13 @@ export function createChainRingSource(options: ChainRingSourceOptions): ChainRin
     if (!sameScope(requested)) {
       throw new ProtocolFailure('INVALID_INPUT', 'this ring source serves a different pool');
     }
+    // A seed the RPC refused at boot is tried again here, once for all asking:
+    // its windows answer in seconds, the whole history (backfill's, queued
+    // behind the other pools) in hours, and a wallet can't wait that long.
+    if (servedAt === undefined) await (seeding ??= seed().catch(() => undefined).finally(() => { seeding = undefined; }));
     const [head, indexed] = await Promise.all([
-      // Seeded but not caught up: serve the seed and leave the history to backfill().
-      servedAt !== undefined && !caughtUp ? servedThrough! : scan(),
+      // Seeded but not caught up: the seed and what came since; the history is backfill()'s.
+      servedAt !== undefined && !caughtUp ? tail() : scan(),
       // Down or stale is not fatal: the ring is still the chain's.
       options.indexed?.(requested).catch(() => undefined),
     ]);

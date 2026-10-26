@@ -35,17 +35,17 @@ import { createServer, type RequestListener } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createPublicClient, nonceManager, parseAbi, parseEventLogs } from 'viem';
+import { createPublicClient, nonceManager, parseAbi, parseEventLogs, WaitForTransactionReceiptTimeoutError } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
-import { ProtocolFailure, type ApprovedRelease, type GraphSelectionClient, type PoolScope, type RelaySnapshot, type RingSnapshot, type TxHash, type UnixSeconds } from '@opaque/protocol-types';
+import { ProtocolFailure, type GraphSelectionClient, type PoolScope, type RelaySnapshot, type RingSnapshot, type UnixSeconds } from '@opaque/protocol-types';
 import { asChainId, fromHex, spendHash, toHex } from '@opaque/protocol-types/codecs.js';
 
 import { deployment, meshTrustRoot, poolFor, requireContract, requireService, type PoolDeployment } from '../deployments/index.ts';
 import { GraphHttpClient } from '../graph/src/client.ts';
 import { evaluatePublicReadiness } from '../graph/src/privacy-score.ts';
 import { registryAttesterKeys } from './chain/attester-registry.ts';
-import { ARC, createPoolClient, poolSubmitter, rpcTransport } from './chain/pool.ts';
+import { ARC, assertSpendable, createPoolClient, poolSubmitter, rpcTransport, writeInTurn } from './chain/pool.ts';
 import { ARC_AUTHORITY } from './chain/pq-wallet-chain.ts';
 import { relayDirectoryReporter } from './chain/relay-directory.ts';
 import { createChainRingSource } from './chain/ring-source.ts';
@@ -55,7 +55,7 @@ import { createExecutorServer } from './cre/executor-server.ts';
 import { generateIntentKeypair } from './cre/seal-client.ts';
 import { createSettler, type Settler, type SettlerOptions } from './cre/settler.ts';
 import { createCreSimulator } from './cre/simulator.ts';
-import { createEgress } from './mesh/egress.ts';
+import { createEgress, egressClient } from './mesh/egress.ts';
 import { backupFromEnv, backupHttpHandler } from './mesh/backup-store.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from './mesh/contracts.ts';
 import { chainTo, verify } from './mesh/directory.ts';
@@ -216,10 +216,14 @@ const ringSource: GraphSelectionClient = {
 };
 
 // ── egress, exit, stand-in ───────────────────────────────────────────────
+// One account for everything the egress key pays for: settlements, the
+// attester's rotations, wallets' rotations. One nonce manager, and one write
+// at a time (chain/pool.ts writeInTurn).
+const egressAccount = privateKeyToAccount(env('EGRESS_PRIVATE_KEY') as `0x${string}`, { nonceManager });
 const egress = createEgress({
   secret: credentialMac,
   submitter: poolSubmitter(createPoolClient({
-    account: privateKeyToAccount(env('EGRESS_PRIVATE_KEY') as `0x${string}`, { nonceManager }),
+    account: egressAccount,
     offChain: { pqWallet: 'LIVE', graph: 'LIVE', confidentialExecution: 'SIMULATED', policyScope: 'CRE_WORKFLOW_ONLY' },
   })),
 });
@@ -242,13 +246,27 @@ const exit = createExecutorServer({
     entryPoint: ARC_AUTHORITY.entryPoint, accountImplementation: ARC_AUTHORITY.accountImplementation, factory: ARC_AUTHORITY.factory,
     // Pays for ROTATE, as it already pays for settlement and the attester's own
     // rotations. An account cannot pay for its own: see chain/wallet-rpc.ts.
-    payer: privateKeyToAccount(env('EGRESS_PRIVATE_KEY') as `0x${string}`, { nonceManager }),
+    payer: egressAccount,
     ...(process.env['LIFI_API_KEY'] ? { lifiApiKey: process.env['LIFI_API_KEY'] } : {}),
   }),
 });
 await exit.listen(PORTS.exit, LOOPBACK);
 
 // Settling a decision, whoever made it: attest, release, deliver, reconcile.
+// Every signature the attester's few-time key makes is counted in this file
+// before it is made (cre/attester-keys.ts). On a hosted service it must be on
+// the volume, or a redeploy forgets the signatures that never landed: see
+// docs/hosting.md.
+const ATTESTER_LOG = process.env['ATTESTER_LOG'] || join(STATE, 'attester-uses.json');
+const attesterKeys = registryAttesterKeys({
+  publicClient: publicClient as never,
+  payer: egressAccount,
+  registry: REGISTRY as never,
+  attester: ATTESTER as never,
+  master: fromHex(env('ATTESTER_FORS_MASTER') as `0x${string}`),
+  chainId: BigInt(deployment.network.chainId),
+  log: ATTESTER_LOG,
+});
 const settlement: SettlerOptions = {
   executor: exit.executor,
   credentialMac,
@@ -256,29 +274,29 @@ const settlement: SettlerOptions = {
   releaseTtlSeconds: 900n,
   attester: {
     identity: (scope) => ({ chainId: BigInt(deployment.network.chainId), registry: REGISTRY as never, attester: ATTESTER as never, pool: poolAt(scope).address as never, denomination: poolAt(scope).denomination }),
-    // Rotates itself near the end of each key's budget; see cre/attester-keys.ts.
-    current: registryAttesterKeys({
-      publicClient: publicClient as never,
-      payer: privateKeyToAccount(env('EGRESS_PRIVATE_KEY') as `0x${string}`, { nonceManager }),
-      registry: REGISTRY as never,
-      attester: ATTESTER as never,
-      master: fromHex(env('ATTESTER_FORS_MASTER') as `0x${string}`),
-      chainId: BigInt(deployment.network.chainId),
-    }).current,
+    // current() rotates itself near the end of each key's budget; observe() only reads.
+    current: attesterKeys.current,
+    observe: attesterKeys.observe,
   },
-  async deliver(release: ApprovedRelease) {
-    const response = await fetch(`http://127.0.0.1:${PORTS.egress}/v1/release`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(release, (_k, v) => (typeof v === 'bigint' ? v.toString(10) : v)),
-    });
-    const body = (await response.json()) as { txHash?: string; message?: string };
-    if (body.txHash === undefined) throw new Error(`egress refused: ${response.status} ${body.message}`);
-    return body.txHash as TxHash;
-  },
+  // Nothing is signed for a spend the pool would refuse.
+  spendable: (spend) => assertSpendable(publicClient as never, spend),
+  deliver: egressClient(`http://127.0.0.1:${PORTS.egress}/v1/release`),
+  // A receipt, or a wait that throws: see evidence below.
+  receiptEvidence: true,
   // Evidence from the chain: the receipt succeeded and the spend's own pool
   // emitted a Spent for exactly this nullifier and recipient.
   async evidence(txHash, release) {
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
+    // Arc's blocks are a second apart: a minute without a receipt is a
+    // transaction that is late or gone, and the settler's retry looks again
+    // without holding up the next one. viem's nonce manager would go on
+    // counting past a dropped nonce, and every later transaction would queue
+    // behind it: start again from what the chain has.
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 60_000 }).catch(async (error: unknown) => {
+      if (error instanceof WaitForTransactionReceiptTimeoutError) {
+        await writeInTurn(egressAccount.address, async () => nonceManager.reset({ address: egressAccount.address, chainId: ARC.id }));
+      }
+      throw error;
+    });
     const spent = parseEventLogs({ abi: poolAbi, logs: receipt.logs, eventName: 'Spent' }).find(
       (l) => l.address.toLowerCase() === release.spend.scope.pool.toLowerCase()
         && l.args.nullifier.toLowerCase() === (release.spend.nullifier as string).toLowerCase()

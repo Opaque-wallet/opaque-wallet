@@ -53,7 +53,7 @@ export interface OpaqueWallet {
   xrpl(): Promise<XrplClient>;
   /** Your app's own records, sealed in the wallet file beside the account's. */
   readonly data: { get(name: string): string | null; set(name: string, value: string): void };
-  /** Lets the wallet file go, for another process to open. */
+  /** Lets the wallet file go, for another process to open, and stops what its clients started. */
   close(): void;
 }
 
@@ -81,7 +81,11 @@ function wrap(store: FileStore, account: AccountKeys, network: Network, text: st
     arc: () => (arc ??= import('./arc.ts').then((m) => m.openArc(store, account)).catch((e) => { arc = undefined; throw e; })),
     xrpl: () => (xrpl ??= import('./xrpl.ts').then((m) => m.openXrpl(account)).catch((e) => { xrpl = undefined; throw e; })),
     data: { get: (name) => store.getItem(`opaque:app:${name}`), set: (name, value) => store.setItem(`opaque:app:${name}`, value) },
-    close: () => store.close(),
+    close: () => {
+      // Their relays' polls and provers go with the file (F-62); a client still opening is closed once it has.
+      for (const client of [arc, xrpl]) void client?.then((c) => c.close(), () => undefined);
+      store.close();
+    },
   };
 }
 

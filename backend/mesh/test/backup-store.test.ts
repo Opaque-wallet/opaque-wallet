@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
 import { createBackupStore, MAX_BLOB, movingFrom } from '../backup-store.ts';
+import { rateLimit } from '../limit.ts';
 import { decodeMeshQuery } from '../queries.ts';
 
 // No work asked: these tests are about what is kept; the work a new id costs has its own.
@@ -58,7 +59,7 @@ test('while backups move, a miss is read from the first store, and a removal rem
   const [a, b] = [mkdtempSync(join(tmpdir(), 'opaque-backup-')), mkdtempSync(join(tmpdir(), 'opaque-backup-'))];
   try {
     const before = createBackupStore(a, FREE);
-    const moving = movingFrom(createBackupStore(b, FREE), before);
+    const moving = movingFrom(createBackupStore(b, FREE), before, undefined, undefined, 0);
     await ask(before, 'PUT', { id, token, blob: 'Zmlyc3Q=' });
     assert.equal((await ask(moving, 'GET', { id })).result.blob, 'Zmlyc3Q=', 'found where it was first kept');
     await ask(moving, 'PUT', { id, token, blob: 'bW92ZWQ=' });
@@ -126,7 +127,7 @@ test('while backups move, an id the first store holds is taken only with its own
   const [a, b] = [mkdtempSync(join(tmpdir(), 'opaque-backup-')), mkdtempSync(join(tmpdir(), 'opaque-backup-'))];
   try {
     const before = createBackupStore(a, FREE);
-    const moving = movingFrom(createBackupStore(b, FREE), before);
+    const moving = movingFrom(createBackupStore(b, FREE), before, undefined, undefined, 0);
     await ask(before, 'PUT', { id, token, blob: 'dmljdGlt' });
     // OMEGA's PoC: knowing the victim's id, PUT it to the new store under the attacker's token first.
     const attacker = 'd5'.repeat(32);
@@ -177,4 +178,39 @@ test('a disk error is answered without its path (F-26)', async () => {
   const answer = await ask(store, 'PUT', { id, token, blob: 'AA==' });
   assert.equal(answer.error!.message, 'the backup store failed');
   assert.ok(!JSON.stringify(answer).includes(dir));
+});
+
+test('a flood of reads for made-up ids does not refuse new backups (F-64)', async () => {
+  const [a, b] = [mkdtempSync(join(tmpdir(), 'opaque-backup-')), mkdtempSync(join(tmpdir(), 'opaque-backup-'))];
+  try {
+    const moving = movingFrom(createBackupStore(b, FREE), createBackupStore(a, FREE), rateLimit(120, () => 0), undefined, 0);
+    // OMEGA's PoC: 120 GETs of random ids in a minute, each a miss.
+    for (let n = 0; n < 120; n++) await ask(moving, 'GET', { id: n.toString(16).padStart(64, '0') });
+    assert.match((await ask(moving, 'GET', { id: 'e6'.repeat(32) })).error!.message, /busy/, 'reads are spent');
+    const put = await ask(moving, 'PUT', { id: 'f7'.repeat(32), token, blob: 'bmV3' });
+    assert.ok(put.result?.savedAt > 0, `a new backup was refused: ${put.error?.message}`);
+  } finally {
+    rmSync(a, { recursive: true, force: true });
+    rmSync(b, { recursive: true, force: true });
+  }
+});
+
+test('a flood of new-id PUTs with no work does not refuse a real worked one (F-64)', async () => {
+  const { findWork, workBits } = await import('../backup-work.ts');
+  const [a, b] = [mkdtempSync(join(tmpdir(), 'opaque-backup-')), mkdtempSync(join(tmpdir(), 'opaque-backup-'))];
+  try {
+    // 16 bits: few enough hashes to find here, too many for a made-up id to pass by luck.
+    const moving = movingFrom(createBackupStore(b, { baseBits: 16 }), createBackupStore(a, FREE), undefined, rateLimit(120, () => 0), 16);
+    // OMEGA's PoC: 120 PUTs a minute of made-up ids and no work. Each used to
+    // spend a write before the store looked at the work.
+    for (let n = 0; n < 120; n++) {
+      assert.match((await ask(moving, 'PUT', { id: n.toString(16).padStart(64, '0'), token, blob: 'AA==' })).error!.message, /work/);
+    }
+    const real = 'f8'.repeat(32);
+    const put = await ask(moving, 'PUT', { id: real, token, blob: 'cmVhbA==', work: await findWork(real, workBits(0, 10_000, 16)) });
+    assert.ok(put.result?.savedAt > 0, `a worked backup was refused: ${put.error?.message}`);
+  } finally {
+    rmSync(a, { recursive: true, force: true });
+    rmSync(b, { recursive: true, force: true });
+  }
 });

@@ -30,6 +30,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
 import {
+  ERROR_CODES,
   ProtocolFailure,
   type Address,
   type ApprovedRelease,
@@ -254,5 +255,25 @@ export function createEgress(options: EgressOptions): Egress {
         ? Promise.resolve()
         : new Promise((resolve) => running.close(() => resolve()));
     },
+  };
+}
+
+/**
+ * The settler's side of the egress: a release in, the broadcast's hash out.
+ * A refusal keeps the egress's own code and verdict (F-56): one it calls final
+ * (an expired release, a spend the pool refuses) ends the intent, where a
+ * plain error would have it retried for ever. One it does not explain is
+ * retryable: a transaction may be behind it.
+ */
+export function egressClient(url: string, fetchImpl: typeof fetch = fetch): (release: ApprovedRelease) => Promise<TxHash> {
+  return async (release) => {
+    const response = await fetchImpl(url, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(release, (_k, v) => (typeof v === 'bigint' ? v.toString(10) : v)),
+    });
+    const body = (await response.json().catch(() => ({}))) as { txHash?: unknown; code?: unknown; message?: unknown; retryable?: unknown };
+    if (typeof body.txHash === 'string') return body.txHash as TxHash;
+    const code = (ERROR_CODES as readonly unknown[]).includes(body.code) ? body.code as ErrorCode : 'MESH_UNAVAILABLE';
+    throw new ProtocolFailure(code, `egress refused: ${response.status} ${String(body.message ?? '')}`, body.retryable !== false);
   };
 }

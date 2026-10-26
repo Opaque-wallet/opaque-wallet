@@ -139,3 +139,12 @@ test('it serves over a real socket', async () => {
     await server.close();
   }
 });
+
+test('F51_an_intent_keeps_only_its_own_fields_each_short', async () => {
+  // Every field a caller added was spread into the stored intent and held as
+  // long as it was: a quarter of a megabyte a message, beside the ciphertext.
+  const { server } = harness();
+  const { json: ref } = await call(server, 'POST', '/v1/intent', { ...intentBody('pad-1'), padding: 'x'.repeat(200_000) });
+  assert.equal('padding' in (server.executor.store.get(ref.intentId)!.intent as object), false);
+  assert.equal((await call(server, 'POST', '/v1/intent', intentBody('k'.repeat(257)))).status, 400);
+});

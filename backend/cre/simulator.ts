@@ -14,38 +14,19 @@
 // 'SIMULATED'` whenever this runs. A deployed stack does not run it at all:
 // its key exists only in Chainlink's Vault DON.
 
-import type { ApprovedRelease, Hex, IntentId, PoolScope, PrivacyScore, PrivateSpend, TxHash, UnixSeconds } from '@opaque/protocol-types';
+import type { Hex, IntentId, PoolScope, PrivacyScore, UnixSeconds } from '@opaque/protocol-types';
 
-import type { AttesterIdentity } from './attest.ts';
 import { decide, ringPoolKey } from './cre-release.ts';
-import type { OpaqueExecutor } from './executor.ts';
-import type { SettlementEvidence } from './intent-store.ts';
 import { decapsulationKey } from './sealed-intent.ts';
-import { createSettler, pendingForCre } from './settler.ts';
+import { createSettler, pendingForCre, type SettlerOptions } from './settler.ts';
 
-export interface CreSimulatorOptions {
-  readonly executor: OpaqueExecutor;
+/** The settler's own options, and the CRE key and score a stand-in decides with. */
+export interface CreSimulatorOptions extends SettlerOptions {
   /** The CRE key: its 64-byte seed (as Vault holds it) or the decapsulation key. */
   readonly intentSecretKey: Hex;
   readonly encryptionKeyId: string;
-  /** Verifies recipient credentials, tags decisions, and MACs the release the egress trusts. */
-  readonly credentialMac: Uint8Array;
-  readonly policyVersion: string;
-  readonly releaseTtlSeconds: bigint;
-  /** Arc's FORS attester. Absent on XRPL, whose attester quorum verifies the proof itself. */
-  readonly attester?: {
-    /** One attester can serve several pools: then, the identity for the spend's pool. */
-    readonly identity: AttesterIdentity | ((scope: PoolScope) => AttesterIdentity);
-    readonly current: () => Promise<{ readonly forsSeed: Uint8Array; readonly useCount: bigint }>;
-  };
-  readonly deliver: (release: ApprovedRelease) => Promise<TxHash>;
-  readonly evidence: (txHash: TxHash, release: ApprovedRelease) => Promise<SettlementEvidence>;
-  readonly nullifierSpent: (spend: PrivateSpend) => Promise<boolean>;
   /** The pool's current privacy score. Absent or null: payments wait for their deadline (or go at once if they asked for 0). */
   readonly readFreshScore?: (scope: PoolScope) => Promise<{ score: PrivacyScore; observedAt: UnixSeconds } | null>;
-  /** Told when a settlement fails and will be retried. Never given a recipient. */
-  readonly onError?: (intentId: IntentId, error: unknown) => void;
-  readonly now?: () => UnixSeconds;
 }
 
 export interface CreSimulator {

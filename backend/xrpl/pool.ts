@@ -28,7 +28,7 @@
 // carried remainder is credited as soon as there are notes for it.
 
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, truncateSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, fsyncSync, ftruncateSync, openSync, readFileSync, truncateSync, writeSync } from 'node:fs';
 
 import type { Client } from 'xrpl';
 
@@ -264,11 +264,33 @@ export interface PoolSource {
 }
 
 /**
- * ponytail: the log is recomputed from every payment on each change, O(n) in
- * the pool's history; make it incremental once a pool passes ~100k payments.
+ * What registrations may hold before anything has paid for them, per pool
+ * (F-52): commitments not yet credited, plus each registration beyond the
+ * notes credited to its tag, at what it costs in memory (a history event is
+ * about six commitments). Registering is free and anonymous, and every
+ * registration is kept and replayed at boot, so this is what bounds the table;
+ * a credited note was paid for, and makes its room again. Nothing registered
+ * is ever dropped, since a tag may still be paid: past this, a registration is
+ * refused, retryably, until deposits arrive. About 75 MB of heap per pool.
+ * ponytail: one budget for everyone, so a flood of free registrations holds
+ * new ones back (as MAX_TAGS did) while paid tags keep working; expire tags
+ * never paid if that is ever seen.
+ */
+const MAX_UNPAID = 1 << 19;
+const EVENT_COST = 6;
+
+/**
+ * ponytail: the log is recomputed from every payment when a read finds new
+ * ones (and when a top-up credits a tag's carry), O(n) in the pool's history;
+ * make it incremental once a pool passes ~100k payments.
  * The tag table persists to `tagFile`; payments are re-read from the ledger.
  */
-export function createPoolSource(options: { readonly client: Client; readonly config: PoolConfig; readonly tagFile?: string }): PoolSource {
+export function createPoolSource(options: {
+  readonly client: Client;
+  readonly config: PoolConfig;
+  readonly tagFile?: string;
+  readonly log?: (line: string) => void;
+}): PoolSource {
   const { client, config } = options;
   const payments: IncomingPayment[] = [];
   const tagsSeen = new Set<number>();
@@ -305,24 +327,67 @@ export function createPoolSource(options: { readonly client: Client; readonly co
     // A last line a crash cut short never took effect: dropped, so the next write starts a line of its own.
     const whole = text.lastIndexOf('\n') + 1;
     if (whole < text.length) truncateSync(logFile, Buffer.byteLength(text.slice(0, whole)));
-    for (const line of text.slice(0, whole).split('\n')) if (line !== '') apply(JSON.parse(line) as Entry);
+    // A line that does not parse is what a refused write left and could not take back
+    // (write, below): never a registration anyone was told of, since those are whole lines.
+    // Reported and left in place, never a reason not to boot (F-61).
+    let unreadable = 0;
+    for (const line of text.slice(0, whole).split('\n')) {
+      if (line === '') continue;
+      let entry: Entry;
+      try { entry = JSON.parse(line) as Entry; } catch { unreadable += 1; continue; }
+      apply(entry);
+    }
+    if (unreadable > 0) options.log?.(`  ${logFile}: skipped ${unreadable} unreadable line(s), left by registrations that were refused`);
   }
+  /** False while the log ends in a fragment a refused write could not take back. */
+  let ended = true;
   const write = (e: Entry) => {
     if (logFile === undefined) return;
+    // After a fragment, a NUL and a newline first: the fragment, even one missing only its
+    // newline, can then never parse, and this line starts a line of its own.
+    const line = Buffer.from(`${ended ? '' : '\0\n'}${JSON.stringify(e)}\n`);
     const fd = openSync(logFile, 'a', 0o600);
-    try { writeSync(fd, `${JSON.stringify(e)}\n`); fsyncSync(fd); } finally { closeSync(fd); }
+    try {
+      const size = fstatSync(fd).size;
+      try {
+        // A full disk writes short, and says so only in what it returns (F-61).
+        if (writeSync(fd, line) !== line.length) throw new Error('short write');
+        fsyncSync(fd);
+        ended = true;
+      } catch {
+        // Not on disk whole, so not registered: take back whatever part reached the file.
+        try { ftruncateSync(fd, size); } catch { ended = false; }
+        throw new ProtocolFailure('MESH_UNAVAILABLE', 'the pool could not record this registration: try again', true);
+      }
+    } finally {
+      closeSync(fd);
+    }
   };
   const rings = new Map<string, number>();
   let through = config.deployedAtLedger - 1;
-  let current: DepositLog = creditDeposits([], config.sizes, tags, history);
   let inFlight: Promise<void> | undefined;
 
+  let current: DepositLog = { deposits: [], carried: new Map(), unmatched: [] };
   /** Every commitment the log has credited: a registration may not name one. */
   let depositCommitments = new Set<string>();
+  /** Per tag, the notes the log has credited it; and what every tag holds that nothing has paid for (MAX_UNPAID). */
+  let creditedTo = new Map<number, number>();
+  let unpaid = 0;
+  const held = (r: TagRegistration | undefined) => Object.values(r ?? {}).reduce((n, list) => n + list.length, 0);
+  /** What `tag` holds unpaid, with `more` commitments and `events` registrations added. */
+  const unpaidOf = (tag: number, more = 0, events = 0) => {
+    const credited = creditedTo.get(tag) ?? 0;
+    return Math.max(0, held(tags.get(tag)) + more - credited) + EVENT_COST * Math.max(0, (history.get(tag)?.length ?? 0) + events - credited);
+  };
   const recompute = () => {
     current = creditDeposits(payments, config.sizes, tags, history);
     depositCommitments = new Set(current.deposits.map((d) => d.commitment as string));
+    creditedTo = new Map();
+    for (const d of current.deposits) if (d.tag !== null && d.tag !== INVOICE_TAG) creditedTo.set(d.tag, (creditedTo.get(d.tag) ?? 0) + 1);
+    unpaid = 0;
+    for (const tag of tags.keys()) unpaid += unpaidOf(tag);
   };
+  recompute();
 
   // Every payment once, by hash, whatever reads overlap.
   const seenPayments = new Set<string>();
@@ -351,14 +416,17 @@ export function createPoolSource(options: { readonly client: Client; readonly co
       max = response.result.ledger_index_max;
       marker = response.result.marker;
     } while (marker !== undefined);
+    let added = 0;
     for (const p of fresh) {
       if (seenPayments.has(p.hash)) continue;
       seenPayments.add(p.hash);
       payments.push(p);
+      added += 1;
       if (p.tag !== null) tagsSeen.add(p.tag);
     }
     through = Math.max(through, max);
-    recompute();
+    // Nothing new read, nothing new to credit: anyone can ask for a read (F-52).
+    if (added > 0) recompute();
   }
 
   return {
@@ -418,10 +486,17 @@ export function createPoolSource(options: { readonly client: Client; readonly co
           events: [{ at: through, len: lengths(registration), ...ladder }],
         };
       }
+      const growth = unpaidOf(tag, count, entry.events.length) - unpaidOf(tag);
+      if (growth > 0 && unpaid + growth > MAX_UNPAID) {
+        throw new ProtocolFailure('MESH_UNAVAILABLE', 'this pool holds all the unpaid notes it can: try again once deposits arrive', true);
+      }
       // On disk first: what a wallet is told was registered survives any restart.
       write(entry);
       apply(entry);
-      recompute();
+      // Every payment to the tag was read before this takes effect, so only what it
+      // carries can be credited now; with nothing carried the log stands as it is.
+      if ((current.carried.get(tag) ?? 0n) > 0n) recompute();
+      else unpaid += growth;
     },
     registered: (tag) => tags.has(tag),
     registration: (tag) => tags.get(tag),

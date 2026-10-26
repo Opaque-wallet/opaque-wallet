@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { ProtocolFailure, type BackupOperation, type Hex } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
-import { workBits, zeroBits } from './backup-work.ts';
+import { BASE_BITS, workBits, zeroBits } from './backup-work.ts';
 import { rateLimit } from './limit.ts';
 import { BACKUP_OPERATIONS } from './queries.ts';
 
@@ -180,31 +180,40 @@ const VOLUME = join(dirname(fileURLToPath(import.meta.url)), '..', '.backups');
  * which the old store has nothing anyone needs.
  */
 // ponytail: read-through to the first store; drop it once wallets have re-sent theirs (a few weeks).
-export function movingFrom(store: BackupSend, before: BackupSend, allowance: () => boolean = rateLimit(120)): BackupSend {
+export function movingFrom(store: BackupSend, before: BackupSend, reads: () => boolean = rateLimit(120), writes: () => boolean = rateLimit(120), bits = BASE_BITS): BackupSend {
   const answerOf = (a: Hex) => JSON.parse(new TextDecoder().decode(fromHex(a))) as { result?: unknown; error?: unknown };
   const isNone = (a: Hex) => answerOf(a).result === null;
   const isError = (a: Hex | null) => a === null || answerOf(a).error !== undefined;
   const failed = (message: string) => json({ error: { code: 'MESH_UNAVAILABLE', message, retryable: true } });
   const busy = failed('the backup store is busy: try again in a minute');
-  const idOf = (encodedRequest: Hex): string | undefined => {
-    try { const id = (JSON.parse(new TextDecoder().decode(fromHex(encodedRequest))) as { id?: unknown }).id; return typeof id === 'string' ? id : undefined; } catch { return undefined; }
+  const fieldsOf = (encodedRequest: Hex): { id?: string; work: string } => {
+    try {
+      const { id, work } = JSON.parse(new TextDecoder().decode(fromHex(encodedRequest))) as { id?: unknown; work?: unknown };
+      return { ...(typeof id === 'string' ? { id } : {}), work: typeof work === 'string' && /^([0-9a-f]{2}){1,32}$/.test(work) ? work : '' };
+    } catch { return { work: '' }; }
   };
-  // Each call to the first store is one a stranger can make for free: at most `allowance` a minute.
+  // Each call to the first store is one a stranger can make for free: at most so many a minute.
+  // Reads and writes are counted apart: one allowance let 120 GETs of made-up ids a minute
+  // refuse every new backup (F-64).
   const first = (operation: BackupOperation, encodedRequest: Hex) => before(operation, encodedRequest).catch(() => null);
   return async (operation, encodedRequest) => {
     if (operation === 'GET') {
       const answer = await store('GET', encodedRequest);
       if (!isNone(answer)) return answer;
-      if (!allowance()) return busy;
+      if (!reads()) return busy;
       const old = await first('GET', encodedRequest);
       return isError(old) ? answer : old!;
     }
     if (operation === 'PUT') {
       // An id the first store still holds is its owner's: the first store checks the token
       // before this one takes it. Unsure whether it holds it, this store takes nothing.
-      const id = idOf(encodedRequest);
+      const { id, work } = fieldsOf(encodedRequest);
       if (id !== undefined && isNone(await store('GET', json({ id })))) {
-        if (!allowance()) return busy;
+        // The least work any new id needs, checked before a write is spent: refused only by
+        // the store, 120 made-up ids a minute with no work spent every write and refused
+        // every real backup (F-64). `bits` is the store's own floor, BASE_BITS unless set.
+        if (zeroBits(id, work) < bits) return json({ error: { code: 'INVALID_INPUT', message: `a new backup needs ${bits} bits of work`, retryable: false } });
+        if (!writes()) return busy;
         const old = await first('GET', json({ id }));
         if (isError(old)) return failed('the earlier backup store did not answer: try again');
         if (!isNone(old!)) {
@@ -217,7 +226,7 @@ export function movingFrom(store: BackupSend, before: BackupSend, allowance: () 
     }
     // DELETE: from the first store, then this one. If the first fails, nothing is removed
     // and the wallet asks again, so a removed backup never comes back from the first store.
-    if (!allowance()) return busy;
+    if (!writes()) return busy;
     if (isError(await first('DELETE', encodedRequest))) return failed('the earlier copy could not be removed: try again');
     return store('DELETE', encodedRequest);
   };

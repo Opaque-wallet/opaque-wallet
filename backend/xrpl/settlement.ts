@@ -110,8 +110,9 @@ export function createXrplSettlement(options: {
     const signed = multisign(blobs);
     const hash = hashes.hashSignedTx(signed);
     try {
-      const submitted = await client.submit(signed);
-      const preliminary = submitted.result.engine_result;
+      // A submit call that times out or loses its socket may have handed rippled the
+      // Batch all the same (F-54): that is not a refusal, so it falls through to the hash.
+      const preliminary = await client.submit(signed).then((r) => r.result.engine_result, (error: Error) => `unanswered (${error.message})`);
       // Thrown only when the ledger certainly never applied it. From here on the
       // hash is returned whatever happens, and evidence() reads the outcome: a
       // payout that landed must never be retried as if it had not.

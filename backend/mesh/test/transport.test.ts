@@ -291,3 +291,26 @@ test('a path that repeats a relay is refused at build time', () => {
     'INSUFFICIENT_RELAYS',
   );
 });
+
+// ── overlord regressions ────────────────────────────────────────────────────
+
+test('a layer cannot pin a replay entry far into the future (F-48)', () => {
+  const net = mesh();
+  const relay = net.relays[0]!;
+  const cache = new MemoryReplayCache();
+  // OMEGA's PoC, authenticated this time: a properly sealed layer whose
+  // expiry is a day out. Recorded, it would hold its slot for that day.
+  const far = buildOnion({ path: net.path, payload: PAYMENT, expiresAt: NOW + 86_400n });
+  assert.equal(
+    code(() => peelLayer({ envelope: far, hopId: relay.id, secretKey: relay.keys.secretKey, keyEpoch: 7n, now: NOW, replayCache: cache })),
+    'INVALID_INPUT',
+  );
+  assert.equal(cache.entries().length, 0, 'refused before it was recorded');
+  // And a forgery is never recorded at all: the tag is checked first.
+  const forged = { ...buildOnion({ path: net.path, payload: PAYMENT, expiresAt: EXPIRY }), nonce: `0x${'00'.repeat(12)}` as Hex };
+  assert.equal(
+    code(() => peelLayer({ envelope: forged, hopId: relay.id, secretKey: relay.keys.secretKey, keyEpoch: 7n, now: NOW, replayCache: cache })),
+    'INVALID_INPUT',
+  );
+  assert.equal(cache.entries().length, 0, 'an unauthenticated layer claims no slot');
+});

@@ -9,7 +9,7 @@ import type { Address } from '@opaque/protocol-types';
 import { asBytes32 } from '@opaque/protocol-types/codecs.js';
 
 import { createAttesterKeys, type AttesterKeys } from '../cre/attester-keys.ts';
-import { ARC, rpcTransport } from './pool.ts';
+import { ARC, rpcTransport, writeInTurn } from './pool.ts';
 
 const REGISTRY_ABI = parseAbi([
   'function stateOf(address) view returns ((bytes32,bytes32,uint64,uint64,uint64,uint64))',
@@ -25,12 +25,15 @@ export function registryAttesterKeys(options: {
   readonly attester: Address;
   readonly master: Uint8Array;
   readonly chainId: bigint;
+  /** The file that counts the key's signatures (cre/attester-keys.ts). Absent: memory only. */
+  readonly log?: string;
 }): AttesterKeys {
   const { publicClient, registry, attester } = options;
   const wallet = createWalletClient({ account: options.payer, chain: ARC, transport: rpcTransport() });
 
   async function send(functionName: 'rotate' | 'takeover', args: readonly unknown[]): Promise<void> {
-    const hash = await wallet.writeContract({ address: registry, abi: REGISTRY_ABI, functionName, args } as never);
+    // In turn with every other transaction the egress key pays for (chain/pool.ts).
+    const hash = await writeInTurn(options.payer.address, () => wallet.writeContract({ address: registry, abi: REGISTRY_ABI, functionName, args } as never));
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     if (receipt.status !== 'success') throw new Error(`attester ${functionName} reverted in ${hash}`);
   }
@@ -39,6 +42,7 @@ export function registryAttesterKeys(options: {
     master: options.master,
     attester,
     chainId: options.chainId,
+    ...(options.log === undefined ? {} : { log: options.log }),
     async readState() {
       const s = await publicClient.readContract({ address: registry, abi: REGISTRY_ABI, functionName: 'stateOf', args: [attester] });
       return { pkCommitment: asBytes32(s[0].toLowerCase()), useCount: s[2], maxUses: s[3] };

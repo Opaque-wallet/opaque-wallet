@@ -162,3 +162,24 @@ test('F-33: the key rotates once a quarter of its signatures are left, once per 
   assert.equal(rotations, 2, 'a failed rotation is not retried');
   assert.equal((await failing.status()).rotationError, 'bundler said no');
 });
+
+// ── overlord F-59 (2026-10-26) ──────────────────────────────────────────────
+
+test('F-59: two operations starting together rotate the key once', async () => {
+  let reserved = 24n;
+  let key = 'k1';
+  let rotations = 0;
+  // The key's state is read across the mesh: both operations are waiting on it when it arrives.
+  let answer!: () => void;
+  const read = new Promise<void>((r) => { answer = r; });
+  const app = {
+    walletState: async () => { await read; return { active: true, maxUses: 32n, localSigningReservations: reserved, pkCommitment: key }; },
+    rotateWallet: async () => { rotations++; key = `k${rotations + 1}`; reserved = 0n; },
+  };
+  const keeper = keyKeeper(app, async () => undefined);
+  const both = Promise.all([keeper.fresh(), keeper.fresh()]);
+  for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+  answer();
+  await both;
+  assert.equal(rotations, 1, 'each operation rotated the key: the second spends the other signature held back for it');
+});

@@ -27,6 +27,7 @@ import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase
 import { acceptTerms, copy, idOf, markOf, openOnboarding, setupWalletScreens, swapProgress, tokenBadge, type OpenAccount } from './lib/wallet-ui.ts';
 import { deployment, NETWORK, type SwapToken } from '../../deployments/index.ts';
 import type { SwapQuote } from '../../backend/chain/wallet-rpc.ts';
+import { oneOperationAtATime } from '../../backend/chain/pq-wallet-chain.ts';
 import { networkPicker } from './lib/network-picker.ts';
 import { scoped } from './lib/storage-name.ts';
 
@@ -190,8 +191,10 @@ async function autoRotate(): Promise<void> {
   rotated = true;
   setStatus('rotate-status', 'Few signatures left on this key. Rotating to the next one…');
   try {
-    const before = (await rt.app.walletState()).pkCommitment;
-    await rt.app.rotateWallet();
+    const { pkCommitment: before, accountAddress } = await rt.app.walletState();
+    // In the account's queue: signed beside a deposit or a call, the rotation and
+    // the operation would each spend a signature for one use count (F-59).
+    await oneOperationAtATime(accountAddress, () => rt.app.rotateWallet());
     await settle(async () => (await rt.app.walletState()).pkCommitment !== before);
     setStatus('rotate-status', 'Rotated. A fresh key is active, with the next one already committed behind it.');
     await renderBudget();

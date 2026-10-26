@@ -15,6 +15,8 @@ import { selectDecoys } from './selection.ts';
 export interface RingProver {
   prove(input: BuildRingSpendInput): PrivateSpend | Promise<PrivateSpend>;
   verify(spend: PrivateSpend): boolean | Promise<boolean>;
+  /** Stops its thread, where it has one: a wallet's close() calls it. */
+  close?(): unknown;
 }
 
 const inThread: RingProver = { prove: buildRingSpend, verify: (spend) => verifyRingSpend(spend) };

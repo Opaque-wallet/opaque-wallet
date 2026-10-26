@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import test from 'node:test';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 
 import { ProtocolFailure, type Hex, type RelayId } from '@opaque/protocol-types';
 
 import { deterministicDirectory } from '../directory.ts';
 import { createChannel } from '../return-path.ts';
-import { createRelay, type Relay } from '../server.ts';
+import { createRelay, defaultDeliver, type Relay } from '../server.ts';
 import { toPath } from '../directory.ts';
-import { buildOnion, encodeFrame } from '../transport.ts';
+import { LAYER_OVERHEAD, MemoryReplayCache, buildOnion, encodeFrame } from '../transport.ts';
 import type { FinalPayload, MeshMessageKind } from '../transport.ts';
 
 const { directory, relays } = deterministicDirectory('server');
@@ -323,4 +325,76 @@ test('a browser can reach a relay: preflight answered, every response carries CO
   // error sees a CORS failure instead of the actual reason.
   const missing = await get(relay, '/v1/status/does-not-exist');
   assert.equal(missing.headers['access-control-allow-origin'], '*', 'even on a miss');
+});
+
+// ── overlord regressions ────────────────────────────────────────────────────
+
+test('a message that expires in the queue takes its peeled layer with it (F-47)', async () => {
+  // The leak is memory nothing else can see, so it is measured: a full GC,
+  // then the heap. The relay's own counters never noticed it.
+  setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc') as () => void;
+  // OMEGA's PoC: onions that expire between acceptance and release. Accepted
+  // 100 ms before the second the frame names, released after it, so the
+  // scheduler drops every one as expired instead of handing it on.
+  const { built } = mesh({ now: () => NOW_MS - 100n });
+  const relay = built.get(ids[0]!)!;
+  const frames = Array.from({ length: 120 }, () =>
+    encodeFrame(buildOnion({ path: toPath(directory, ids, NOW_S as any), payload: { kind: 'PAYMENT', body: '0x00' }, expiresAt: NOW_S })),
+  );
+  gc();
+  const before = process.memoryUsage().heapUsed;
+  for (const frame of frames.splice(0)) assert.equal((await post(relay, frame)).status, 202);
+  await relay.drainOnce(NOW_MS);
+  assert.equal(relay.queued, 0, 'every one expired in the queue');
+  gc();
+  const retained = process.memoryUsage().heapUsed - before;
+  // Each held layer is ~84 KB, so a leak of 120 is ~10 MB.
+  assert.ok(retained < 3_000_000, `${(retained / 1e6).toFixed(1)} MB of expired messages still held`);
+});
+
+test('unauthenticated frames cannot fill the replay cache and lock real ones out (F-48)', async () => {
+  const { built } = mesh({ replayCache: new MemoryReplayCache(1_000) });
+  const relay = built.get(ids[0]!)!;
+  // OMEGA's PoC: a frame with a valid header for this relay and an expiry
+  // near the end of time, and nothing behind it — no KEM, no tag. It costs
+  // its sender nothing to make.
+  const junk = (): Uint8Array => {
+    const bytes = new Uint8Array(LAYER_OVERHEAD + 32);
+    const view = new DataView(bytes.buffer);
+    bytes[0] = 1;
+    crypto.getRandomValues(bytes.subarray(1, 17));
+    bytes.set(utf8(ids[0]!), 17);
+    view.setBigUint64(49, relays[0]!.keyEpoch);
+    view.setBigUint64(57, 2n ** 62n);
+    view.setUint32(65, 32);
+    return bytes;
+  };
+  for (let n = 0; n < 1_000; n++) assert.equal((await post(relay, junk())).status, 400);
+  const real = await post(relay, onionFor({ kind: 'PAYMENT', body: '0x01' }));
+  assert.equal(real.status, 202, `a real frame was refused: ${JSON.stringify(real.json)}`);
+});
+
+test('a relay gives up on a next hop or an egress that never answers (F-63a)', async () => {
+  // OMEGA's PoC: a next hop that accepts the connection and never responds
+  // pins the message, its socket and its drain for as long as it likes.
+  const signals: (AbortSignal | undefined)[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+    signals.push(init?.signal ?? undefined);
+    return new Response('{}', { status: 200 });
+  }) as typeof fetch;
+  try {
+    await defaultDeliver('https://next.invalid/v1/relay', new Uint8Array(1));
+    // callEgress left to its default: the final hop's own POST to the exit.
+    const { built } = mesh({ callEgress: undefined as never });
+    await post(built.get(ids[0]!)!, onionFor({ kind: 'PAYMENT', body: '0x01' }));
+    for (const id of ids) await built.get(id)!.drainOnce(NOW_MS + 10n);
+    assert.equal(signals.length, 2, 'one delivery and one egress call');
+    for (const signal of signals) {
+      assert.ok(signal instanceof AbortSignal && !signal.aborted, 'every outbound call carries a timeout');
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

@@ -31,6 +31,8 @@
 // between them. `denomination` below is always the 6-decimal one.
 
 import {
+  BaseError,
+  ContractFunctionRevertedError,
   createPublicClient,
   createWalletClient,
   custom,
@@ -88,6 +90,25 @@ export const rpcTransport = (chain: Chain = ARC, url?: string): Transport =>
     ? fallback(ARC_RPC_URLS.map((u) => http(u, { retryCount: 0 })))
     : http(url ?? chain.rpcUrls.default.http[0]);
 
+/**
+ * One transaction at a time per sending account, from taking a nonce to the
+ * node accepting it (F-57). viem's nonce manager hands out nonces ahead of
+ * broadcast and forgets them on any error, so a write that failed after taking
+ * nonce N (a gas estimate that reverts) left a write that had taken N+1
+ * queued behind a gap nothing would fill: the egress key pays for settlements,
+ * the attester's rotations and wallets' rotations, from three call sites.
+ * Only the send is held, never the wait for a receipt.
+ */
+const writing = new Map<string, Promise<unknown>>();
+export function writeInTurn<T>(sender: string, write: () => Promise<T>): Promise<T> {
+  const key = sender.toLowerCase();
+  const result = (writing.get(key) ?? Promise.resolve()).then(write, write);
+  const done = result.then(() => undefined, () => undefined);
+  writing.set(key, done);
+  void done.then(() => { if (writing.get(key) === done) writing.delete(key); });
+  return result;
+}
+
 export const POOL_ABI = parseAbi([
   'function capabilities() view returns ((uint8 proofMode, uint8 ringSize, bytes32 verifierId, uint256 denomination, bool requiresCommitReveal))',
   'function deposit(bytes32 commitment)',
@@ -128,6 +149,8 @@ export interface PoolClientOptions {
   >;
   /** Injected so a test does not wait on real blocks. */
   readonly waitForBlocks?: (n: bigint) => Promise<void>;
+  /** Injected so a test can stand in for the RPC. Default: rpcTransport. */
+  readonly transport?: Transport;
 }
 
 const PROOF_MODES = ['RING_8', 'SINGLE_NOTE_PQ', 'ATTESTED_OFFCHAIN'] as const;
@@ -182,9 +205,10 @@ export function createPoolClient(options: PoolClientOptions): OpaquePoolClient {
   const chain = options.chain ?? ARC;
   // A browser reads through its wallet's own provider, never an RPC of its
   // own: every read here serves a transaction that wallet is about to sign.
+  const transport = (): Transport => options.transport ?? rpcTransport(chain, options.rpcUrl);
   const publicClient = createPublicClient({
     chain,
-    transport: options.provider !== undefined ? custom(options.provider) : rpcTransport(chain, options.rpcUrl),
+    transport: options.provider !== undefined ? custom(options.provider) : transport(),
   }) as PublicClient;
 
   const wallet = (): WalletClient => {
@@ -195,7 +219,7 @@ export function createPoolClient(options: PoolClientOptions): OpaquePoolClient {
       return createWalletClient({
         chain,
         account: options.account,
-        transport: rpcTransport(chain, options.rpcUrl),
+        transport: transport(),
       });
     }
     // Refused rather than silently read-only: a caller that thinks it
@@ -239,18 +263,22 @@ export function createPoolClient(options: PoolClientOptions): OpaquePoolClient {
     functionName: string,
     args: readonly unknown[],
     abi: typeof POOL_ABI | typeof ERC20_ABI = POOL_ABI,
+    wait = true,
   ): Promise<TxHash> {
+    const signer = await signerFor(client);
     const { request } = await publicClient.simulateContract({
       address: getAddress(address),
       abi,
       functionName,
       args,
-      account: await signerFor(client),
+      account: signer,
     } as never);
     // Simulated first, so a revert surfaces as a decoded custom error here
     // rather than as a spent transaction that failed on chain.
-    const hash = (await client.writeContract(request as never)) as TxHash;
-    await publicClient.waitForTransactionReceipt({ hash: hash as `0x${string}` });
+    const hash = (await writeInTurn(typeof signer === 'string' ? signer : signer.address, () => client.writeContract(request as never))) as TxHash;
+    // A settlement is answered as soon as it is broadcast: the hash is then on
+    // record, and the caller's own wait for the receipt can fail without losing it.
+    if (wait) await publicClient.waitForTransactionReceipt({ hash: hash as `0x${string}` });
     return hash;
   }
 
@@ -320,7 +348,7 @@ export function createPoolClient(options: PoolClientOptions): OpaquePoolClient {
         // The salt lives only in this closure across the wait. See the header.
         await waitForBlocks(COMMIT_DELAY_BLOCKS);
       }
-      return send(client, pool, 'spend', [ring, spend.proof, getAddress(spend.recipient), salt]);
+      return send(client, pool, 'spend', [ring, spend.proof, getAddress(spend.recipient), salt], POOL_ABI, false);
     },
 
     async isNullifierSpent(scope: PoolScope, value: Nullifier): Promise<boolean> {
@@ -335,10 +363,42 @@ export function createPoolClient(options: PoolClientOptions): OpaquePoolClient {
 }
 
 /**
+ * What an attester checks on chain before it signs anything (F-45): every ring
+ * member is a deposit this pool has seen, and the note is not spent. The pool
+ * reverts a spend that fails either, and a signature for one that can never
+ * land still costs the attester's few-time key a use. Throws a final refusal.
+ * One read at a time: Arc refuses bursts.
+ */
+export async function assertSpendable(publicClient: Pick<PublicClient, 'readContract'>, spend: PrivateSpend): Promise<void> {
+  // The pool's first check, and one a credential for 0x0 got straight past (F-68).
+  if (/^0x0{40}$/i.test(String(spend.recipient))) {
+    throw new ProtocolFailure('PROOF_REJECTED', 'the recipient is the zero address, which the pool never pays');
+  }
+  const pool = getAddress(spend.scope.pool);
+  for (const member of new Set(ringOf(spend))) {
+    if (!(await publicClient.readContract({ address: pool, abi: POOL_ABI, functionName: 'isCommitmentKnown', args: [member] }))) {
+      throw new ProtocolFailure('PROOF_REJECTED', 'a ring member is not a deposit in this pool');
+    }
+  }
+  if (await publicClient.readContract({ address: pool, abi: POOL_ABI, functionName: 'isNullifierSpent', args: [spend.nullifier as `0x${string}`] })) {
+    throw new ProtocolFailure('NULLIFIER_SPENT', 'this note is already spent');
+  }
+}
+
+/**
  * The egress's submitter, backed by the same client. `deliverApprovedRelease`
  * verifies the MAC before this is ever called, so by here the spend is one the
  * confidential workflow already approved.
  */
 export const poolSubmitter = (client: PrivatePoolContract) => ({
-  submit: (spend: PrivateSpend): Promise<TxHash> => client.spend(spend),
+  submit: (spend: PrivateSpend): Promise<TxHash> => client.spend(spend).catch((error: unknown) => {
+    // The pool refusing in simulation is final (F-56): nothing was sent, and
+    // sending the same release again meets the same refusal. Anything else
+    // (the RPC, say) is worth another try.
+    const reverted = error instanceof BaseError ? error.walk((e) => e instanceof ContractFunctionRevertedError) : null;
+    if (reverted instanceof ContractFunctionRevertedError) {
+      throw new ProtocolFailure('SETTLEMENT_REVERTED', `the pool refuses this spend (${reverted.reason ?? reverted.data?.errorName ?? 'reverted'})`, false);
+    }
+    throw error;
+  }),
 });

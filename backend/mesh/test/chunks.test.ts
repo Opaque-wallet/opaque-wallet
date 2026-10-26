@@ -141,3 +141,22 @@ test('a resend of the same chunk replaces it without double-counting bytes', () 
   store.put({ uploadId: id(12), index: 0, total: 1, data: payload(300) });
   assert.equal(store.bytes, 300);
 });
+
+test('uploads nobody commits cannot fill the store\'s bytes and block a real one (F-50)', () => {
+  const store = new ChunkStore();
+  const uid = () => crypto.getRandomValues(new Uint8Array(16));
+  const junk = payload(CHUNK_DATA_BYTES);
+  // OMEGA's PoC: 40-chunk uploads, never committed, until the 48 MB cap.
+  for (let u = 0; u < 60; u++) {
+    const upload = uid();
+    for (let index = 0; index < 40; index++) {
+      try { store.put({ uploadId: upload, index, total: 40, data: junk }); } catch { /* the old store refused here */ }
+    }
+  }
+  // A real intent arriving next still gets its bytes, completes, and is taken.
+  const real = uid();
+  const data = payload(CHUNK_DATA_BYTES * 35, 7);
+  splitPayload(data).forEach((part, index) => store.put({ uploadId: real, index, total: 35, data: part }));
+  assert.equal(store.take(real, 35, payloadHash(data)).kind, 'COMPLETE');
+  assert.ok(store.bytes <= 48 * 1024 * 1024, 'still bounded');
+});

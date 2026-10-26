@@ -3,12 +3,14 @@ import { createHash } from 'node:crypto';
 // and what an attester refuses to sign. The ledger itself is exercised by
 // spike.ts and e2e-payment.ts on testnet.
 
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 
-import type { Batch, Client, SignerListSet } from 'xrpl';
+import { hashes, Wallet, type Batch, type Client, type SignerListSet } from 'xrpl';
 
-import type { NoteCommitment, Nullifier } from '@opaque/protocol-types';
+import { ProtocolFailure, type ApprovedRelease, type NoteCommitment, type Nullifier } from '@opaque/protocol-types';
 
 import { buildRingSpend, createNoteSecret, deriveCommitment, verifierId } from '../../zk/index.ts';
 import { createAttester, attesterChain, nextSignersOf, type Attester, type XrplSpend } from '../attester.ts';
@@ -17,6 +19,7 @@ import { keyChain } from '../keys.ts';
 import { createPoolSource, creditDeposits, incomingOf, type IncomingPayment } from '../pool.ts';
 import { amountOf, recipientFor, scopeOf, splitAmount, unitsDelivered, unitsOfDecimal, type XrplAsset } from '../protocol.ts';
 import { createXrplAnswerer } from '../queries.ts';
+import { createXrplSettlement, toTxHash } from '../settlement.ts';
 import { toHex } from '@opaque/protocol-types/codecs.js';
 
 const POOL = 'rw5r7pX37iAtLEh1VZdciHaFpduftUtjYe';
@@ -478,4 +481,165 @@ test('carry credited at a registration stays put whatever is paid after (F-28)',
   const after = creditDeposits([tagged, invoice], SIZES, new Map([[50, list]]), history);
   assert.deepEqual(after.deposits.filter((d) => d.tag === 50).map((d) => d.commitment), [c(900), c(901)], 'the tag\'s notes are the same');
   assert.equal(after.unmatched.length, 1, 'the late InvoiceID deposit of an already-credited note credits nothing');
+});
+
+// F-54: a submit call that timed out or lost its socket threw out of the payout without
+// its hash, though rippled may have the Batch: the settler then sent a fresh one, the
+// attesters refused it (the note was spent by the first) and the intent ended FAILED
+// while the recipient had been paid.
+test('a payout whose submit call failed still answers its hash, for evidence to read (F-54)', async () => {
+  const chains = [1, 2, 3].map((n) => attesterChain(new Uint8Array(32).fill(n), POOL));
+  const attesters = chains.map((chain, i) => ({
+    id: `A${i + 1}`,
+    nextAfter: (_pool: string, address: string) => (address === chain.addressAt(0) ? chain.addressAt(1) : undefined),
+    currentOn: (_pool: string, signers: readonly string[]) => signers.find((s) => s === chain.addressAt(0)),
+    sign: async ({ proposed }: { proposed: Batch }) => { const key = chain.keyAt(0); return new Wallet(key.publicKey, key.privateKey).sign(proposed, true).tx_blob; },
+    retire: async () => { throw new Error('not asked'); },
+  })) as unknown as Attester[];
+  const listAt = (i: number) => ({ account_objects: [{ SignerQuorum: 2, SignerEntries: chains.map((c) => ({ SignerEntry: { Account: c.addressAt(i) } })) }] });
+  let lists = 0;
+  const sent: string[] = [];
+  const client = {
+    async request(req: Record<string, unknown>) {
+      if (req['command'] === 'account_objects') return { result: listAt(lists++ === 0 ? 0 : 1) };
+      if (req['command'] === 'tx') return { result: { validated: true, meta: { TransactionResult: 'tesSUCCESS' } } };
+      throw new Error(`unexpected ${String(req['command'])}`);
+    },
+    simulate: async () => ({ result: { engine_result: 'tesSUCCESS' } }),
+    autofill: async (batch: Batch) => filled(batch),
+    // OMEGA's PoC: the socket carries the Batch, then drops before rippled's answer.
+    submit: async (blob: string) => { sent.push(blob); throw new Error('websocket was closed'); },
+    getLedgerIndex: async () => 1000,
+  } as unknown as Client;
+  const rings: unknown[] = [];
+  const settlement = createXrplSettlement({
+    client, attesters,
+    pools: new Map([[POOL, { source: { config: { asset: { kind: 'XRP' } }, noteRing: (r: unknown) => rings.push(r) } as never, spendFee: 200_100n }]]),
+  });
+  const spend = { scope: scopeOf(1, POOL, XRP), mode: 'RING_8', ring: [], nullifier: c(9), destination: { account: ALICE, tag: null } };
+  const hash = await settlement.deliver({ spend } as unknown as ApprovedRelease);
+  assert.equal(sent.length, 1);
+  assert.equal(hash, toTxHash(hashes.hashSignedTx(sent[0]!)), 'the hash of what was sent, for evidence() to look up');
+});
+
+// F-52: anyone can register through the mesh, at no cost, and every registration was
+// kept in memory and replayed at each boot: enough of them ran the process out of memory,
+// and then every restart too. What nothing has paid for yet is now bounded per pool;
+// a registration is never forgotten, and a credited note makes room again.
+test('what registrations hold before anything pays them is bounded per pool, and a payment makes room (F-52)', async () => {
+  const { createHash: sha } = await import('node:crypto');
+  let ledger: Record<string, unknown>[] = [];
+  let max = 15;
+  const source = createPoolSource({
+    client: fakeLedger({ account_tx: () => ({ ledger_index_max: max, transactions: ledger }) }),
+    config: { account: POOL, asset: { kind: 'XRP' }, sizes: SIZES, deployedAtLedger: 10 },
+  });
+  await source.sync();
+  const batch = (n: number) => ({ [String(XRP)]: Array.from({ length: 64 }, (_, i) => c(1_000_000 + n * 64 + i)) });
+  const link = `0x${'ef'.repeat(32)}`;
+  source.registerTag(1, batch(1), { owner: `0x${sha('sha256').update(Buffer.from(link.slice(2), 'hex')).digest('hex')}` });
+  // OMEGA's PoC: registration after registration of 64 fresh commitments, from nobody who pays.
+  let n = 1;
+  let refused: unknown;
+  while (refused === undefined && n < 10_000) {
+    try { source.registerTag(n + 1, batch(n + 1)); n += 1; } catch (error) { refused = error; }
+  }
+  assert.ok(refused instanceof ProtocolFailure && refused.retryable, `refused, retryably, after ${n} registrations`);
+  assert.ok(Array.from({ length: n }, (_, i) => i + 1).every((t) => source.registered(t)), 'nothing registered is forgotten');
+  const topUp = { [String(XRP)]: Array.from({ length: 64 }, (_, i) => c(9_000_000 + i)) };
+  assert.throws(() => source.registerTag(1, topUp, { reveal: link }), (e: unknown) => e instanceof ProtocolFailure && e.retryable, 'a top-up waits too');
+  // 64 XRP to tag 2 credits its 64 notes: they are paid for now, and their room is free again.
+  ledger = [{ validated: true, hash: 'B2', ledger_index: 20, tx_json: { TransactionType: 'Payment', Account: ALICE, Destination: POOL, DestinationTag: 2 }, meta: { TransactionResult: 'tesSUCCESS', delivered_amount: String(64 * XRP) } }];
+  max = 50;
+  await source.sync();
+  assert.equal(source.log().deposits.filter((d) => d.tag === 2).length, 64);
+  source.registerTag(1, topUp, { reveal: link });
+  assert.equal(source.registration(1)?.[String(XRP)]?.length, 128);
+});
+
+// F-52: every read and every registration re-credited the pool's whole history, even when
+// nothing had changed, which an anonymous TAG_STATUS or registration could ask for at will.
+test('a read that finds nothing new, and a registration nothing has paid, change no log (F-52)', async () => {
+  let ledger: Record<string, unknown>[] = [];
+  let max = 15;
+  const source = createPoolSource({
+    client: fakeLedger({ account_tx: () => ({ ledger_index_max: max, transactions: ledger }) }),
+    config: { account: POOL, asset: { kind: 'XRP' }, sizes: SIZES, deployedAtLedger: 10 },
+  });
+  await source.sync();
+  const before = source.log();
+  await source.sync();
+  assert.equal(source.log(), before, 'nothing new read: the same log, not a recomputed one');
+  source.registerTag(5, { [String(XRP)]: [c(1)] });
+  assert.equal(source.log(), before, 'a tag nothing has paid credits nothing');
+  // A top-up of a tag that carries value still credits it at once.
+  const link = `0x${'ab'.repeat(32)}`;
+  const { createHash: sha } = await import('node:crypto');
+  source.registerTag(6, { [String(XRP)]: [c(2)] }, { owner: `0x${sha('sha256').update(Buffer.from(link.slice(2), 'hex')).digest('hex')}` });
+  ledger = [{ validated: true, hash: 'T6', ledger_index: 20, tx_json: { TransactionType: 'Payment', Account: ALICE, Destination: POOL, DestinationTag: 6 }, meta: { TransactionResult: 'tesSUCCESS', delivered_amount: String(3 * XRP) } }];
+  max = 50;
+  await source.sync();
+  assert.equal(source.log().carried.get(6), 2n * BigInt(XRP));
+  source.registerTag(6, { [String(XRP)]: [c(3), c(4)] }, { reveal: link });
+  assert.deepEqual(source.log().deposits.filter((d) => d.tag === 6).map((d) => d.commitment), [c(2), c(3), c(4)]);
+  assert.equal(source.log().carried.get(6), 0n);
+});
+
+// F-61: the log's append ignored a short write (what a full disk gives): the registration
+// was applied and confirmed with half a line on disk, the next append joined that half,
+// and the next boot could not parse the log.
+test('a registration the disk did not take whole is refused, and a restart reads past what it left (F-61)', async () => {
+  const { mkdtempSync, rmSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'opaque-tags-'));
+  const realWriteSync = fs.writeSync;
+  const restore = () => { mock.restoreAll(); syncBuiltinESMExports(); };
+  try {
+    const tagFile = join(dir, `tags-${POOL}.json`);
+    const logFile = join(dir, `tags-${POOL}.log`);
+    const lines: string[] = [];
+    const open = () => createPoolSource({ client: fakeLedger({ account_tx: () => ({ ledger_index_max: 15, transactions: [] }) }), config: { account: POOL, asset: { kind: 'XRP' }, sizes: SIZES, deployedAtLedger: 10 }, tagFile, log: (l) => lines.push(l) });
+    const a = open();
+    await a.sync();
+    a.registerTag(60, { [String(XRP)]: [c(60)] });
+    const whole = readFileSync(logFile, 'utf8');
+    // OMEGA's PoC: the volume is full; writeSync takes half the line and says so.
+    mock.method(fs, 'writeSync', (fd: number, data: string | Buffer) => { const b = Buffer.from(data); return realWriteSync(fd, b.subarray(0, b.length >> 1)); });
+    syncBuiltinESMExports();
+    assert.throws(() => a.registerTag(61, { [String(XRP)]: [c(61)] }), (e: unknown) => e instanceof ProtocolFailure && e.retryable, 'refused, retryably');
+    assert.equal(a.registered(61), false, 'and not registered');
+    assert.equal(readFileSync(logFile, 'utf8'), whole, 'the half line is taken back');
+    // Nor can the half be taken back: it stays, and the next line starts a line of its own.
+    mock.method(fs, 'ftruncateSync', () => { throw new Error('EIO'); });
+    syncBuiltinESMExports();
+    assert.throws(() => a.registerTag(62, { [String(XRP)]: [c(62)] }), /try again/);
+    restore();
+    a.registerTag(63, { [String(XRP)]: [c(63)] });
+    const b = open();
+    await b.sync();
+    assert.deepEqual([60, 61, 62, 63].map((t) => b.registered(t)), [true, false, false, true], 'every confirmed registration, and none that was refused');
+    assert.ok(lines.some((l) => /skipped/.test(l)), 'the line it could not read is reported');
+    b.registerTag(64, { [String(XRP)]: [c(62)] });
+  } finally {
+    restore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// F-65: READ's params were spread into the request sent on the stack's one ledger socket,
+// so a caller could name its request id and collide with the stack's own requests.
+test('READ refuses the request plumbing in its params (F-65)', async () => {
+  const asked: Record<string, unknown>[] = [];
+  const answer = createXrplAnswerer({
+    registerTag: async () => undefined, tagStatus: async () => ({ registered: false, notes: 0, carried: 0n, sizes: {}, owner: null }), isSpent: async () => false,
+    read: async (_command, params) => { asked.push(params); return {}; },
+  });
+  const ask = async (request: unknown) =>
+    JSON.parse(Buffer.from((await answer('READ', toHex(new TextEncoder().encode(JSON.stringify(request))))).slice(2), 'hex').toString()) as { result?: unknown; error?: { message: string } };
+  for (const params of [{ id: 7 }, { id: 'x' }, { api_version: 1 }]) {
+    assert.match((await ask({ command: 'fee', params })).error?.message ?? 'answered', /params/, JSON.stringify(params));
+  }
+  assert.equal(asked.length, 0, 'none reached the ledger');
+  assert.deepEqual((await ask({ command: 'account_info', params: { account: ALICE } })).result, {});
 });

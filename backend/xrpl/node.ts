@@ -9,7 +9,7 @@
 // own seed and its own ledger connection; the code does not change, only where
 // each createAttester runs.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,11 +49,86 @@ export function attesterFile(dir = XRPL_STATE, count = xrplDeployment.attesters.
     const given = process.env['XRPL_ATTESTER_SEEDS']?.split(',').map((s) => s.trim().toLowerCase());
     if (given !== undefined && given.some((s) => !/^0x[0-9a-f]{64}$/.test(s))) throw new Error('XRPL_ATTESTER_SEEDS must be comma-separated 32-byte hex seeds');
     const fresh: AttesterFile = { seeds: given ?? Array.from({ length: count }, () => toHex(crypto.getRandomValues(new Uint8Array(32)))), index: {} };
-    writeFileSync(file, JSON.stringify(fresh), { mode: 0o600 });
+    saveAttesterFile(dir, fresh);
   }
   const state = JSON.parse(readFileSync(file, 'utf8')) as AttesterFile;
   if (state.seeds.length !== count) throw new Error(`${file} holds ${state.seeds.length} seeds; the deployment has ${count} attesters`);
   return state;
+}
+
+/**
+ * Replaces attesters.json whole or not at all (F-60): it is rewritten at every
+ * rotation, and holds the seeds, so a process killed mid-write must leave the
+ * old file, never half of one.
+ */
+export function saveAttesterFile(dir: string, state: AttesterFile): void {
+  const file = join(dir, 'attesters.json');
+  const bytes = Buffer.from(JSON.stringify(state));
+  const fd = openSync(`${file}.tmp`, 'w', 0o600);
+  try {
+    // A full disk writes short: never put a short file in the real one's place.
+    if (writeSync(fd, bytes) !== bytes.length) throw new Error(`${file}: short write`);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(`${file}.tmp`, file);
+}
+
+/** How long the ledger may stay unreachable before a node gives up and lets its host restart it. */
+const LEDGER_DOWN_MS = 5 * 60_000;
+const RETRY_MS = { first: 1_000, most: 30_000 };
+
+/**
+ * Keeps `client` connected. xrpl.js reconnects once after an unexpected close
+ * and, if that attempt fails, never again (F-53): every request after it
+ * failed at once, for good, while the process looked healthy. This tries
+ * again, at most RETRY_MS.most apart, for as long as the ledger is down;
+ * requests meanwhile fail at once and their callers retry. Down for
+ * `maxDownMs`, it calls `onDown` once (the stack exits, and its host restarts it).
+ */
+export function keepConnected(client: Client, options: {
+  readonly onDown?: () => void;
+  readonly maxDownMs?: number;
+  readonly now?: () => number;
+  readonly setTimer?: (run: () => Promise<void>, ms: number) => void;
+} = {}): { close(): void } {
+  const now = options.now ?? Date.now;
+  const setTimer = options.setTimer ?? ((run, ms) => { setTimeout(run, ms).unref(); });
+  let closed = false;
+  let scheduled = false;
+  let downSince: number | undefined;
+  let told = false;
+  let wait = RETRY_MS.first;
+  const schedule = () => {
+    if (closed || scheduled) return;
+    scheduled = true;
+    setTimer(attempt, wait);
+  };
+  async function attempt(): Promise<void> {
+    scheduled = false;
+    if (closed) return;
+    // xrpl.js's own attempt may have succeeded, or be under way: connect() then waits for it.
+    if (!client.isConnected()) await client.connect().catch(() => undefined);
+    if (client.isConnected()) {
+      downSince = undefined;
+      told = false;
+      wait = RETRY_MS.first;
+      return;
+    }
+    if (!told && now() - (downSince ?? now()) >= (options.maxDownMs ?? LEDGER_DOWN_MS)) {
+      told = true;
+      options.onDown?.();
+    }
+    wait = Math.min(wait * 2, RETRY_MS.most);
+    schedule();
+  }
+  client.on('disconnected', () => {
+    if (closed) return;
+    downSince ??= now();
+    schedule();
+  });
+  return { close() { closed = true; } };
 }
 
 /** site.ts's ledger, straight to a node: for the backend and scripts. The wallet's goes through the mesh. */
@@ -136,16 +211,23 @@ export interface XrplNode {
   close(): Promise<void>;
 }
 
-export async function startXrpl(options: { readonly dir?: string; readonly log?: (line: string) => void } = {}): Promise<XrplNode> {
+export async function startXrpl(options: {
+  readonly dir?: string;
+  readonly log?: (line: string) => void;
+  /** The ledger has been unreachable for minutes; absent, the node keeps trying. */
+  readonly onLedgerDown?: () => void;
+} = {}): Promise<XrplNode> {
   const dir = options.dir ?? XRPL_STATE;
   const client = new Client(xrplDeployment.network.wss);
   await client.connect();
+  const watch = keepConnected(client, options.onLedgerDown === undefined ? {} : { onDown: options.onLedgerDown });
 
   const pools = new Map<string, XrplPool>(xrplDeployment.pools.map((p) => [p.account, {
     source: createPoolSource({
       client,
       config: { account: p.account, asset: assetOf(p), sizes: p.sizes, deployedAtLedger: p.deployedAtLedger },
       tagFile: join(dir, `tags-${p.account}.json`),
+      ...(options.log === undefined ? {} : { log: options.log }),
     }),
     spendFee: BigInt(p.spendFee),
   }]));
@@ -153,7 +235,7 @@ export async function startXrpl(options: { readonly dir?: string; readonly log?:
   const state = attesterFile(dir);
   const saveIndex = (id: string, pool: string, i: number) => {
     (state.index[id] ??= {})[pool] = i;
-    writeFileSync(join(dir, 'attesters.json'), JSON.stringify(state), { mode: 0o600 });
+    saveAttesterFile(dir, state);
   };
   const attesters: Attester[] = state.seeds.map((seed, i) => {
     const id = `A${i + 1}`;
@@ -191,6 +273,6 @@ export async function startXrpl(options: { readonly dir?: string; readonly log?:
       await source.sync();
       source.registerTag(tag, registration, auth, payable);
     },
-    close: () => client.disconnect(),
+    close: () => { watch.close(); return client.disconnect(); },
   };
 }

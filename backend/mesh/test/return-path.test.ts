@@ -156,13 +156,15 @@ test('sweep clears only what is dead', () => {
 });
 
 test('a full store sweeps the dead, then refuses retryably rather than evicting a live drop', () => {
-  const store = createDropStore({ maxDrops: 2 });
+  let t = 50n;
+  const store = createDropStore({ maxDrops: 2, now: () => t });
   store.put(id('5'), someSealed, 100n);
   store.put(id('6'), someSealed, 500n);
   // Nothing dead at t=50: refuse, do not discard an answer someone awaits.
   assert.throws(() => store.put(id('7'), someSealed, 50n), (error: unknown) =>
     error instanceof ProtocolFailure && error.code === 'MESH_UNAVAILABLE' && error.retryable);
   // At t=200 the first is dead, so the sweep makes room without losing a live one.
+  t = 200n;
   store.put(id('7'), someSealed, 200n);
   assert.equal(store.take(id('6'), 200n), someSealed);
 });
@@ -193,4 +195,22 @@ test('the full return path: client asks, hop 3 deposits, client collects later',
   assert.equal(text(channel.open(collected!)), 'CONFIRMED');
   // Single-use: the credential is spent, so a relay replaying it gets nothing.
   assert.equal(store.take(channel.dropId, 100n), undefined);
+});
+
+// ── overlord regressions ────────────────────────────────────────────────────
+
+test('a full drop store keeps every live answer (F-49)', () => {
+  // OMEGA's PoC: three live drops, 15 minutes each, then a fourth. Sweeping
+  // with the new drop's expiry called all three dead and dropped them.
+  const TTL = 900_000n;
+  let at = 1_000_000n;
+  const store = createDropStore({ maxDrops: 3, now: () => at });
+  const drop = (n: number) => n.toString(16).padStart(32, '0');
+  for (let n = 1; n <= 3; n++) {
+    store.put(drop(n), someSealed, at + TTL);
+    at += 1_000n;
+  }
+  assert.throws(() => store.put(drop(4), someSealed, at + TTL), (error: unknown) =>
+    error instanceof ProtocolFailure && error.code === 'MESH_UNAVAILABLE' && error.retryable);
+  for (let n = 1; n <= 3; n++) assert.equal(store.take(drop(n), at), someSealed, `drop ${n} survived`);
 });

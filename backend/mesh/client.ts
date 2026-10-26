@@ -100,6 +100,22 @@ export function createMeshTransport(options: MeshClientOptions = {}): PrivacyTra
   } = options;
 
   /**
+   * One request that gives up at `deadline`, body read included. The deadline
+   * used to be checked only between requests, so a relay that accepted the
+   * connection and never answered hung the call — forever in a browser, and
+   * during an intent upload, after the note was already reserved (F-63b).
+   */
+  async function within<T>(deadline: number, call: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const signal = AbortSignal.timeout(Math.max(deadline - Date.now(), 0));
+    try {
+      return await call(signal);
+    } catch (error) {
+      if (signal.aborted) throw new ProtocolFailure('MESH_UNAVAILABLE', 'a relay did not answer in time', true);
+      throw error;
+    }
+  }
+
+  /**
    * One round trip. Builds a fresh channel and a fresh onion, posts to hop 1,
    * then collects the sealed answer from the drop.
    */
@@ -121,27 +137,29 @@ export function createMeshTransport(options: MeshClientOptions = {}): PrivacyTra
       }),
     );
 
-    const accepted = await fetchImpl(path[0].endpoint, {
+    // One deadline for the whole trip, the POST included.
+    const deadline = Date.now() + pollTimeoutMs;
+    const accepted = await within(deadline, (signal) => fetchImpl(path[0].endpoint, {
       method: 'POST',
       redirect: 'error',
       headers: { 'content-type': 'application/octet-stream' },
       body: frame,
-    });
+      signal,
+    }));
     if (accepted.status !== 202) {
       throw new ProtocolFailure('MESH_UNAVAILABLE', `hop 1 answered ${accepted.status}`, true);
     }
 
     const url = statusUrl(path[2].endpoint, channel.dropId);
-    const deadline = Date.now() + pollTimeoutMs;
     // Polling, because the mesh delays on purpose. There is nothing to push
     // to: the client has no inbound address, which is the whole premise.
     while (Date.now() < deadline) {
-      const response = await fetchImpl(url, { redirect: 'error' });
-      if (response.status === 200) {
-        const { sealed } = (await response.json()) as { sealed: Hex };
-        // Opened locally. The drop relay held ciphertext it could not read.
-        return channel.open(sealed);
-      }
+      const sealed = await within(deadline, async (signal) => {
+        const response = await fetchImpl(url, { redirect: 'error', signal });
+        return response.status === 200 ? ((await response.json()) as { sealed: Hex }).sealed : undefined;
+      });
+      // Opened locally. The drop relay held ciphertext it could not read.
+      if (sealed !== undefined) return channel.open(sealed);
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
     throw new ProtocolFailure('MESH_UNAVAILABLE', 'no answer arrived before the deadline', true);
@@ -160,12 +178,14 @@ export function createMeshTransport(options: MeshClientOptions = {}): PrivacyTra
         expiresAt: now() + ttlSeconds,
       }),
     );
-    const accepted = await fetchImpl(path[0].endpoint, {
+    // No drop to poll, so no deadline but this one: as long as a round trip may take.
+    const accepted = await within(Date.now() + pollTimeoutMs, (signal) => fetchImpl(path[0].endpoint, {
       method: 'POST',
       redirect: 'error',
       headers: { 'content-type': 'application/octet-stream' },
       body: frame,
-    });
+      signal,
+    }));
     if (accepted.status !== 202) {
       throw new ProtocolFailure('MESH_UNAVAILABLE', `hop 1 answered ${accepted.status}`, true);
     }

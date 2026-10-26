@@ -62,6 +62,34 @@ What the secrets do:
 - `ATTESTER_FORS_MASTER` derives every generation of the attester's FORS key
   (`backend/cre/attester-keys.ts`); the stack rotates it when 4 signatures are
   left.
+- `ATTESTER_LOG` is not a secret but must outlive the container: the file that
+  counts every signature the attester's FORS key has made. The registry counts
+  only signatures that landed; an attestation that was refused, dropped or is
+  still in flight leaves its count where it was, and the next is signed at the
+  same index. The stack counts each signature here before making it, and
+  rotates on the larger count, so a key never signs past its budget. Unset, it
+  is `backend/.stack/attester-uses.json`, inside the container, which a
+  redeploy wipes. **On mainnet, put it on the volume, in a directory of its
+  own:** `ATTESTER_LOG=/app/backend/.backups/attester/uses.json`. Not in the
+  volume's top directory: the backup store takes every `*.json` there for a
+  backup, counts it against its limit, and deletes the oldest when it is full.
+  The stack makes the file's own directory but nothing above it, so with the
+  volume unmounted it refuses to start rather than count on a disk a redeploy
+  wipes; set it only on the service that has the volume. The file names the
+  attester and chain it counts for, and the stack refuses to start on one it
+  cannot read or that is another's: fix or move it, never delete it to get the
+  stack going. What is left: a redeploy without it forgets
+  the signatures that never landed, and counting starts again from the
+  registry's.
+  The file also keeps a rotation the key signed and has not yet seen land, so a
+  restart sends that same rotation again instead of signing another, and the
+  highest index read per key, so a lagging RPC node cannot take the count back.
+  Beside it, `uses.json.lock` holds the log for one process: a second signer on
+  the same host is refused while the first runs. A lock from another host (the
+  container before this deploy) is taken over, which is safe only because a
+  service with a volume stops its old deployment before starting the new one.
+  So keep the log on the volume: two containers each with a log of their own,
+  briefly side by side during a deploy, would each count from the registry.
 - `MESH_MASTER` derives every relay key and every weekly relay directory,
   starting from the genesis in `deployments/arc-testnet.json`. The wallet has
   that chain's root compiled in, so a stack without this exact secret serves a

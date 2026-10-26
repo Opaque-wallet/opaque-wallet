@@ -123,12 +123,21 @@ export interface Relay {
 /** What a client finds at its drop when the egress could not answer. */
 const EGRESS_FAILED = new TextEncoder().encode(JSON.stringify({ code: 'MESH_UNAVAILABLE', message: 'the exit could not answer', retryable: true }));
 
+/**
+ * How long a next hop or the egress gets. A drain hands on everything due at
+ * once and never waits for the last one, so a peer that accepts and never
+ * answers would otherwise hold each message and its socket for undici's
+ * five minutes (F-63a). The client's own deadline is two minutes.
+ */
+const OUTBOUND_TIMEOUT_MS = 30_000;
+
 export const defaultDeliver = async (url: string, body: Uint8Array): Promise<void> => {
   const response = await fetch(url, {
     method: 'POST',
     // No redirect is ever followed: the allowlist is the destination, and an
     // allowlist a 302 can walk out of is not an allowlist.
     redirect: 'error',
+    signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS),
     headers: { 'content-type': 'application/octet-stream' },
     body,
   });
@@ -141,6 +150,7 @@ const defaultCallEgress = async (url: string, payload: FinalPayload): Promise<Ui
   const response = await fetch(url, {
     method: 'POST',
     redirect: 'error',
+    signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS),
     headers: { 'content-type': 'application/json' },
     // Only the body crosses. responseKey and returnRoute stay in the mesh —
     // an egress service that saw them could deposit its own reply.
@@ -209,7 +219,7 @@ export function createRelay(options: RelayOptions): Relay {
     replayCache = new MemoryReplayCache(),
   } = options;
 
-  const drops = options.drops ?? createDropStore({ maxDrops });
+  const drops = options.drops ?? createDropStore({ maxDrops, now });
   const scheduler: MeshBatchScheduler = createBatchScheduler({
     batchWindowMs,
     maxExtraDelayMs,
@@ -218,10 +228,11 @@ export function createRelay(options: RelayOptions): Relay {
   });
 
   // Peeling IS validation (protocol.md property 4), so it happens before a
-  // slot is taken — but the result is needed again at release. Keyed by
-  // hopLocalId, which is already local to this hop and on the wire only in the
-  // layer this relay just consumed, so it introduces no new identifier.
-  const peeled = new Map<string, PeelResult>();
+  // slot is taken — but the result is needed again at release. Keyed by the
+  // queued envelope itself, weakly, so a result lives exactly as long as its
+  // message: one the scheduler drops for expiry takes its result with it. A
+  // Map keyed by hopLocalId kept every one of those forever (F-47).
+  const peeled = new WeakMap<MeshEnvelope, PeelResult>();
   let undelivered = 0;
   let accepted = 0;
   let released = 0;
@@ -274,8 +285,8 @@ export function createRelay(options: RelayOptions): Relay {
     // Counted, never logged: which message failed is the correlation.
     const outcomes = await Promise.allSettled(
       due.map(async (message) => {
-        const result = peeled.get(message.envelope.hopLocalId);
-        peeled.delete(message.envelope.hopLocalId);
+        const result = peeled.get(message.envelope);
+        peeled.delete(message.envelope);
         if (result === undefined) return;
         if (result.kind === 'FORWARD') {
           await deliver(endpointOf(result.next), encodeFrame(result.envelope));
@@ -305,12 +316,13 @@ export function createRelay(options: RelayOptions): Relay {
 
     const next = result.kind === 'FORWARD' ? result.next : null;
     const inner = result.kind === 'FORWARD' ? result.envelope : envelope;
-    peeled.set(inner.hopLocalId, result);
 
+    // Kept only once queued: offer can refuse, and can throw EXPIRED on an
+    // inner expiry the sender chose, and neither may leave a result behind.
     if (!scheduler.offer(inner, next, at)) {
-      peeled.delete(inner.hopLocalId);
       throw new ProtocolFailure('MESH_UNAVAILABLE', 'relay queue is full', true);
     }
+    peeled.set(inner, result);
     accepted++;
     // A bare acknowledgement. No id: anything returned here is something the
     // caller and this relay both hold, which is a correlation handle.

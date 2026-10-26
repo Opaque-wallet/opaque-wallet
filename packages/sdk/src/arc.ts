@@ -10,7 +10,8 @@ import { asHexBytes, CREATE2_FACTORY, deployment as deployCall, MAX_INITCODE, ne
 import { paymentDeadline } from '../../../frontend/src/lib/payment-deadline.ts';
 import { runPaymentLanes } from '../../../frontend/src/lib/payment-lanes.ts';
 import { makeAmount, MAX_NOTES_PER_DEPOSIT } from '../../../frontend/src/lib/protocol/index.ts';
-import { startWallet } from '../../../frontend/src/lib/runtime.ts';
+import { startWallet, type WalletRuntime } from '../../../frontend/src/lib/runtime.ts';
+import { oneOperationAtATime } from '../../../backend/chain/pq-wallet-chain.ts';
 import type { SwapQuote } from '../../../backend/chain/wallet-rpc.ts';
 import type { AccountKeys } from '../../../frontend/src/lib/xrpl-keys.ts';
 import { FileKeyStore } from './keys.ts';
@@ -59,35 +60,46 @@ interface KeyedApp {
  * most ONCE per open: a rotation spends one of the two signatures held back
  * for it whether or not it lands, and a retry loop would spend the other.
  * A failure is kept for keyStatus(); the operation goes on with what is left.
+ * One look at a time: two operations starting together would each find the
+ * key low and each rotate it (F-59), and the second waits for the first's
+ * rotation rather than sign with the key it replaces.
  */
 export function keyKeeper(app: KeyedApp, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))) {
   let tried = false;
   let rotationError: string | undefined;
+  let looking: Promise<void> = Promise.resolve();
   const status = async (): Promise<KeyStatus> => {
     const s = await app.walletState();
     const max = Number(s.maxUses);
     return { left: Math.max(0, max - Number(s.localSigningReservations)), max, ...(rotationError === undefined ? {} : { rotationError }) };
   };
+  async function look(): Promise<void> {
+    if (tried) return;
+    const s = await app.walletState();
+    const { left, max } = await status();
+    if (!s.active || left > Math.ceil(max / 4)) return;
+    tried = true;
+    try {
+      await app.rotateWallet();
+      for (let i = 0; i < 10 && (await app.walletState()).pkCommitment === s.pkCommitment; i++) await wait(2_000);
+    } catch (error) {
+      rotationError = (error as Error).message;
+    }
+  }
   return {
     status,
-    async fresh(): Promise<void> {
-      if (tried) return;
-      const s = await app.walletState();
-      const { left, max } = await status();
-      if (!s.active || left > Math.ceil(max / 4)) return;
-      tried = true;
-      try {
-        await app.rotateWallet();
-        for (let i = 0; i < 10 && (await app.walletState()).pkCommitment === s.pkCommitment; i++) await wait(2_000);
-      } catch (error) {
-        rotationError = (error as Error).message;
-      }
-    },
+    fresh: (): Promise<void> => (looking = looking.then(look, look)),
   };
 }
 
-export async function openArc(store: FileStore, account: AccountKeys) {
-  const rt = await startWallet(undefined, account, { keys: (name) => new FileKeyStore(store, name), prover: nodeProver });
+export async function openArc(store: FileStore, account: AccountKeys,
+  begin = (): Promise<WalletRuntime> => startWallet(undefined, account, { keys: (name) => new FileKeyStore(store, name), prover: nodeProver })) {
+  const rt = await begin();
+  // One that fails to open leaves nothing running: opened again, it starts afresh (F-62).
+  try { return await clientOf(rt, account); } catch (error) { await rt.close(); throw error; }
+}
+
+async function clientOf(rt: WalletRuntime, account: AccountKeys) {
   await rt.open();
   // The first time this wallet opens the account: the notes it already holds, found on chain, as the page does.
   if (arcState().scanned?.[account.id] !== true) await rt.recover(true);
@@ -103,19 +115,25 @@ export async function openArc(store: FileStore, account: AccountKeys) {
     [s.pool as string, await rt.readRing(s).then((r) => r.candidates.length, () => RING_SIZE)] as const)));
   const listNotes = async () => (await Promise.all(rt.scopes.map((s) => rt.app.listNotes(s)))).flat();
   const sent = (): Sent[] => JSON.parse(localStorage.getItem(rt.sentKey) ?? '[]') as Sent[];
-  const key = keyKeeper(rt.app as unknown as KeyedApp);
+  // A rotation waits for the account's operation under way, and the next waits for it.
+  const key = keyKeeper({ walletState: () => rt.app.walletState(), rotateWallet: () => oneOperationAtATime(address as never, () => rt.app.rotateWallet()) } as unknown as KeyedApp);
   const names = Object.fromEntries([...deployment.swap.tokens.map((t) => [t.address.toLowerCase(), t.symbol]), [deployment.tokens.usdc.address.toLowerCase(), 'USDC']]);
-  /** The notes `usdc` would spend (undefined if the spendable ones can't make it exactly), and what is spendable. */
-  async function plan(usdc: number): Promise<{ readonly queue: NoteSummary[] | undefined; readonly spendable: number }> {
+  /** Notes a payment under way has taken: another, alongside it, takes others (F-55). */
+  const spending = new Set<string>();
+  /**
+   * The notes `usdc` would spend (undefined if the spendable ones can't make it
+   * exactly), and what is spendable. `take`: taken for this payment, with
+   * nothing awaited since they were chosen; send() gives them back.
+   */
+  async function plan(usdc: number, take = false): Promise<{ readonly queue: NoteSummary[] | undefined; readonly spendable: number }> {
     const [notes, sizes] = await Promise.all([listNotes(), poolSizes()]);
-    const ready = notes.filter((n) => n.state === 'AVAILABLE' && (sizes.get(n.scope.pool) ?? RING_SIZE) >= RING_SIZE);
+    const ready = notes.filter((n) => n.state === 'AVAILABLE' && !spending.has(n.id) && (sizes.get(n.scope.pool) ?? RING_SIZE) >= RING_SIZE);
     const have = new Map<number, number>();
     for (const n of ready) have.set(usdcOf(n), (have.get(usdcOf(n)) ?? 0) + 1);
     const pick = makeAmount(usdc, rt.scopes.map((s) => Number(s.denomination) / 1e6), have);
-    return {
-      queue: pick && [...pick].flatMap(([size, n]) => ready.filter((note) => usdcOf(note) === size).slice(0, n)),
-      spendable: ready.reduce((t, n) => t + usdcOf(n), 0),
-    };
+    const queue = pick && [...pick].flatMap(([size, n]) => ready.filter((note) => usdcOf(note) === size).slice(0, n));
+    if (take) for (const n of queue ?? []) spending.add(n.id);
+    return { queue, spendable: ready.reduce((t, n) => t + usdcOf(n), 0) };
   }
 
   const arc = {
@@ -169,30 +187,34 @@ export async function openArc(store: FileStore, account: AccountKeys) {
       const waitForPrivacy = options.waitForPrivacy === true;
       const deadline = () => paymentDeadline({ waitForPrivacy, nowMs: Date.now(), ...(options.deadline ? { selectedMs: options.deadline.getTime() } : {}) }) as UnixSeconds;
       deadline(); // a past or missing deadline fails here, before anything is spent
-      const { queue, spendable } = await plan(usdc);
+      const { queue, spendable } = await plan(usdc, true);
       if (queue === undefined) throw new Error(`the spendable notes (${spendable} USDC) can't make exactly ${usdc} USDC: each is sent whole, with no change`);
-      // Before paying, out of band: the authority learns a recipient, never a payment.
-      const credentialHandle = await rt.obtainCredential(recipient as Hex);
-      const group = `send-${Date.now()}`;
-      const payments: ArcPayment[] = [];
-      const results = await runPaymentLanes(queue, LANES, async (note) => {
-        const ref = await rt.app.submitPayment({
-          noteId: note.id, recipient: recipient as never,
-          minPrivacyScore: (waitForPrivacy ? MIN_FRESHNESS * 100 : 0) as PrivacyScore,
-          deadline: deadline(), credentialHandle,
-          idempotencyKey: `pay-${note.id}-${Date.now()}` as never,
+      try {
+        // Before paying, out of band: the authority learns a recipient, never a payment.
+        const credentialHandle = await rt.obtainCredential(recipient as Hex);
+        const group = `send-${Date.now()}`;
+        const payments: ArcPayment[] = [];
+        const results = await runPaymentLanes(queue, LANES, async (note) => {
+          const ref = await rt.app.submitPayment({
+            noteId: note.id, recipient: recipient as never,
+            minPrivacyScore: (waitForPrivacy ? MIN_FRESHNESS * 100 : 0) as PrivacyScore,
+            deadline: deadline(), credentialHandle,
+            idempotencyKey: `pay-${note.id}-${Date.now()}` as never,
+          });
+          const payment = { handle: ref.statusHandle as string, usdc: usdcOf(note) };
+          payments.push(payment);
+          localStorage.setItem(rt.sentKey, JSON.stringify([{ ...payment, recipient, at: Date.now(), group }, ...sent()]));
         });
-        const payment = { handle: ref.statusHandle as string, usdc: usdcOf(note) };
-        payments.push(payment);
-        localStorage.setItem(rt.sentKey, JSON.stringify([{ ...payment, recipient, at: Date.now(), group }, ...sent()]));
-      });
-      const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-      if (failed.length > 0) {
-        const why = (failed[0]!.reason as Error).message;
-        if (payments.length === 0) throw new Error(`not sent: ${why}`);
-        throw Object.assign(new Error(`sent ${payments.length} of ${queue.length} notes; the rest failed: ${why}`), { payments });
+        const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+        if (failed.length > 0) {
+          const why = (failed[0]!.reason as Error).message;
+          if (payments.length === 0) throw new Error(`not sent: ${why}`);
+          throw Object.assign(new Error(`sent ${payments.length} of ${queue.length} notes; the rest failed: ${why}`), { payments });
+        }
+        return payments;
+      } finally {
+        for (const n of queue) spending.delete(n.id);
       }
-      return payments;
     },
 
     /** Looks on chain for every note of the account: ones another host made, say. Returns how many were new. */
@@ -263,6 +285,9 @@ export async function openArc(store: FileStore, account: AccountKeys) {
     swapQuote: (from: string, to: string, amount: bigint): Promise<SwapQuote> => rt.swapQuote(address, tokenOf(from), tokenOf(to), amount),
     /** The quoted swap, signed by the PQ key: approve exactly `amount`, the call, then the approval back to 0. */
     swap: async (from: string, to: string, amount: bigint, quote: SwapQuote): Promise<TxHash> => { await key.fresh(); return rt.swap(address, tokenOf(from), tokenOf(to), amount, quote); },
+
+    /** Stops what this client started: its relays' poll and its prover's thread. */
+    close: (): Promise<void> => rt.close(),
   };
   return arc;
 }

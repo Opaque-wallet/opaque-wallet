@@ -320,6 +320,23 @@ type Op = {
 };
 const WEI_PER_USDC6 = 10n ** 12n;
 
+/** Each account's operation under way, in this page or process (oneOperationAtATime). */
+const operating = new Map<string, Promise<unknown>>();
+
+/**
+ * Runs `run`, a whole operation of `account` (its nonce read, its signature,
+ * its receipt), after the one before it is done. Two at once would read the
+ * same EntryPoint nonce and each spend one of the few-time key's signatures,
+ * for only one to land (F-59); a rotation signed meanwhile would be signed
+ * for a use count that an operation landing moves on.
+ */
+export function oneOperationAtATime<T>(account: Address, run: () => Promise<T>): Promise<T> {
+  const key = account.toLowerCase();
+  const turn = (operating.get(key) ?? Promise.resolve()).then(run, run);
+  operating.set(key, turn.catch(() => undefined));
+  return turn;
+}
+
 /**
  * What the account does by itself: deposit into a pool and withdraw, each a
  * UserOperation its PQ key signs. Built here rather than by viem's smart
@@ -420,7 +437,7 @@ export function createPqAccountOps(options: {
      * signature however many notes and pools, so a deposit split across
      * denominations does not spend the key's budget per note.
      */
-    async deposit(groups: readonly DepositGroup[]): Promise<TxHash> {
+    deposit: (groups: readonly DepositGroup[]): Promise<TxHash> => oneOperationAtATime(account, async () => {
       const total = groups.reduce((sum, g) => sum + BigInt(g.scope.denomination) * BigInt(g.commitments.length), 0n);
       const have = await funds();
       if (have.usdc6 < total) throw shortfall(total * WEI_PER_USDC6, have);
@@ -432,7 +449,7 @@ export function createPqAccountOps(options: {
       const need = total * WEI_PER_USDC6 + (prefundOf(op) > have.prepaidGas ? prefundOf(op) - have.prepaidGas : 0n);
       if (have.usdc6 * WEI_PER_USDC6 < need) throw shortfall(need, have);
       return submit(op);
-    },
+    }),
 
     /**
      * A swap LI.FI quoted: approve its contract exactly `amount` of `token`,
@@ -454,26 +471,26 @@ export function createPqAccountOps(options: {
      * account's USDC. `spendsUsdc` is USDC the calls themselves take, so gas
      * is checked on top of it.
      */
-    async execute(calls: readonly Call[], spendsUsdc = 0n): Promise<TxHash> {
+    execute: (calls: readonly Call[], spendsUsdc = 0n): Promise<TxHash> => oneOperationAtATime(account, async () => {
       const op = await prepare(calls);
       const have = await funds();
       const need = spendsUsdc * WEI_PER_USDC6 + (prefundOf(op) > have.prepaidGas ? prefundOf(op) - have.prepaidGas : 0n);
       if (have.usdc6 * WEI_PER_USDC6 < need) throw shortfall(need, have);
       return submit(op);
-    },
+    }),
 
     /**
      * Everything the account holds, to `to`, less this operation's gas. What
      * the EntryPoint refunds afterwards lands in the account's deposit there,
      * a few cents that pay for its next operation.
      */
-    async withdraw(to: Address): Promise<TxHash> {
+    withdraw: (to: Address): Promise<TxHash> => oneOperationAtATime(account, async () => {
       const op = await prepare([{ to, value: 1n }]);
       const have = await funds();
       const fromBalance = prefundOf(op) > have.prepaidGas ? prefundOf(op) - have.prepaidGas : 0n;
       const value = have.usdc6 * WEI_PER_USDC6 - fromBalance;
       if (value <= 0n) throw new ProtocolFailure('INVALID_INPUT', 'the account holds too little to pay for its own withdrawal');
       return submit({ ...op, callData: encodeCalls([{ to, value }]) });
-    },
+    }),
   };
 }

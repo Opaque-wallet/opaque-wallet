@@ -106,7 +106,7 @@ export interface ChunkStoreOptions {
   readonly maxUploads?: number;
   /** Per upload. Matches the sealed-intent cap; nothing larger can be submitted anyway. */
   readonly maxUploadBytes?: number;
-  /** Across every upload. Bounded memory is the only DoS defence available here. */
+  /** Across every upload. Bounded memory is the only DoS defence available here; at it, the oldest make room. */
   readonly maxTotalBytes?: number;
   /** An upload never committed is evicted after this. */
   readonly ttlMs?: number;
@@ -186,6 +186,14 @@ export class ChunkStore {
     const delta = frame.data.length - (previous?.length ?? 0);
     if (upload.bytes + delta > this.#maxUploadBytes) {
       throw new ProtocolFailure('INVALID_INPUT', 'upload exceeds the size an intent may be');
+    }
+    // Full of bytes: the oldest other uploads make room, as they do for slots.
+    // Refusing instead let 48 MB of chunks nobody commits, sent every ten
+    // minutes, refuse every RING_8 spend (F-50). Only an upload that alone
+    // exceeds the cap is refused.
+    for (const [otherId, other] of this.#uploads) {
+      if (this.#totalBytes + delta <= this.#maxTotalBytes) break;
+      if (other !== upload) this.#drop(otherId, other);
     }
     if (this.#totalBytes + delta > this.#maxTotalBytes) {
       throw new ProtocolFailure('MESH_UNAVAILABLE', 'reassembly store is full', true);

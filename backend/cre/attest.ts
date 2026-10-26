@@ -144,6 +144,12 @@ export function attestRingSpend(input: {
   readonly identity: AttesterIdentity;
   readonly forsSeed: Uint8Array;
   readonly useCount: bigint;
+  /**
+   * Counts the signature against the key's budget (attester-keys.ts), after
+   * the proof verifies and before the key is touched: a proof that fails costs
+   * the key nothing, and no signature exists that was not counted first.
+   */
+  readonly reserve?: () => void;
 }): PrivateSpend {
   const { spend, identity } = input;
   if (spend.mode !== 'RING_8') {
@@ -179,6 +185,7 @@ export function attestRingSpend(input: {
   const payload = attestationPayload(ringVerifierId(identity), spend.ring as unknown as Bytes32[], nullifier, paymentContext);
   const digest = attestationDigest(identity, payload, input.useCount);
 
+  input.reserve?.();
   const key = keyGen(input.forsSeed);
   const signature = encodeSignature(key.publicKey, sign(key.secretKey, digest));
 

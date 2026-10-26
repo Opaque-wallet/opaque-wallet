@@ -42,6 +42,7 @@ import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
 import { deployment, entryPoint, requireContract } from '../../deployments/index.ts';
 import { rateLimit } from '../mesh/limit.ts';
+import { writeInTurn } from './pool.ts';
 
 /** The one thing the page hands the mesh: an operation and its JSON, as hex. */
 export type WalletRpcSend = (operation: WalletRpcOperation, encodedRequest: Hex) => Promise<Hex>;
@@ -111,6 +112,8 @@ export function createWalletRpcAnswerer(options: {
   readonly lifiApiKey?: string;
   /** Swap quotes a minute, whoever asks (each is a call to LI.FI on a quota everyone shares). */
   readonly quotesPerMinute?: number;
+  /** How long a bundler call may take before the answer is an error. */
+  readonly bundlerTimeoutMs?: number;
 }): WalletRpcSend {
   const { publicClient } = options;
   const allowlist = options.allowlist ?? walletRpcAllowlist();
@@ -179,9 +182,12 @@ export function createWalletRpcAnswerer(options: {
     } else if (method === 'eth_getUserOperationReceipt') {
       if (!/^0x[0-9a-fA-F]{64}$/.test(String(p[0]))) refuse('a receipt needs a UserOperation hash');
     }
+    // Bounded (F-63c): a bundler that never answers would otherwise hold this
+    // query, and the relay's request behind it, for as long as the socket lives.
     const response = await doFetch(options.bundlerUrl, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      signal: AbortSignal.timeout(options.bundlerTimeoutMs ?? 20_000),
     });
     const body = await response.json() as { result?: unknown; error?: { message?: string; code?: number } };
     if (body.error !== undefined) throw new ProtocolFailure('SETTLEMENT_REVERTED', `bundler: ${body.error.message ?? 'refused'}`);
@@ -214,24 +220,38 @@ export function createWalletRpcAnswerer(options: {
     if (!/^0x[0-9a-f]+$/i.test(signature)) refuse('a rotation carries a signature');
     const maxUses = BigInt(String(request['maxUses']));
     const deadline = BigInt(String(request['deadline']));
-    await assertPqAccount(account);
-    if (Date.now() - (rotatedAt.get(account) ?? 0) < ROTATE_COOLDOWN_MS) refuse('a rotation for this account was relayed a moment ago');
-    // rotate() resets useCount to 0, so a key that has signed nothing is either
-    // brand new or just rotated. Refusing those means every relayed rotation
-    // costs whoever asks one real operation of their own first, which is what
-    // stops this being free gas in a loop.
-    const registry = requireContract('pqKeyRegistry') as Address;
-    const read = await publicClient.call({ to: registry, data: encodeFunctionData({ abi: STATE_ABI, functionName: 'stateOf', args: [account as Address] }) as Hex });
-    const state = decodeFunctionResult({ abi: STATE_ABI, functionName: 'stateOf', data: read.data ?? '0x' }) as unknown as { pkCommitment: Hex; useCount: bigint };
-    if (BigInt(state.pkCommitment) === 0n) refuse('that account has no registered key');
-    if (state.useCount === 0n) refuse('that key has signed nothing, so it does not need rotating');
-    // Simulated first: a signature for the wrong useCount reverts here, for free.
-    const { request: tx } = await publicClient.simulateContract({
-      address: registry, abi: REGISTRY_ROTATE, functionName: 'rotate',
-      args: [account as Address, next as Bytes32, maxUses, deadline, signature as Hex], account: options.payer,
-    } as never);
-    const hash = await signer.writeContract(tx as never) as TxHash;
+    // Taken before the first await (F-57): set only once the transaction was
+    // sent, every one of N rotations asked at once passed this check, and the
+    // exit paid for N transactions of which one could land. Given back if
+    // nothing is sent, so a refusal costs the account no wait.
+    const before = rotatedAt.get(account);
+    if (Date.now() - (before ?? 0) < ROTATE_COOLDOWN_MS) refuse('a rotation for this account was relayed a moment ago');
     rotatedAt.set(account, Date.now());
+    const payer = options.payer!;
+    let hash: TxHash;
+    try {
+      await assertPqAccount(account);
+      // rotate() resets useCount to 0, so a key that has signed nothing is either
+      // brand new or just rotated. Refusing those means every relayed rotation
+      // costs whoever asks one real operation of their own first, which is what
+      // stops this being free gas in a loop.
+      const registry = requireContract('pqKeyRegistry') as Address;
+      const read = await publicClient.call({ to: registry, data: encodeFunctionData({ abi: STATE_ABI, functionName: 'stateOf', args: [account as Address] }) as Hex });
+      const state = decodeFunctionResult({ abi: STATE_ABI, functionName: 'stateOf', data: read.data ?? '0x' }) as unknown as { pkCommitment: Hex; useCount: bigint };
+      if (BigInt(state.pkCommitment) === 0n) refuse('that account has no registered key');
+      if (state.useCount === 0n) refuse('that key has signed nothing, so it does not need rotating');
+      // Simulated first: a signature for the wrong useCount reverts here, for free.
+      const { request: tx } = await publicClient.simulateContract({
+        address: registry, abi: REGISTRY_ROTATE, functionName: 'rotate',
+        args: [account as Address, next as Bytes32, maxUses, deadline, signature as Hex], account: payer,
+      } as never);
+      // In turn with every other transaction the egress key pays for (chain/pool.ts).
+      hash = await writeInTurn(payer.address, () => signer.writeContract(tx as never)) as TxHash;
+    } catch (error) {
+      if (before === undefined) rotatedAt.delete(account);
+      else rotatedAt.set(account, before);
+      throw error;
+    }
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     if (receipt.status !== 'success') throw new ProtocolFailure('SETTLEMENT_REVERTED', `rotate reverted in ${hash}`);
     return { txHash: hash };

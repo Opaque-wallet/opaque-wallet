@@ -165,6 +165,8 @@ export const returnPathModule: ReturnPathModule = { createChannel, decodeRoute, 
 export interface DropStoreOptions {
   /** Bounded. An unbounded store is a memory oracle describing its traffic. */
   readonly maxDrops: number;
+  /** Unix milliseconds, the unit every expiry here is in. Injected for tests. */
+  readonly now?: () => bigint;
 }
 
 /**
@@ -177,7 +179,7 @@ export interface DropStoreOptions {
  * survive a restart without losing in-flight answers.
  */
 export function createDropStore(options: DropStoreOptions): DropStore {
-  const { maxDrops } = options;
+  const { maxDrops, now = () => BigInt(Date.now()) } = options;
   if (!Number.isInteger(maxDrops) || maxDrops < 1) {
     throw new ProtocolFailure('INVALID_INPUT', 'maxDrops must be at least 1');
   }
@@ -200,8 +202,9 @@ export function createDropStore(options: DropStoreOptions): DropStore {
       if (drops.size >= maxDrops) {
         // Evict only what is already dead, then refuse. Dropping a live entry
         // to make room silently discards an answer someone is still waiting
-        // for, and does it precisely when the relay is busiest.
-        store.sweep(expiresAt);
+        // for, and does it precisely when the relay is busiest. Dead as of
+        // NOW: swept at the new drop's expiry, every live drop looked dead (F-49).
+        store.sweep(now());
         if (drops.size >= maxDrops) {
           throw new ProtocolFailure('MESH_UNAVAILABLE', 'the drop store is full', true);
         }

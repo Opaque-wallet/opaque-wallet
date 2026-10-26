@@ -73,9 +73,9 @@ export async function deliverApprovedRelease(input: {
   // safe because resending cannot double-pay. The pool spends a nullifier once,
   // and the submitter simulates first, so a spend that already landed reverts in
   // simulation rather than on chain.
-  // ponytail: assumes the throw came before broadcast. A throw after it (a
-  // receipt wait timing out) resends into a revert and never records the spend
-  // that did land; record the hash at broadcast if receipt waits start timing out.
+  // A throw here came before broadcast: a spend is answered with its hash as
+  // soon as it is sent (chain/pool.ts, F-56), and the receipt is the settler's
+  // to wait for.
   try {
     const authorizations = input.release.authorizations;
     if (authorizations !== undefined) {

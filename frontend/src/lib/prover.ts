@@ -35,5 +35,10 @@ export function createWorkerProver(): RingProver {
   return {
     prove: (input) => call<PrivateSpend>('prove', input),
     verify: (spend) => call<boolean>('verify', spend),
+    close: () => {
+      worker.terminate();
+      for (const waiting of pending.values()) waiting.reject(new Error('the wallet was closed'));
+      pending.clear();
+    },
   };
 }

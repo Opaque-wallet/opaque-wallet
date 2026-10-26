@@ -164,6 +164,8 @@ export interface WalletRuntime {
   exportBackup(passphrase: string): Promise<Blob>;
   /** Into a new key store; reload the page to open it. Returns the notes it added. */
   restoreBackup(file: Blob, passphrase: string): Promise<number>;
+  /** Stops what this runtime started: the relays' poll and the prover's thread. */
+  close(): Promise<void>;
 }
 
 /** Whether this browser holds an Arc account from before recovery phrases: keys in IndexedDB, or notes. */
@@ -206,9 +208,10 @@ function meshOf(cfg: StackConfig) {
   // Until the first answer, every relay weighs the same. The polls double as
   // cover traffic (§7.5).
   void relayHealth.refresh();
+  const poll = setInterval(() => void relayHealth.refresh(), 120_000);
   // Never what keeps a Node process (packages/sdk) running.
-  (setInterval(() => void relayHealth.refresh(), 120_000) as { unref?: () => void }).unref?.();
-  return { bootstrap, query };
+  (poll as { unref?: () => void }).unref?.();
+  return { bootstrap, query, stop: () => clearInterval(poll) };
 }
 let pageQuery: (<T>(request: MeshQuery) => Promise<{ value: T }>) | undefined;
 let pageMesh: Promise<<T>(request: MeshQuery) => Promise<{ value: T }>> | undefined;
@@ -239,7 +242,10 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       denomination: p.denomination as PoolScope['denomination'],
     }));
 
-  const { bootstrap, query } = meshOf(cfg);
+  const prover = (host.prover ?? createWorkerProver)();
+  let mesh: ReturnType<typeof meshOf>;
+  try { mesh = meshOf(cfg); } catch (error) { await prover.close?.(); throw error; }
+  const { bootstrap, query } = mesh;
   pageQuery = query;
 
   // Opaque is a wallet of its own: it never reads or asks a browser wallet
@@ -295,7 +301,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       },
     }),
   });
-  const ring = createRingClient(vault, (host.prover ?? createWorkerProver)());
+  const ring = createRingClient(vault, prover);
 
   const credentials = new Map<string, string>();
   const sealIntent = createIntentSealer({
@@ -419,5 +425,10 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
     swap: (address, from, to, amount, quote) => opsFor(address).swap(from.address as never, amount, quote, to.address as never),
     exportBackup: (passphrase) => exportBackup(keys, passphrase),
     restoreBackup,
+    async close() {
+      mesh.stop();
+      if (pageQuery === query) pageQuery = undefined;
+      await prover.close?.();
+    },
   };
 }

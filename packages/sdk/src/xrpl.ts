@@ -6,12 +6,14 @@ import type { UnixSeconds } from '@opaque/protocol-types';
 import { isAccount } from '../../../backend/xrpl/protocol.ts';
 import { xrplDeployment } from '../../../deployments/xrpl.ts';
 import { paymentDeadline } from '../../../frontend/src/lib/payment-deadline.ts';
-import { loadXrplStack, startXrplWallet, type Sent, type SwapQuote } from '../../../frontend/src/lib/xrpl-runtime.ts';
+import { loadXrplStack, startXrplWallet, type Sent, type SwapQuote, type XrplWallet } from '../../../frontend/src/lib/xrpl-runtime.ts';
 import type { AccountKeys } from '../../../frontend/src/lib/xrpl-keys.ts';
 import { nodeProver } from './prover.ts';
 
 /** The hosted XRPL testnet service's config (frontend/package.json's build:site names the same). */
 const STACK = 'https://opaque-xrpl-testnet-production.up.railway.app/xrpl-stack.json';
+/** The accounts this wallet has looked for on the ledger. */
+const SCANNED = 'opaque:sdk:xrpl-scanned';
 
 export type XrplClient = Awaited<ReturnType<typeof openXrpl>>;
 export interface XrplSendOptions {
@@ -22,9 +24,24 @@ export interface XrplSendOptions {
   readonly deadline?: Date;
 }
 
-export async function openXrpl(account: AccountKeys) {
+/** The XRPL page's runtime, from the hosted service's config, its proofs on a worker thread. */
+const start = async (account: AccountKeys): Promise<XrplWallet> =>
+  startXrplWallet(await loadXrplStack(process.env['OPAQUE_XRPL_STACK_URL'] ?? STACK), account, { prover: nodeProver });
+
+export async function openXrpl(account: AccountKeys, begin = start) {
   if (xrplDeployment.pools.length === 0) throw new Error(`Opaque has no pools on ${xrplDeployment.network.name} yet: open the wallet on testnet`);
-  const wallet = await startXrplWallet(await loadXrplStack(process.env['OPAQUE_XRPL_STACK_URL'] ?? STACK), account, { prover: nodeProver });
+  const wallet = await begin(account);
+  // One that fails to open leaves nothing running: opened again, it starts afresh (F-62).
+  try { return await clientOf(wallet, account); } catch (error) { await wallet.close(); throw error; }
+}
+
+async function clientOf(wallet: XrplWallet, account: AccountKeys) {
+  // The first time this wallet opens the account: its notes and addresses, found on the ledger, as Arc does.
+  const scanned = JSON.parse(localStorage.getItem(SCANNED) ?? '[]') as string[];
+  if (!scanned.includes(account.id)) {
+    await wallet.recover();
+    localStorage.setItem(SCANNED, JSON.stringify([...scanned, account.id]));
+  }
   const deadline = (o: { readonly waitForPrivacy?: boolean; readonly deadline?: Date }) =>
     paymentDeadline({ waitForPrivacy: o.waitForPrivacy === true, nowMs: Date.now(), ...(o.deadline ? { selectedMs: o.deadline.getTime() } : {}) }) as UnixSeconds;
   const symbolOf = (symbol: string): string => {
@@ -72,6 +89,8 @@ export async function openXrpl(account: AccountKeys) {
     /** A private swap: notes spent through rings into a fresh tag of `to`'s pool; nothing links the two sides. */
     swap: (from: string, to: string, amount: number, options: { readonly deadline?: Date } = {}) =>
       wallet.swap({ from: symbolOf(from), to: symbolOf(to), amount, deadline: deadline({ waitForPrivacy: options.deadline !== undefined, ...options }) }),
+    /** Stops what this client started: its relays' poll, its waits for payments, its prover's thread. */
+    close: (): Promise<void> => wallet.close(),
   };
   return xrpl;
 }

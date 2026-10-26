@@ -125,6 +125,17 @@ function asIdempotencyKey(value: unknown): IdempotencyKey {
   return value as IdempotencyKey;
 }
 
+/**
+ * Runs `run` alone among this origin's tabs where the platform has Web Locks
+ * (a browser), and as it is where there are none (Node, where FileStore's
+ * lock keeps a wallet to one process): for the few look-then-write steps two
+ * tabs over one localStorage could otherwise interleave.
+ */
+export function exclusive<T>(name: string, run: () => Promise<T>): Promise<T> {
+  const locks = (globalThis as { navigator?: { locks?: { request<R>(name: string, run: () => Promise<R>): Promise<R> } } }).navigator?.locks;
+  return locks === undefined ? run() : locks.request(name, run);
+}
+
 const sameScope = (a: PoolScope, b: PoolScope): boolean =>
   a.chainId === b.chainId && a.pool === b.pool && a.denomination === b.denomination;
 
@@ -184,6 +195,8 @@ export function createNoteVault(deps: NoteVaultDeps): NoteVault {
     await deps.storage.write(note);
     return summarise(note);
   }
+  /** Notes this vault is reserving right now (reserve()). */
+  const claiming = new Set<NoteId>();
 
   return {
     async create(scope) {
@@ -244,29 +257,51 @@ export function createNoteVault(deps: NoteVaultDeps): NoteVault {
 
     async reserve(noteId, reservation) {
       const key = asIdempotencyKey(reservation);
-      const note = await must(noteId);
+      // Claimed before anything is awaited: a second payment looking while the
+      // first asks the chain would otherwise find the note AVAILABLE too, and
+      // both would spend it (F-55). The same payment asking again meanwhile
+      // is refused like any other.
+      if (claiming.has(noteId)) throw new ProtocolFailure('NOTE_RESERVED', 'note is being reserved for another payment');
+      claiming.add(noteId);
+      try {
+        // Looked at and marked RESERVED in one step, under the note's lock, and
+        // BEFORE the chain is asked: another vault on this storage (another
+        // tab) finds it taken, not AVAILABLE for the seconds the question takes.
+        const { note, marked } = await exclusive(`opaque:note:${String(noteId)}`, async () => {
+          const note = await must(noteId);
+          if (note.state === 'RESERVED') {
+            // A different key means a second payment is trying to claim a note the
+            // first one is already spending. That is the double-spend attempt.
+            if (note.reservation !== key) {
+              throw new ProtocolFailure('NOTE_RESERVED', 'note is reserved for another payment');
+            }
+            return { note, marked: false };
+          }
+          if (note.state === 'SPENT') throw new ProtocolFailure('NULLIFIER_SPENT', 'note is already spent');
+          if (note.state !== 'AVAILABLE') invalid(`only an AVAILABLE note can be reserved, this one is ${note.state}`);
+          await deps.storage.write({ ...note, state: 'RESERVED', reservation: key });
+          return { note, marked: true };
+        });
 
-      if (note.state === 'RESERVED') {
-        // A different key means a second payment is trying to claim a note the
-        // first one is already spending. That is the double-spend attempt.
-        if (note.reservation !== key) {
-          throw new ProtocolFailure('NOTE_RESERVED', 'note is reserved for another payment');
+        // §6.6: the local spent flag is a convenience. Always re-check the chain
+        // before spending — a note spent from another device still looks
+        // AVAILABLE here.
+        let spent: boolean;
+        try {
+          spent = await deps.chain.isNullifierSpent(note.scope, nullifierOf(note));
+        } catch (error) {
+          // Not known to be spendable: back as it was, for a later try.
+          if (marked) await deps.storage.write(note);
+          throw error;
         }
-      } else if (note.state === 'SPENT') {
-        throw new ProtocolFailure('NULLIFIER_SPENT', 'note is already spent');
-      } else if (note.state !== 'AVAILABLE') {
-        invalid(`only an AVAILABLE note can be reserved, this one is ${note.state}`);
+        if (spent) {
+          await save({ ...note, state: 'SPENT', reservation: null });
+          throw new ProtocolFailure('NULLIFIER_SPENT', 'note is already spent on chain');
+        }
+        return summarise({ ...note, state: 'RESERVED', reservation: key });
+      } finally {
+        claiming.delete(noteId);
       }
-
-      // §6.6: the local spent flag is a convenience. Always re-check the chain
-      // before spending — a note spent from another device still looks
-      // AVAILABLE here.
-      if (await deps.chain.isNullifierSpent(note.scope, nullifierOf(note))) {
-        await save({ ...note, state: 'SPENT', reservation: null });
-        throw new ProtocolFailure('NULLIFIER_SPENT', 'note is already spent on chain');
-      }
-
-      return save({ ...note, state: 'RESERVED', reservation: key });
     },
 
     async release(input) {

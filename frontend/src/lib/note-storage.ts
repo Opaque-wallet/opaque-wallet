@@ -14,7 +14,7 @@
 import { scoped } from './storage-name.ts';
 import type { NoteId } from '@opaque/protocol-types';
 
-import type { NoteStorage, StoredNote } from '../../../packages/ring-client/src/index.ts';
+import { exclusive, type NoteStorage, type StoredNote } from '../../../packages/ring-client/src/index.ts';
 
 // JSON has no bigint. createdAtBlock and the scope's chainId round-trip as
 // "<digits>n" — the same spelling the relay directory uses, so one reviver
@@ -36,11 +36,14 @@ export function localNoteStorage(key = scoped('opaque:notes:v1')): NoteStorage {
     async read(id: NoteId) {
       return load()[id as string];
     },
-    async write(note: StoredNote) {
+    // The whole map is read and written back: under its lock, so another tab's
+    // write between the two is never written over (a note it just made, and its
+    // secret, gone) (F-67).
+    write: (note: StoredNote) => exclusive(key, async () => {
       const all = load();
       all[note.id as string] = note;
       localStorage.setItem(key, JSON.stringify(all, replacer));
-    },
+    }),
     async all() {
       return Object.values(load());
     },
