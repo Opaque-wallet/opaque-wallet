@@ -116,8 +116,10 @@ export function createXrplAnswerer(deps: XrplAnswererDeps): XrplSend {
       return json({ result: await handler(request as Record<string, unknown>) });
     } catch (error) {
       // Public messages only: nothing here carries a secret.
-      const e = error as { publicMessage?: string; message?: string; code?: string; retryable?: boolean };
-      return json({ error: { code: e.code ?? 'MESH_UNAVAILABLE', message: e.publicMessage ?? e.message ?? 'failed', retryable: e.retryable ?? true } });
+      const e = error as { publicMessage?: string; message?: string; code?: string; retryable?: boolean; taken?: unknown };
+      // `taken`: commitments of the caller's own a registration found on another tag (pool.ts).
+      const taken = Array.isArray(e.taken) ? { taken: e.taken.slice(0, 64).map(String) } : {};
+      return json({ error: { code: e.code ?? 'MESH_UNAVAILABLE', message: e.publicMessage ?? e.message ?? 'failed', retryable: e.retryable ?? true, ...taken } });
     }
   };
 }
@@ -126,9 +128,13 @@ export function createXrplAnswerer(deps: XrplAnswererDeps): XrplSend {
 
 export async function xrplCall<T>(send: XrplSend, operation: XrplOperation, request: unknown): Promise<T> {
   const answer = JSON.parse(new TextDecoder().decode(fromHex(await send(operation, json(request))))) as {
-    result?: T; error?: { code: string; message: string; retryable: boolean };
+    result?: T; error?: { code: string; message: string; retryable: boolean; taken?: unknown };
   };
-  if (answer.error !== undefined) throw new ProtocolFailure(answer.error.code as never, answer.error.message, answer.error.retryable);
+  if (answer.error !== undefined) {
+    const failure = new ProtocolFailure(answer.error.code as never, answer.error.message, answer.error.retryable);
+    const taken = answer.error.taken;
+    throw Array.isArray(taken) && taken.every((c) => typeof c === 'string') ? Object.assign(failure, { taken: taken as string[] }) : failure;
+  }
   return answer.result as T;
 }
 

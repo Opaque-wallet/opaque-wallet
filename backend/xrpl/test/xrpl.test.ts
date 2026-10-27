@@ -18,7 +18,7 @@ import { checkProposal, payoutBatch, rotationOf, signerListOf, type Payout } fro
 import { keyChain } from '../keys.ts';
 import { createPoolSource, creditDeposits, incomingOf, type IncomingPayment } from '../pool.ts';
 import { amountOf, recipientFor, scopeOf, splitAmount, unitsDelivered, unitsOfDecimal, type XrplAsset } from '../protocol.ts';
-import { createXrplAnswerer } from '../queries.ts';
+import { createXrplAnswerer, registerTag } from '../queries.ts';
 import { createXrplSettlement, toTxHash } from '../settlement.ts';
 import { toHex } from '@opaque/protocol-types/codecs.js';
 
@@ -642,4 +642,22 @@ test('READ refuses the request plumbing in its params (F-65)', async () => {
   }
   assert.equal(asked.length, 0, 'none reached the ledger');
   assert.deepEqual((await ask({ command: 'account_info', params: { account: ALICE } })).result, {});
+});
+
+test('a registration naming commitments another tag holds says which, across the mesh', async () => {
+  // The same account in two browsers: A registered notes it was never paid
+  // for, B's import finds only paid ones and draws the same numbers. Told
+  // which collided, B keeps those (they are its own) and draws again for only those.
+  const source = createPoolSource({ client: fakeLedger({ account_tx: () => ({ ledger_index_max: 50, transactions: [] }) }), config: { account: POOL, asset: { kind: 'XRP' }, sizes: SIZES, deployedAtLedger: 10 } });
+  await source.sync();
+  source.registerTag(10, { [String(XRP)]: [c(1), c(2)] });
+  assert.throws(() => source.registerTag(11, { [String(XRP)]: [c(2), c(3), c(1)] }),
+    (e: unknown) => /another tag/.test((e as Error).message) && JSON.stringify([...(e as { taken: string[] }).taken].sort()) === JSON.stringify([c(1), c(2)].sort()));
+  const answer = createXrplAnswerer({
+    registerTag: async (_pool, tag, registration) => source.registerTag(tag, registration),
+    tagStatus: async () => ({ registered: false, notes: 0, carried: 0n, sizes: {}, owner: null }), isSpent: async () => false,
+  });
+  const send = (op: 'REGISTER_TAG', encoded: `0x${string}`) => answer(op, encoded);
+  await assert.rejects(registerTag(send as never, POOL, 12, { [String(XRP)]: [c(4), c(2)] }),
+    (e: unknown) => e instanceof ProtocolFailure && JSON.stringify((e as unknown as { taken: string[] }).taken) === JSON.stringify([c(2)]));
 });

@@ -465,7 +465,11 @@ export function createPoolSource(options: {
         }
       }
       if (count === 0 || count > MAX_REGISTERED) refuse(`a registration names 1 to ${MAX_REGISTERED} commitments`);
-      for (const c of fresh) if (registeredCommitments.has(c)) refuse('a commitment is already registered to another tag');
+      // Which, by name: the same account in another browser drew these numbers
+      // for a tag nobody paid, and the wallet keeps them (its own) and draws
+      // again for only these. No one learns more: only their owner can name them.
+      const taken = [...fresh].filter((c) => registeredCommitments.has(c));
+      if (taken.length > 0) throw Object.assign(new ProtocolFailure('INVALID_INPUT', 'a commitment is already registered to another tag'), { taken });
       const ladder = payable ? { ladder: true as const } : {};
       let entry: Entry;
       if (topUp) {

@@ -152,3 +152,32 @@ test('a payment tries again when a relay drops the connection, whatever words th
   assert.equal(sent.notes[0]!.state, 'FAILED', 'and only then given up');
   wallet.close();
 });
+
+test('a receive gets past note numbers another browser registered and was never paid for', async () => {
+  // The import test's failure, live (2026-10-26): browser A's one-time tag held
+  // up to 64 spare notes; browser B, given A's account key, found only the paid
+  // ones and drew A's spares again, ten deep here, and gave up after 3 tries.
+  items.clear();
+  const theirs = Array.from({ length: 9 }, (_, i) => mine(i)); // A's, never paid
+  const registered = new Set(theirs);
+  const asked: string[][] = [];
+  const hex = (v: unknown) => toHex(new TextEncoder().encode(JSON.stringify(v)));
+  const { mesh } = relays(async (r) => {
+    if (r.kind === 'RING_SNAPSHOT') return ringOf(r.scope, others);
+    if (r.kind === 'XRPL' && (r as { operation: string }).operation === 'REGISTER_TAG') {
+      const request = JSON.parse(Buffer.from((r as { encodedRequest: string }).encodedRequest.slice(2), 'hex').toString()) as { tag: number; commitments: Record<string, string[]> };
+      const named = Object.values(request.commitments).flat();
+      asked.push(named);
+      const taken = named.filter((c) => registered.has(c));
+      if (taken.length > 0) return hex({ error: { code: 'INVALID_INPUT', message: 'a commitment is already registered to another tag', retryable: false, taken } });
+      for (const c of named) registered.add(c);
+      return hex({ result: { pool: pool.account, tag: request.tag } });
+    }
+    return offline();
+  });
+  const wallet = await startXrplWallet(CONFIG, account, { prover, mesh });
+  await wallet.receive(pool.symbol, 0, new Map([[size, 2]]));
+  assert.deepEqual(asked.at(-1)!.sort(), [mine(9), mine(10)].sort(), 'past A\'s nine, and the free one of the last pair kept');
+  assert.ok(asked.slice(0, -1).every((named) => named.some((c) => theirs.includes(c))), 'drawn again only for a collision');
+  wallet.close();
+});

@@ -746,7 +746,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
         return commitments;
       };
       let commitments = await mint();
-      for (let attempt = 0; ; attempt++) {
+      for (let attempt = 0, redrawn = 0; ; attempt++) {
         const tag = freshTag();
         try {
           await registerTag(xrpl, p.account, tag, commitments, undefined, true);
@@ -755,6 +755,23 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
           return record;
         } catch (error) {
           const message = (error as Error).message;
+          // Named by the pool: numbers this account drew in another browser, for a
+          // tag nobody paid (an import finds only paid notes). Each stays here, its
+          // own, and only those are drawn again, until past the other browser's,
+          // up to 64 deep, as many as one registration holds.
+          const taken = (error as { taken?: readonly string[] }).taken;
+          if (taken !== undefined && taken.length > 0 && redrawn < 64) {
+            const gone = new Set(taken);
+            for (const [size, list] of Object.entries(commitments)) {
+              const next: NoteSummary['commitment'][] = [];
+              // One at a time: a note is drawn through `drawing`, which two at once would share.
+              for (const c of list) next.push(gone.has(c) ? (await newNote(scopeFor(p, Number(size)))).commitment : c);
+              commitments[size] = next;
+            }
+            redrawn++;
+            attempt--;
+            continue;
+          }
           // A random 32-bit tag already in use is rare; another draw settles it.
           // A note already registered was drawn by this phrase somewhere else:
           // it stays here (it is this wallet's), and the next numbers are fresh.
