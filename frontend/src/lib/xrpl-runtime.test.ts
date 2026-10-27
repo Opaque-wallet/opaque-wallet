@@ -181,3 +181,39 @@ test('a receive gets past note numbers another browser registered and was never 
   assert.ok(asked.slice(0, -1).every((named) => named.some((c) => theirs.includes(c))), 'drawn again only for a collision');
   wallet.close();
 });
+
+test('refreshes at once keep each note a payment credited to the address once, and share one sync', async () => {
+  // xrpl:e2e:address, live (2026-10-27): the balance read 284 where the ledger
+  // held 190. Refresh pressed while the page's own refresh ran: both syncs found
+  // the credited notes missing, and both kept them.
+  items.clear();
+  const tag = 77;
+  items.set(`opaque:xrpl:${account.id}:addresses:v1`, JSON.stringify({ [pool.account]: { i: 0, tag, synced: {} } }));
+  let answer!: () => void;
+  const gate = new Promise<void>((r) => { answer = r; });
+  const hex = (v: unknown) => toHex(new TextEncoder().encode(JSON.stringify(v)));
+  let looks = 0;
+  const { mesh } = relays(async (r) => {
+    if (r.kind === 'RING_SNAPSHOT') return ringOf(r.scope, others);
+    if (r.kind === 'XRPL' && (r as { operation: string }).operation === 'TAG_STATUS') {
+      looks++;
+      await gate;
+      return hex({ result: { registered: true, notes: 3, carried: '0', sizes: { [String(size)]: { registered: 3, credited: 3 } }, owner: null } });
+    }
+    return offline();
+  });
+  const wallet = await startXrplWallet(CONFIG, account, { prover, mesh });
+  // The page's refresh asks the pool; Refresh is pressed twice while it waits.
+  const first = wallet.refresh();
+  await settle();
+  const all = Promise.all([first, wallet.refresh(), wallet.refresh()]);
+  await settle();
+  answer();
+  await all;
+  const stored = Object.values(JSON.parse(items.get(`opaque:xrpl:${account.id}:notes:v1`) ?? '{}') as Record<string, { commitment: string }>);
+  assert.equal(stored.length, 3, 'a credited note was kept twice: the balance counts it twice');
+  assert.equal(new Set(stored.map((n) => n.commitment)).size, 3);
+  // The one under way, and one more that the other two share: never a backlog.
+  assert.equal(looks, 2);
+  await wallet.close();
+});

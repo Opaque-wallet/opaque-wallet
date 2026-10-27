@@ -35,7 +35,7 @@ import { closeSite, newSite, resultOf, rotate, setupSite, signAndSubmit, signMes
 import { planSweep, runSweep, sweepKey, type SweepPlan } from '../../../backend/xrpl/sweep.ts';
 import { deliverMinOf, notesForPayments, quoteNotes, xrpPriceIn } from '../../../backend/xrpl/swap.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
-import { createNoteVault, createRingClient, type NoteVault } from '../../../packages/ring-client/src/index.ts';
+import { createNoteVault, createRingClient, exclusive, type NoteVault } from '../../../packages/ring-client/src/index.ts';
 import type { RingProver } from '../../../packages/ring-client/src/ring-client.ts';
 import { xrplDeployment, xrplMeshTrustRoot, type XrplPoolDeployment } from '../../../deployments/xrpl.ts';
 import { keyFrom } from './backup.ts';
@@ -485,11 +485,28 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
     }
     throw new Error('no free tag for this account yet: try again');
   }
+  /** Per owned tag: the last sync begun, and the one queued behind it, which every caller meanwhile shares. */
+  const syncing = new Map<string, { last: Promise<unknown>; next?: Promise<number> | undefined }>();
   /**
    * Keeps the notes payments have credited to an owned tag, and tops it up
    * when a size runs low, revealing the next link. Returns the notes it kept.
+   * One sync of a tag at a time, here and in this browser's other tabs: two at
+   * once each found a credited note missing and kept it, and the balance
+   * counted it twice (xrpl:e2e:address, 2026-10-27). Refreshes faster than a
+   * sync queue one more, never a backlog.
    */
-  async function syncAddress(keys: AccountKeys, p: XrplPoolDeployment, rec: AddressRecord, kind: TagKind = 'address', again = true): Promise<number> {
+  function syncAddress(keys: AccountKeys, p: XrplPoolDeployment, rec: AddressRecord, kind: TagKind = 'address'): Promise<number> {
+    const name = `${kind === 'address' ? K.addresses : K.swapTags}:${p.account}`;
+    const s = syncing.get(name) ?? { last: Promise.resolve() };
+    if (s.next !== undefined) return s.next;
+    const start = () => { s.next = undefined; return exclusive(name, () => syncNow(keys, p, rec, kind)); };
+    const next = s.last.then(start, start);
+    s.next = next;
+    s.last = next.catch(() => undefined);
+    syncing.set(name, s);
+    return next;
+  }
+  async function syncNow(keys: AccountKeys, p: XrplPoolDeployment, rec: AddressRecord, kind: TagKind, again = true): Promise<number> {
     const s = await tagStatus(xrpl, p.account, rec.tag);
     const have = new Set((await vault.list()).map((n) => n.commitment as string));
     const synced = { ...rec.synced };
@@ -536,7 +553,7 @@ export async function startXrplWallet(config?: XrplStackConfig, account: Account
       for (const [size, k] of Object.entries(batch)) registered[size] = registered[size]! + k;
     }
     // What the new notes credited from what it carried, kept now rather than at the next sync.
-    return added && again ? kept + await syncAddress(keys, p, { ...rec, synced }, kind, false) : kept;
+    return added && again ? kept + await syncNow(keys, p, { ...rec, synced }, kind, false) : kept;
   }
   /**
    * The swap tag on `p`, made the first time, with at least `need[size]`
