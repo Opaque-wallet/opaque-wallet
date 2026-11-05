@@ -9,6 +9,9 @@
 //                                                       the factory pays, and no ECDSA key signs anything
 //   node --use-system-ca ethereum/frame-tx.ts send      VERIFY (FORS+C) + one transfer
 //   node --use-system-ca ethereum/frame-tx.ts attack    the same, signed by another FORS key: must be refused
+//   node --use-system-ca ethereum/frame-tx.ts pool      one atomic FORS-signed transaction: deploy pqUSD, approve,
+//                                                       create the ETH/pqUSD v4 pool, add liquidity (once)
+//   node --use-system-ca ethereum/frame-tx.ts swap [eth]  swap ETH for pqUSD on Uniswap v4, signed by FORS+C alone
 //
 // Keys live in .stack/eth-devnet/ (0600) and are never printed: the deployer's
 // secp256k1 key, which only deploys the factory, and each account's FORS seed.
@@ -25,12 +28,14 @@ import { encodeDeployData, formatEther, getContractAddress, hexToBytes, parseEth
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 import { accountOf, accountTx, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, forsKey, keyOf, mined, nonceOf, sendCalls, settled, txUrl } from './frame.ts';
+import { pqUSD, poolSetup, swapCall, tokenBalance } from './uniswap.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIR = join(HERE, '..', '.stack', 'eth-devnet');
 const STATE = join(DIR, 'state.json');
 const DEPLOYMENTS = join(HERE, '..', '..', 'deployments', 'eth-devnet.json');
-const ARTIFACT = join(HERE, '..', '..', 'contracts', 'out-frame', 'FramePQAccountFactory.sol', 'FramePQAccountFactory.json');
+const artifactOf = (name: string): string => join(HERE, '..', '..', 'contracts', 'out-frame', `${name}.sol`, `${name}.json`);
+const ARTIFACT = artifactOf('FramePQAccountFactory');
 
 /** A secret file, made on first use with `make`, read thereafter. Never printed. */
 function secret(name: string, make: () => Hex): Hex {
@@ -116,7 +121,35 @@ async function attack(): Promise<void> {
   }
 }
 
-const commands: Record<string, () => Promise<void>> = { fund, factory, create, send, attack };
+/** The ETH/pqUSD pool, in one atomic transaction the account signs with FORS+C. */
+async function pool(): Promise<void> {
+  if ((devnet.uniswap as { pqUSD: string | null }).pqUSD !== null) throw new Error(`the pool exists already: pqUSD ${pqUSD()}`);
+  const { account, key } = current();
+  const { abi, bytecode } = JSON.parse(readFileSync(artifactOf('TestToken'), 'utf8')) as { abi: Abi; bytecode: { object: Hex } };
+  const initCode = encodeDeployData({ abi, bytecode: bytecode.object, args: ['Post-Quantum Test Dollar', 'pqUSD', account, parseEther('1000000')] });
+  const { token, calls } = await poolSetup(account, initCode, parseEther('0.1'), 2000n);
+  const hash = await sendCalls(account, key, calls, true);
+  await settled(hash);
+  console.log(`pqUSD ${token}; ETH/pqUSD pool made and funded, ${calls.length} frames in one atomic batch: ${hash}\n${txUrl(hash)}`);
+  const file = JSON.parse(readFileSync(DEPLOYMENTS, 'utf8'));
+  file.uniswap.pqUSD = token;
+  writeFileSync(DEPLOYMENTS, `${JSON.stringify(file, null, 2)}\n`);
+  console.log('written to deployments/eth-devnet.json');
+}
+
+/** ETH for pqUSD on Uniswap v4, with FORS+C the only signature. */
+async function swap(): Promise<void> {
+  const { account, key } = current();
+  const amount = parseEther(process.argv[3] ?? '0.001');
+  const before = await tokenBalance(account);
+  const { call: c, expected } = await swapCall(amount);
+  const hash = await sendCalls(account, key, [c]);
+  await settled(hash);
+  const got = (await tokenBalance(account)) - before;
+  console.log(`swapped ${formatEther(amount)} ETH for ${formatEther(got)} pqUSD (quoted ${formatEther(expected)}): ${hash}\n${txUrl(hash)}`);
+}
+
+const commands: Record<string, () => Promise<void>> = { fund, factory, create, send, attack, pool, swap };
 const run = commands[process.argv[2] ?? ''];
 if (run === undefined) throw new Error(`usage: node ethereum/frame-tx.ts ${Object.keys(commands).join(' | ')}`);
 await run();

@@ -245,7 +245,22 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - It talks straight to the devnet gateway, which allows any origin; this devnet has no relay mesh.
 - `backend/scripts/e2e-devnet-page.ts` runs that whole life in Chromium against the live devnet.
 
+**Uniswap v4, signed with FORS+C (`backend/ethereum/uniswap.ts`):**
+- **Setup (`frame-tx.ts pool`):** one atomic FORS-signed transaction of 5 SENDER frames:
+  - deploy pqUSD (`contracts/frame/TestToken.sol`, through the CREATE2 deployer, so no ECDSA deploys it);
+  - approve Permit2, and the PositionManager in Permit2;
+  - initialize ETH/pqUSD (fee 0.30%, tick spacing 60, no hooks, 2,000 pqUSD per ETH);
+  - add 0.1 ETH of full-range liquidity.
+- **pqUSD** is at `0x26453ffc2FdEC380396852947A3b2c1467384D9B`. The pool's price and liquidity, read back from PoolManager storage, are exactly the ones set.
+- **Swap (`frame-tx.ts swap`):** one SENDER frame, `UniversalRouter.execute` with V4_SWAP: SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL.
+  - `0x6a530b4d8c639053af8b59a171868a1c7c9e034525e0726add5bdd32463f205a` swapped 0.001 ETH for 1.974316068794122597 pqUSD.
+  - That's exactly the quote, computed from the pool's storage with the v4 swap step. The quote matches the router's own answer to the unit.
+- **Found on the way:**
+  - The devnet runs the newer v4-periphery: `ExactInputSingleParams` carries `minHopPriceX36`, and an impossible value trips its price check.
+  - ethrex refuses `eth_call` from a contract address and takes no state overrides. So the quote comes from storage, not a simulation.
+
 **Still to do:**
+- **The wallet page's Swap button** (the same `swapCall`).
 - **SENDER frames that do the demo,** under `ATOMIC_BATCH_FLAG` (all or nothing):
   - (a) set the ENS name and records (the T7 registry, deployed on the devnet);
   - (b) swap or add liquidity on the predeployed v4 (the T8 hook);
