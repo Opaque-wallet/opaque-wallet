@@ -11,7 +11,7 @@
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 
 import { deployment, requireService } from '../../deployments/index.ts';
-import { acceptTerms, ARC_READY, createWallet } from './xrpl-wallet-page.ts';
+import { acceptTerms, ARC_READY, createWallet } from './wallet-page.ts';
 
 const APP_URL = process.env['APP_URL'] ?? 'https://www.opaque.credit/app.html';
 const stackOrigin = new URL(requireService('meshExitUrl')).origin;

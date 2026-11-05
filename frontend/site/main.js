@@ -28,18 +28,27 @@ function leaning(canvas, area, size, dot, onDraw) {
 const heroEl = $('.hero');
 
 // ── the ledger behind the hero: public lines everywhere, blacked out inside the ring ──
-// Made-up XRPL activity: nothing is fetched, so the page tells no ledger server who is looking.
+// Made-up activity on Ethereum and the XRP Ledger: nothing is fetched, so the page tells no node who is looking.
 const ledgerCanvas = $('.hero__ledger');
 const lx = ledgerCanvas.getContext('2d');
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const FONT = '12.5px ui-monospace, SFMono-Regular, Menlo, monospace';
-let seed = 20261018, ledgerIndex = 4812207;
+let seed = 20261018, ledgerIndex = 4812207, blockNumber = 9431566;
 const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const pick = (list) => list[Math.floor(rnd() * list.length)];
-const chars = (n) => Array.from({ length: n }, () => pick(B58)).join('');
+const chars = (n, set = B58) => Array.from({ length: n }, () => pick(set)).join('');
 const addr = () => `r${chars(3)}…${chars(4)}`;
+const hex = () => `0x${chars(4, '0123456789abcdef')}…${chars(4, '0123456789abcdef')}`;
 const amount = () => (rnd() < 0.5 ? (rnd() * 900 + 1).toFixed(2) : String(Math.ceil(rnd() * 40) * 25));
-function record() {
+function record(evm) {
+  if (evm) {
+    if (rnd() < 0.25) blockNumber += 1;
+    const k = rnd();
+    const [type, detail] = k < 0.5 ? ['Transfer', `${hex()} → ${hex()}  ${amount()} ${pick(['USDC', 'USDC', 'ETH'])}`]
+      : k < 0.8 ? ['Swap', `${hex()}  ${amount()} USDC for ${pick(['ETH', 'WETH'])}`]
+      : ['Approve', `${hex()}  USDC to ${hex()}`];
+    return `${blockNumber.toLocaleString('en-US')}  ${type.padEnd(11)}  ${detail.padEnd(46)}  success`;
+  }
   if (rnd() < 0.25) ledgerIndex += 1;
   const k = rnd();
   const [type, detail] = k < 0.55 ? ['Payment', `${addr()} → ${addr()}  ${amount()} ${pick(['XRP', 'XRP', 'RLUSD', 'USDC'])}`]
@@ -49,8 +58,10 @@ function record() {
   return `${ledgerIndex.toLocaleString('en-US')}  ${type.padEnd(11)}  ${detail.padEnd(46)}  tesSUCCESS`;
 }
 function ledgerRow(cols) {
+  // One chain per row, so its columns line up.
+  const evm = rnd() < 0.5;
   let text = '';
-  while (text.length < cols) text += (text ? '      ' : '') + record();
+  while (text.length < cols) text += (text ? '      ' : '') + record(evm);
   return { text, words: [...text.matchAll(/\S+/g)].map((m) => [m.index, m[0].length]) };
 }
 const ledger = { rows: [], cols: 0, offset: 0, last: 0, W: 0, H: 0, cw: 7.5, lh: 22, fade: null };

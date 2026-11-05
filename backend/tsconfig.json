@@ -29,5 +29,8 @@
     "chain",
     "xrpl",
     "stack.ts"
+  ],
+  "exclude": [
+    "xrpl/scripts"
   ]
 }

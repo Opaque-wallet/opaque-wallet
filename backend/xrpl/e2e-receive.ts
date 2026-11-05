@@ -23,7 +23,7 @@ import { BatchFlags, GlobalFlags, PaymentFlags, Wallet, type Batch } from 'xrpl'
 
 import type { ApprovedRelease } from '@opaque/protocol-types';
 
-import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
+import { xrplDeployment, xrplPool } from '../../deployments/xrpl/index.ts';
 import { signQuery } from '../onramp/moonpay.ts';
 import { createNoteSecret, deriveCommitment, deriveNullifier } from '../zk/index.ts';
 import { signerListOf } from './attester.ts';

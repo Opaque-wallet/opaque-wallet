@@ -63,7 +63,7 @@ import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 import { deployment, meshTrustRoot, requireService, type SwapToken } from '../../../deployments/index.ts';
 import { exportBackup, keyStoreName, NOTES_KEY, restoreBackup, WALLET_ID } from './backup.ts';
 import { arcState, arcStorageOf, findNotes, forsSeed, noteCounters, noteSecret, saveArcState } from './arc-keys.ts';
-import type { AccountKeys } from './xrpl-keys.ts';
+import type { AccountKeys } from './wallet-keys.ts';
 import { createWorkerProver } from './prover.ts';
 import { createPaymentApplication, type AdapterPorts } from './protocol/index.ts';
 import { localNoteStorage } from './note-storage.ts';
@@ -416,6 +416,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       // LI.FI's pinned contract, nothing paid in gas currency, and its call
       // decoded: this account receives at least the least it shows, of `to`,
       // for exactly `amount` of `from`. The signer checks the call again.
+      if (deployment.swap.router === null) throw new Error(`no swaps on ${deployment.network.displayName} yet`);
       const router = deployment.swap.router.toLowerCase();
       if (quote.to !== router || quote.approvalAddress !== router) throw new Error('the quote calls a contract other than LI.FI\'s');
       if (BigInt(quote.value) !== 0n) throw new Error('the quote asks for USDC on top of the swap');

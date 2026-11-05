@@ -43,7 +43,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import { xrplDeployment } from '../../../deployments/xrpl.ts';
+import { xrplDeployment } from '../../../deployments/xrpl/index.ts';
 
 // OPAQUE_MCP_CLI: the built one (node_modules/@opaque/mcp/lib/cli.js), to test the package a company installs.
 const CLI = process.env['OPAQUE_MCP_CLI'] ?? new URL('../src/cli.ts', import.meta.url).pathname;

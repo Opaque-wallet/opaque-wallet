@@ -23,7 +23,7 @@ import type { BackupOperation, Hex } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
 import { BASE_BITS, findWork } from '../../../backend/mesh/backup-work.ts';
-import { importedKeyTexts, restoreImportedKeys, savePhrase, saveWalletState, storedPhrase, walletState } from './xrpl-keys.ts';
+import { importedKeyTexts, restoreImportedKeys, savePhrase, saveWalletState, storedPhrase, walletState } from './wallet-keys.ts';
 
 export type BackupTransport = (operation: BackupOperation, encodedRequest: Hex) => Promise<Hex>;
 
@@ -51,7 +51,7 @@ const LOCAL = 'opaque:passkey-backup:v1';
 const STORE = 'mainnet-1';
 /** backend/mesh/backup-store.ts MAX_BLOB. */
 const MAX_BLOB = 24_000;
-/** The XRPL browser account's records: xrpl-runtime.ts storageOf(null). */
+/** The XRPL browser account's records: xrpl/runtime.ts storageOf(null). */
 const XRPL_BROWSER = /^opaque:xrpl-(notes|tags|sites):v1(@[a-z-]+)?$/;
 const WRAPPED = 12 + 32 + 16;
 /** Saved again at least this often, so the store never counts it stale (backup-store.ts STALE_MS). */

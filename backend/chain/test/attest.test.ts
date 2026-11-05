@@ -7,7 +7,7 @@ import type { Address, Bytes32 } from '@opaque/protocol-types';
 import { asAddress, asChainId, derivePaymentContext } from '@opaque/protocol-types/codecs.js';
 import { FORS_C_DEFAULT, forsSchemeId, utf8 } from '@opaque/pq-wallet';
 
-import { deployment, poolFor, requireContract } from '../../../deployments/index.ts';
+import { deployment, poolFor, requireAttester, requireContract } from '../../../deployments/index.ts';
 import { attestationDigest, attestationPayload, ringVerifierId, type AttesterIdentity } from '../../cre/attest.ts';
 
 // LIVE. The attester signs a digest it computes itself (see attest.ts, rule 2).
@@ -26,7 +26,7 @@ const REGISTRY = requireContract('pqKeyRegistry');
 const identity: AttesterIdentity = {
   chainId: BigInt(deployment.network.chainId),
   registry: REGISTRY as Address,
-  attester: deployment.accounts.attester as Address,
+  attester: requireAttester() as Address,
   pool: ring8.address as Address,
   denomination: ring8.denomination,
 };

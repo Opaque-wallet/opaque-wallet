@@ -28,10 +28,10 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { openWallet } from './xrpl-wallet-page.ts';
+import { chromium } from '../../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet } from '../../scripts/wallet-page.ts';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const EXTENSION = join(ROOT, 'extension', 'dist');
 const DAPP = (process.argv[2] ?? 'https://opaque-xrpl-demo.vercel.app').replace(/\/+$/, '');
 const STACK = 'https://opaque-xrpl-testnet-production.up.railway.app';

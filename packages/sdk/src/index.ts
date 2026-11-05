@@ -15,7 +15,7 @@
 
 import { randomBytes } from 'node:crypto';
 
-import type { AccountKeys } from '../../../frontend/src/lib/xrpl-keys.ts';
+import type { AccountKeys } from '../../../frontend/src/lib/wallet-keys.ts';
 import type { ArcClient } from './arc.ts';
 import { FileStore, installStorage } from './store.ts';
 import type { XrplClient } from './xrpl.ts';
@@ -68,7 +68,7 @@ function useNetwork(network: string): asserts network is Network {
 }
 
 // The wallet code is imported only once the network is set: it reads it at import.
-const keys = () => import('../../../frontend/src/lib/xrpl-keys.ts');
+const keys = () => import('../../../frontend/src/lib/wallet-keys.ts');
 
 function wrap(store: FileStore, account: AccountKeys, network: Network, text: string): OpaqueWallet {
   installStorage(store);

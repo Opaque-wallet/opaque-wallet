@@ -13,7 +13,7 @@ import { join } from 'node:path';
 
 import { BatchFlags, Client, GlobalFlags, Wallet, type Batch, type Payment } from 'xrpl';
 
-import { xrplDeployment, type XrplPoolDeployment } from '../../deployments/xrpl.ts';
+import { xrplDeployment, type XrplPoolDeployment } from '../../deployments/xrpl/index.ts';
 import { createNoteSecret, deriveCommitment } from '../zk/index.ts';
 import { XRPL_STATE } from './node.ts';
 import { createPoolSource } from './pool.ts';

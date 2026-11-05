@@ -1,6 +1,6 @@
 # Extension: The Wallet in the Side Panel
 
-> **Chrome Manifest V3, version 0.6.0. Chrome, Brave and Edge. Arc mainnet, Arc testnet and XRPL testnet.**
+> **Chrome Manifest V3, version 0.7.0. Chrome, Brave and Edge. Arc mainnet, Arc testnet and XRPL testnet.**
 
 **One Opaque extension for every chain.** The side panel shows the same wallet pages served at opaque.credit, from the same Vite build: `app.html` (Arc mainnet), `testnet/app.html` (Arc testnet) and `testnet/xrpl.html` (XRPL testnet). The header's network picker moves between them, and the panel reopens on the network used last. Each network keeps its own keys and notes. A new chain is a new page in `PAGES` (build.mjs) and an entry in the picker (`frontend/src/lib/network-picker.ts`), never a second extension. The side panel stays open while a deposit or payment runs, where a popup would close on the first click outside it.
 

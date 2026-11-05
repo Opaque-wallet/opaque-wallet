@@ -13,7 +13,7 @@ import { makeAmount, MAX_NOTES_PER_DEPOSIT } from '../../../frontend/src/lib/pro
 import { startWallet, type WalletRuntime } from '../../../frontend/src/lib/runtime.ts';
 import { oneOperationAtATime } from '../../../backend/chain/pq-wallet-chain.ts';
 import type { SwapQuote } from '../../../backend/chain/wallet-rpc.ts';
-import type { AccountKeys } from '../../../frontend/src/lib/xrpl-keys.ts';
+import type { AccountKeys } from '../../../frontend/src/lib/wallet-keys.ts';
 import { FileKeyStore } from './keys.ts';
 import { nodeProver } from './prover.ts';
 import type { FileStore } from './store.ts';

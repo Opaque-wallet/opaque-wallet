@@ -34,15 +34,15 @@ import { fileURLToPath } from 'node:url';
 
 import { BatchFlags, Client, GlobalFlags, NFTokenCreateOfferFlags, NFTokenMintFlags, Wallet, type Batch, type SubmittableTransaction } from 'xrpl';
 
-import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { openWallet, unlockIfAsked } from './xrpl-wallet-page.ts';
-import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
-import { createNoteSecret, deriveCommitment } from '../zk/index.ts';
-import { startXrpl, XRPL_STATE } from '../xrpl/node.ts';
-import { invoiceIdOf, scopeOf } from '../xrpl/protocol.ts';
+import { chromium } from '../../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet, unlockIfAsked } from '../../scripts/wallet-page.ts';
+import { xrplDeployment, xrplPool } from '../../../deployments/xrpl/index.ts';
+import { createNoteSecret, deriveCommitment } from '../../zk/index.ts';
+import { startXrpl, XRPL_STATE } from '../node.ts';
+import { invoiceIdOf, scopeOf } from '../protocol.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, '..', '..');
+const ROOT = join(HERE, '..', '..', '..');
 const WALLET = 'http://127.0.0.1:5199';
 const DAPP = 'http://localhost:5299';
 const CLOSE = process.argv.includes('--close');
@@ -72,7 +72,7 @@ const rlusdPool = xrplPool('RLUSD');
 if (rlusdPool.asset.kind !== 'IOU') throw new Error('the RLUSD pool must be a token pool');
 const { currency, issuer: ISSUER } = rlusdPool.asset;
 const rlusd = (value: string) => ({ currency, issuer: ISSUER, value });
-const client = new Client(xrplDeployment.network.wss);
+const client = new Client(xrplDeployment.network.wss, { connectionTimeout: 20_000 });
 const children: ChildProcess[] = [];
 let browser: any;
 
@@ -121,7 +121,16 @@ try {
   children.push(await start('npx', ['vite', '--port', '5299', '--strictPort', '--host', 'localhost'], join(ROOT, 'demo', 'xrpl-dapp'), /ready in|Local:/));
 
   browser = await chromium.launch({ channel: 'chrome', headless: true });
-  const context = await browser.newContext();
+  // SHOTS=<dir> keeps a 1280×800 picture of each screen a person sees (the store's screenshot size).
+  const SHOTS = process.env['SHOTS'];
+  const shot = async (page: any, name: string) => {
+    if (SHOTS === undefined) return;
+    // Popups open at their own size; and a sheet or view still fading in would be caught half drawn.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity));
+    await page.screenshot({ path: join(SHOTS, `${name}.jpg`), quality: 92 });
+  };
+  const context = await browser.newContext(SHOTS === undefined ? {} : { viewport: { width: 1280, height: 800 } });
   const outside: string[] = [];
   const police = (p: any) => {
     p.on('request', (r: any) => {
@@ -148,6 +157,13 @@ try {
     await new Promise((r) => setTimeout(r, 4_000));
   }
   check('the wallet holds 20 private XRP', (await wallet.textContent('#balance-xrp')) === '20', String(await wallet.textContent('#note-count')));
+  if (SHOTS !== undefined) {
+    await shot(wallet, 'wallet-home');
+    await wallet.click('#network-switch');
+    await wallet.waitForSelector('#network-dialog[open]');
+    await shot(wallet, 'wallet-networks');
+    await wallet.keyboard.press('Escape');
+  }
 
   // ── the dapp ─────────────────────────────────────────────────────────────
   const dapp = await context.newPage();
@@ -180,6 +196,7 @@ try {
     }
     await popup.waitForFunction((t: string) => new RegExp(t).test(document.getElementById('request-title')?.textContent ?? '')
       && !(document.getElementById('approve') as HTMLButtonElement).disabled, title.source, { timeout: 120_000 });
+    await shot(popup, id);
     await popup.click('#approve');
     await logged(id);
     return lineOf(id);
@@ -198,6 +215,12 @@ try {
   if (WC === undefined) {
     const message = await act('message', /Sign a message/);
     check('signMessage', /signature/.test(message), message);
+  }
+  if (SHOTS !== undefined) {
+    await wallet.click('#tab-apps');
+    await wallet.waitForSelector('#site-list button');
+    await shot(wallet, 'wallet-apps');
+    await wallet.click('#tab-home');
   }
 
   // ── what the ledger says about the dapp's account ───────────────────────

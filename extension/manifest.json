@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Opaque",
-  "version": "0.6.0",
-  "description": "One private wallet for every chain Opaque runs on: Arc mainnet and testnet, and XRPL testnet. Post-quantum proofs, a relay mesh, and an account per app.",
+  "version": "0.7.0",
+  "description": "A private, post-quantum wallet for Arc and XRPL: payments through a relay mesh, and a separate account for every app.",
   "action": {
     "default_title": "Open Opaque"
   },

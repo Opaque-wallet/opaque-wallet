@@ -5,7 +5,7 @@ import { deriveCommitment } from '@opaque/zk';
 
 import { deployment } from '../../../deployments/index.ts';
 import { addressOfKey, arcAddressOf, deployerKey, findNotes, forsSeed, NOTE_GAP, noteSecret } from './arc-keys.ts';
-import { accountKeys } from './xrpl-keys.ts';
+import { accountKeys } from './wallet-keys.ts';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');

@@ -51,7 +51,7 @@ import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index
 import { createPublicClient, createWalletClient, http, parseAbiItem, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { asChainId, fromHex } from '@opaque/protocol-types/codecs.js';
-import { deployment, poolFor } from '../../deployments/index.ts';
+import { deployment, poolFor, requireAttester } from '../../deployments/index.ts';
 import { deriveCommitment } from '../zk/spend.ts';
 import { ARC } from '../chain/pool.ts';
 
@@ -61,7 +61,7 @@ let APP_URL = process.env['APP_URL'] ?? 'http://127.0.0.1:5173/app.html';
 const EXTENSION = process.env['E2E_EXTENSION'];
 const WALLET_KEY = process.env['E2E_WALLET_KEY'] as `0x${string}` | undefined;
 const pc = createPublicClient({ chain: ARC, transport: http() });
-const RECIPIENT = deployment.accounts.attester;
+const RECIPIENT = requireAttester();
 const NOTES = Number(process.env['E2E_NOTES'] ?? 1);
 const DEPOSIT = Number(process.env['E2E_DEPOSIT'] ?? NOTES);
 const SEND = Number(process.env['E2E_SEND'] ?? NOTES);

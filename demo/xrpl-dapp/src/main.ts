@@ -12,7 +12,7 @@ import { Client, encode } from 'xrpl';
 import QRCode from 'qrcode';
 import { Adapters, WalletManager } from 'xrpl-connect';
 
-import deployment from '../../../deployments/xrpl-testnet.json';
+import deployment from '../../../deployments/xrpl/testnet.json';
 import { OpaqueAdapter } from '../../../frontend/src/lib/opaque-adapter.ts';
 
 const q = new URLSearchParams(location.search);
@@ -27,7 +27,7 @@ const projectId = q.get('wc') ?? import.meta.env.VITE_WC_PROJECT ?? null;
 const walletConnect = projectId === null ? undefined : new Adapters.WalletConnect({
   projectId, useModal: false, modalMode: 'never',
   metadata: { name: 'Demo XRPL dapp', description: 'An ordinary dapp on xrpl-connect', url: location.origin, icons: [] },
-  onQRCode: (uri) => { el('wc-uri').textContent = uri; void QRCode.toCanvas(el('wc-qr'), uri, { width: 240, margin: 2 }); },
+  onQRCode: (uri) => { el('wc-uri').textContent = uri; el('copy-wc').hidden = false; void QRCode.toCanvas(el('wc-qr'), uri, { width: 240, margin: 2 }); },
 });
 const extensions = [new Adapters.GemWallet(), new Adapters.Crossmark()];
 const manager = new WalletManager({ adapters: [adapter as never, ...extensions, ...(walletConnect === undefined ? [] : [walletConnect])], network: 'testnet' });
@@ -66,6 +66,13 @@ run('connect', connectWith('opaque'));
 run('connect-wc', connectWith('walletconnect'));
 run('connect-gem', connectWith('gemwallet'));
 run('connect-crossmark', connectWith('crossmark'));
+// A long link wraps after its '?', and selecting the first line copies a link with no key.
+el('copy-wc').addEventListener('click', () => {
+  navigator.clipboard.writeText(el('wc-uri').textContent ?? '').then(
+    () => { el('copy-wc').textContent = 'Copied'; },
+    () => { getSelection()?.selectAllChildren(el('wc-uri')); },
+  );
+});
 // WalletConnect answers with the signed tx_json and its hash, and no result: the dapp reads that from the ledger.
 const outcome = async (r: { hash: string; engine_result?: string }) => `${r.hash} ${r.engine_result ?? await resultOf(r.hash)}`;
 run('trade', async () => outcome(await manager.signAndSubmit({

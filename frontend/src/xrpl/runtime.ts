@@ -13,7 +13,7 @@
 //                this page never contacts MoonPay.
 //   pools        compiled in (deployments/xrpl-*.json), never named by a server.
 //   secrets      an account of a recovery phrase draws every note and every app
-//                account from the phrase (lib/xrpl-keys.ts), so importing the
+//                account from the phrase (lib/wallet-keys.ts), so importing the
 //                phrase elsewhere finds them again; the browser wallet from
 //                before phrases keeps random ones, backed up by file.
 //
@@ -24,7 +24,7 @@ import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 import { createNoteSecret, deriveCommitment } from '@opaque/zk';
 
 import { createMeshBootstrap } from '../../../backend/mesh/bootstrap.ts';
-import type { BackupTransport } from './passkey-backup.ts';
+import type { BackupTransport } from '../lib/passkey-backup.ts';
 import { chainTo } from '../../../backend/mesh/directory.ts';
 import { createGraphHealth, type GraphHealth } from '../../../backend/mesh/graph-health.ts';
 import type { DirectoryTrustRoot, SignedDirectory } from '../../../backend/mesh/contracts.ts';
@@ -37,17 +37,17 @@ import { deliverMinOf, notesForPayments, quoteNotes, xrpPriceIn } from '../../..
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient, exclusive, type NoteVault } from '../../../packages/ring-client/src/index.ts';
 import type { RingProver } from '../../../packages/ring-client/src/ring-client.ts';
-import { xrplDeployment, xrplMeshTrustRoot, type XrplPoolDeployment } from '../../../deployments/xrpl.ts';
-import { keyFrom } from './backup.ts';
-import { createWorkerProver } from './prover.ts';
-import { createPaymentFlow, makeAmount, type AdapterPorts } from './protocol/index.ts';
-import { localNoteStorage } from './note-storage.ts';
-import { runPaymentLanes } from './payment-lanes.ts';
-import type { WalletConnectConfig } from './walletconnect.ts';
-import { scoped } from './storage-name.ts';
+import { xrplDeployment, xrplMeshTrustRoot, type XrplPoolDeployment } from '../../../deployments/xrpl/index.ts';
+import { keyFrom } from '../lib/backup.ts';
+import { createWorkerProver } from '../lib/prover.ts';
+import { createPaymentFlow, makeAmount, type AdapterPorts } from '../lib/protocol/index.ts';
+import { localNoteStorage } from '../lib/note-storage.ts';
+import { runPaymentLanes } from '../lib/payment-lanes.ts';
+import type { WalletConnectConfig } from '../lib/walletconnect.ts';
+import { scoped } from '../lib/storage-name.ts';
 import { sha256 } from '@noble/hashes/sha256';
 
-import { stream, type AccountKeys } from './xrpl-keys.ts';
+import { stream, type AccountKeys } from '../lib/wallet-keys.ts';
 
 export interface XrplStackConfig {
   readonly directoryChain?: readonly SignedDirectory[];

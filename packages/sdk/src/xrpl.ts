@@ -1,13 +1,13 @@
-// XRPL, from Node: the XRPL page's runtime (frontend/src/lib/xrpl-runtime.ts)
+// XRPL, from Node: the XRPL page's runtime (frontend/src/xrpl/runtime.ts)
 // with its proofs on a worker thread. Testnet only, as the pools are.
 
 import type { UnixSeconds } from '@opaque/protocol-types';
 
 import { isAccount } from '../../../backend/xrpl/protocol.ts';
-import { xrplDeployment } from '../../../deployments/xrpl.ts';
+import { xrplDeployment } from '../../../deployments/xrpl/index.ts';
 import { paymentDeadline } from '../../../frontend/src/lib/payment-deadline.ts';
-import { loadXrplStack, startXrplWallet, type Sent, type SwapQuote, type XrplWallet } from '../../../frontend/src/lib/xrpl-runtime.ts';
-import type { AccountKeys } from '../../../frontend/src/lib/xrpl-keys.ts';
+import { loadXrplStack, startXrplWallet, type Sent, type SwapQuote, type XrplWallet } from '../../../frontend/src/xrpl/runtime.ts';
+import type { AccountKeys } from '../../../frontend/src/lib/wallet-keys.ts';
 import { nodeProver } from './prover.ts';
 
 /** The hosted XRPL testnet service's config (frontend/package.json's build:site names the same). */

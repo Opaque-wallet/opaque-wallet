@@ -20,8 +20,8 @@ import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { createWallet, importWallet, unlockIfAsked } from './xrpl-wallet-page.ts';
+import { chromium } from '../../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { createWallet, importWallet, unlockIfAsked } from '../../scripts/wallet-page.ts';
 
 const WALLET = (process.argv[2] ?? 'https://www.opaque.credit').replace(/\/+$/, '');
 const DAPP = (process.argv[3] ?? 'https://opaque-xrpl-demo.vercel.app').replace(/\/+$/, '');

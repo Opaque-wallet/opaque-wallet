@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { AMMDepositFlags, Client, NFTokenCreateOfferFlags, NFTokenMintFlags, OfferCreateFlags, Wallet, type SubmittableTransaction } from 'xrpl';
 import { deriveAddress, verify } from 'ripple-keypairs';
 
-import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
+import { xrplDeployment, xrplPool } from '../../deployments/xrpl/index.ts';
 import { nodeLedger, XRPL_STATE } from './node.ts';
 import { newSite, regularKey, setupSite, signAndSubmit, signMessage, signOnly, rotate, signTx, type Site } from './site.ts';
 

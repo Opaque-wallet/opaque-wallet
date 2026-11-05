@@ -1,0 +1,85 @@
+{
+  "$comment": "Every public address and endpoint on Ethereum Sepolia, in the shape of arc-testnet.json and under its rules: public values only, and `null` means NOT DEPLOYED. Every address below was read on chain on 2026-11-05.",
+  "network": {
+    "name": "eth-sepolia",
+    "displayName": "Sepolia",
+    "chainId": 11155111,
+    "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+    "rpcFallbacks": [
+      "https://1rpc.io/sepolia"
+    ],
+    "explorer": "https://sepolia.etherscan.io",
+    "sitePath": "sepolia/",
+    "nativeCurrency": {
+      "name": "Ether",
+      "symbol": "ETH",
+      "decimals": 18
+    }
+  },
+  "tokens": {
+    "usdc": {
+      "$comment": "Circle's Sepolia USDC (symbol() and decimals() read on chain); faucet.circle.com hands it out. Unlike Arc, ETH pays gas here.",
+      "address": "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238",
+      "decimals": 6
+    }
+  },
+  "contracts": {
+    "create2Factory": {
+      "$comment": "The deterministic deployment proxy (Arachnid, keyless, the same address on every EVM chain). Code read on Sepolia on 2026-11-05.",
+      "address": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "deployedAtBlock": 0
+    },
+    "pqKeyRegistry": null,
+    "singleNotePqVerifier": null,
+    "attestedRingVerifier": null,
+    "attestedRingVerifier2": null,
+    "attestedRingVerifier5": null,
+    "attestedRingVerifier10": null,
+    "attestedRingVerifier20": null,
+    "attestedRingVerifier50": null,
+    "attestedRingVerifier100": null,
+    "relayDirectory": null,
+    "crePolicyGate": null,
+    "creBatchSettlement": null,
+    "pqAccountImplementation": null,
+    "pqAccountFactory": null,
+    "pqAccountValidator": null
+  },
+  "accounts": {
+    "$comment": "The attester is made in docs/mumbai/PLAN.md T4, with FORS keys of its own: never Arc's, which are few-time.",
+    "attester": null
+  },
+  "pools": [],
+  "erc4337": {
+    "$comment": "All three EntryPoints have code on Sepolia, and Pimlico's keyless endpoint serves them (eth_supportedEntryPoints, chain 0xaa36a7, checked 2026-11-05).",
+    "entryPoints": {
+      "v0.6": "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",
+      "v0.7": "0x0000000071727de22e5e9d8baf0edac6f37da032",
+      "v0.8": "0x4337084d9e255ff0702461cf8895ce9e3b5ff108"
+    },
+    "preferredEntryPoint": "v0.7",
+    "bundlerUrl": "https://public.pimlico.io/v2/11155111/rpc",
+    "bundlerApiKeyEnv": "PIMLICO_API_KEY"
+  },
+  "mesh": {
+    "$comment": "Sepolia's own relay directory root, from a master Arc never uses. Filled in by `node scripts/new-mesh-master.ts eth-sepolia` (in backend/), which keeps the master in backend/.stack/eth-sepolia/mesh-master.",
+    "genesis": 0,
+    "trustRoot": {
+      "signerCommitment": "0x",
+      "minVersion": 0
+    }
+  },
+  "services": {
+    "$comment": "Endpoints, not keys. Each is null until that service is hosted.",
+    "graphUrl": null,
+    "meshExitUrl": null,
+    "releaseEgressUrl": null,
+    "creTriggerUrl": null,
+    "relayDirectoryUrl": null
+  },
+  "swap": {
+    "$comment": "LI.FI has no testnets, so there is no router here yet. Uniswap v4's Universal Router takes its place in docs/mumbai/PLAN.md T8.",
+    "router": null,
+    "tokens": []
+  }
+}

@@ -1,4 +1,4 @@
-// Typed, validated access to deployments/arc-<network>.json.
+// Typed, validated access to deployments/<network>.json: Arc's and Ethereum's.
 //
 // The network is chosen at BUILD/BOOT time, never by a server: OPAQUE_NETWORK
 // in Node, VITE_NETWORK in the Vite build, `testnet` when neither is set.
@@ -13,21 +13,23 @@
 
 import testnet from './arc-testnet.json' with { type: 'json' };
 import mainnet from './arc-mainnet.json' with { type: 'json' };
+import sepolia from './eth-sepolia.json' with { type: 'json' };
 
-const NETWORKS = { testnet, mainnet: mainnet as unknown as typeof testnet } as const;
+const NETWORKS = { testnet, mainnet: mainnet as unknown as typeof testnet, sepolia: sepolia as unknown as typeof testnet } as const;
 const selected =
   (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env['OPAQUE_NETWORK'] ??
   (import.meta as { env?: Record<string, string | undefined> }).env?.['VITE_NETWORK'] ??
   'testnet';
-if (!(selected in NETWORKS)) throw new Error(`unknown network "${selected}": use testnet or mainnet`);
-export const NETWORK = selected as keyof typeof NETWORKS;
+if (!(selected in NETWORKS)) throw new Error(`unknown network "${selected}": use ${Object.keys(NETWORKS).join(', ')}`);
+export type NetworkId = keyof typeof NETWORKS;
+export const NETWORK = selected as NetworkId;
 const raw = NETWORKS[NETWORK];
 /** Every network this build knows, for the wallet's network picker. */
 export const networks = (['mainnet', 'testnet'] as const).map((id) => ({
   id, displayName: NETWORKS[id].network.displayName, sitePath: NETWORKS[id].network.sitePath,
 }));
 /** The file the addresses came from, for error messages. */
-const FILE = `deployments/arc-${NETWORK}.json`;
+const FILE = `deployments/${raw.network.name}.json`;
 
 export type Address = `0x${string}`;
 
@@ -80,7 +82,7 @@ export interface Deployment {
   };
   readonly tokens: { readonly usdc: { readonly address: Address; readonly decimals: number } };
   readonly contracts: Readonly<Record<ContractName, DeployedContract | null>>;
-  readonly accounts: { readonly attester: Address };
+  readonly accounts: { readonly attester: Address | null };
   readonly pools: readonly PoolDeployment[];
   readonly erc4337: {
     readonly entryPoints: Readonly<Record<'v0.6' | 'v0.7' | 'v0.8', Address>>;
@@ -94,7 +96,7 @@ export interface Deployment {
   };
   readonly services: Readonly<Record<ServiceName, string | null>>;
   /** Swaps at the account's address through LI.FI: its contract here, and the tokens offered. */
-  readonly swap: { readonly router: Address; readonly tokens: readonly SwapToken[] };
+  readonly swap: { readonly router: Address | null; readonly tokens: readonly SwapToken[] };
 }
 
 export interface SwapToken { readonly symbol: string; readonly address: Address; readonly decimals: number }
@@ -127,8 +129,10 @@ function validate(d: typeof raw): Deployment {
     if (!(p.verifier in d.contracts)) bad(`pools[${i}].verifier`, `names no known contract (${p.verifier})`);
   });
   for (const [v, a] of Object.entries(d.erc4337.entryPoints)) address(a, `erc4337.entryPoints.${v}`);
-  address(d.accounts.attester, 'accounts.attester');
-  address(d.swap.router, 'swap.router');
+  // null until deployed, like the contracts: Sepolia has no attester or swap router yet.
+  const attester: unknown = d.accounts.attester, router: unknown = d.swap.router;
+  if (attester !== null) address(attester, 'accounts.attester');
+  if (router !== null) address(router, 'swap.router');
   d.swap.tokens.forEach((t, i) => address(t.address, `swap.tokens[${i}].address`));
   if (!Number.isSafeInteger(d.mesh.genesis) || d.mesh.genesis <= 0) bad('mesh.genesis', 'must be unix seconds');
   if (!/^0x[0-9a-f]{64}$/.test(d.mesh.trustRoot.signerCommitment)) bad('mesh.trustRoot.signerCommitment', 'must be 32 lower-case hex bytes');
@@ -145,6 +149,14 @@ export function requireContract(name: ContractName): Address {
     throw new Error(`${name} is not deployed on ${deployment.network.name}: set its address in ${FILE}`);
   }
   return c.address;
+}
+
+/** The attester, for callers that cannot run before one is registered. */
+export function requireAttester(): Address {
+  if (deployment.accounts.attester === null) {
+    throw new Error(`no attester on ${deployment.network.name} yet: set accounts.attester in ${FILE}`);
+  }
+  return deployment.accounts.attester;
 }
 
 /**

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Creates Opaque's XRPL TESTNET pools and writes deployments/xrpl-testnet.json.
+// Creates Opaque's XRPL TESTNET pools and writes deployments/xrpl/testnet.json.
 //
 //   cd backend && npm run xrpl:setup [-- --force]      XRP and RLUSD, afresh
 //   cd backend && npm run xrpl:setup -- --add USDC     one more pool: a trust-line
@@ -27,12 +27,12 @@ import { AccountSetAsfFlags, Client, MPTokenIssuanceCreateFlags, TrustSetFlags, 
 
 import { fromHex } from '@opaque/protocol-types/codecs.js';
 
-import { xrplDeployment, type XrplPoolDeployment } from '../../deployments/xrpl.ts';
+import { xrplDeployment, type XrplPoolDeployment } from '../../deployments/xrpl/index.ts';
 import { attesterChain, signerListOf } from './attester.ts';
 import { attesterFile, XRPL_STATE } from './node.ts';
 import type { XrplAsset } from './protocol.ts';
 
-const FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'deployments', 'xrpl-testnet.json');
+const FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'deployments', 'xrpl', 'testnet.json');
 const SIZES = [1_000_000, 10_000_000, 100_000_000];
 const hexCode = (code: string) => Buffer.from(code, 'ascii').toString('hex').toUpperCase().padEnd(40, '0');
 const log = (s: string) => process.stdout.write(`${s}\n`);
@@ -40,7 +40,7 @@ const ADD = process.argv.includes('--add') ? process.argv[process.argv.indexOf('
 
 if (xrplDeployment.network.name !== 'xrpl-testnet') throw new Error('setup-pools creates testnet pools only');
 if (ADD === undefined && xrplDeployment.pools.length > 0 && !process.argv.includes('--force')) {
-  throw new Error('deployments/xrpl-testnet.json already names pools; --force makes new ones (notes in the old pools stay there), --add adds one');
+  throw new Error('deployments/xrpl/testnet.json already names pools; --force makes new ones (notes in the old pools stay there), --add adds one');
 }
 if (ADD !== undefined && !['USDC', 'MPT'].includes(ADD)) throw new Error('--add USDC or --add MPT');
 if (ADD !== undefined && xrplDeployment.pools.some((p) => p.symbol === (ADD === 'MPT' ? 'tMPT' : ADD))) throw new Error(`a ${ADD} pool exists already`);

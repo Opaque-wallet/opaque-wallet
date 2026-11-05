@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 import { AMMDepositFlags, Client, Wallet, xrpToDrops, type AMMCreate, type AMMDeposit, type Payment, type TrustSet } from 'xrpl';
 
-import { xrplDeployment } from '../../deployments/xrpl.ts';
+import { xrplDeployment } from '../../deployments/xrpl/index.ts';
 
 const STACK = join(dirname(fileURLToPath(import.meta.url)), '..', '.stack', 'xrpl');
 const CHECK = process.argv.includes('--check');

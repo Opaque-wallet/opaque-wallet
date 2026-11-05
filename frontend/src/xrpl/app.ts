@@ -1,18 +1,18 @@
 // The XRPL wallet page: private XRP and RLUSD. Everything it does goes through
-// lib/xrpl-runtime.ts, which talks to this origin and Opaque's stack only.
+// xrpl/runtime.ts, which talks to this origin and Opaque's stack only.
 
 // First: it seals and opens what the wallet stores, so nothing reads storage before it.
-import { confirmPassword, unlockGate } from './lib/lock.ts';
+import { confirmPassword, unlockGate } from '../lib/lock.ts';
 import type { NoteSummary, UnixSeconds } from '@opaque/protocol-types';
 
-import { isAccount } from '../../backend/xrpl/protocol.ts';
-import { xrplDeployment } from '../../deployments/xrpl.ts';
-import { networkPicker } from './lib/network-picker.ts';
-import { paymentDeadline } from './lib/payment-deadline.ts';
-import { backupTransport, cachedAddress, hasBrowserWallet, poolBySymbol, startXrplWallet, symbolOf, UNIT, type ReceiveTag, type ReusableAddress, type Sent, type XrplWallet } from './lib/xrpl-runtime.ts';
-import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
-import { acceptTerms, copy, idOf, markOf, openOnboarding, setupWalletScreens, swapProgress, tokenBadge } from './lib/wallet-ui.ts';
-import type { SweepPlan } from '../../backend/xrpl/sweep.ts';
+import { isAccount } from '../../../backend/xrpl/protocol.ts';
+import { xrplDeployment } from '../../../deployments/xrpl/index.ts';
+import { networkPicker } from '../lib/network-picker.ts';
+import { paymentDeadline } from '../lib/payment-deadline.ts';
+import { backupTransport, cachedAddress, hasBrowserWallet, poolBySymbol, startXrplWallet, symbolOf, UNIT, type ReceiveTag, type ReusableAddress, type Sent, type XrplWallet } from './runtime.ts';
+import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from '../lib/wallet-keys.ts';
+import { acceptTerms, copy, idOf, markOf, openOnboarding, setupWalletScreens, swapProgress, tokenBadge } from '../lib/wallet-ui.ts';
+import type { SweepPlan } from '../../../backend/xrpl/sweep.ts';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const found = document.getElementById(id);

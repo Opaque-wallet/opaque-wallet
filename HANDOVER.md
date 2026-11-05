@@ -50,7 +50,7 @@ Opaque already runs on Arc mainnet (Circle's L1). This repo reuses its code wher
 ## 3. Workspace state right now
 
 ```
-/Users/swarnimraj/OpaqueXRPL          github.com/Opaque-wallet/OpaqueXRPL (public), branch main
+/Users/swarnimraj/OpaqueXRPL          github.com/Opaque-wallet/opaque-wallet (public; renamed from OpaqueXRPL on 2026-11-05), branch main
 ├── LICENSE                           the only committed file (initial commit d44b2b1)
 ├── .gitmodules + opaque/             STAGED, not committed: submodule → github.com/minrawsjar/Opaque @ 4b29e07
 ├── package.json                      untracked: type module, node >=22.18, xrpl ^5.3.0, script "spike"

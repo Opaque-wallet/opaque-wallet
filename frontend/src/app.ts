@@ -23,7 +23,7 @@ import { backupTransport, hasBrowserAccount, startWallet, type WalletRuntime } f
 import { addressOfKey, arcAddressOf, arcState, arcStorageOf, deployerKey, saveArcState } from './lib/arc-keys.ts';
 import { keyStoreName } from './lib/backup.ts';
 import { asHexBytes, CREATE2_FACTORY, deployment as deployOf, MAX_INITCODE, newSalt, riskOfCall } from './lib/contracts.ts';
-import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/xrpl-keys.ts';
+import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/wallet-keys.ts';
 import { acceptTerms, copy, idOf, markOf, openOnboarding, setupWalletScreens, swapProgress, tokenBadge, type OpenAccount } from './lib/wallet-ui.ts';
 import { deployment, NETWORK, type SwapToken } from '../../deployments/index.ts';
 import type { SwapQuote } from '../../backend/chain/wallet-rpc.ts';
@@ -1274,7 +1274,7 @@ async function init(): Promise<void> {
   document.querySelectorAll<HTMLElement>('[data-back]').forEach((node) => node.addEventListener('click', () => showView('home')));
   renderRingSvg();
 
-  // One recovery phrase holds every chain's accounts (lib/xrpl-keys.ts); an
+  // One recovery phrase holds every chain's accounts (lib/wallet-keys.ts); an
   // Arc account from before phrases stays here as the browser account.
   browserAccount = await hasBrowserAccount();
   if (!arcState().seen) {

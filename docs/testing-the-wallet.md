@@ -200,7 +200,7 @@ vault is. Code: [frontend/src/lib/lock.ts](../frontend/src/lib/lock.ts).
   from before passwords and the reveal prompts. The origin can be a vite dev
   server (`http://127.0.0.1:5199`, with `VITE_STACK_URL` and
   `VITE_XRPL_STACK_URL` pointed at the hosted services). Every browser test gives its wallets the password
-  `PASSWORD` (scripts/xrpl-wallet-page.ts).
+  `PASSWORD` (scripts/wallet-page.ts).
 
 ## The passkey backup
 

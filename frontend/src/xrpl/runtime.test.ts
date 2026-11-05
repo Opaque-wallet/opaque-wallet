@@ -10,9 +10,9 @@ import { toHex } from '@opaque/protocol-types/codecs.js';
 import { createNoteSecret, deriveCommitment } from '@opaque/zk';
 
 import { accountOf, scopeOf } from '../../../backend/xrpl/protocol.ts';
-import { xrplDeployment } from '../../../deployments/xrpl.ts';
-import { startXrplWallet, type Relays, type XrplStackConfig } from './xrpl-runtime.ts';
-import { accountKeys, stream } from './xrpl-keys.ts';
+import { xrplDeployment } from '../../../deployments/xrpl/index.ts';
+import { startXrplWallet, type Relays, type XrplStackConfig } from './runtime.ts';
+import { accountKeys, stream } from '../lib/wallet-keys.ts';
 
 const items = new Map<string, string>();
 Object.assign(globalThis, {

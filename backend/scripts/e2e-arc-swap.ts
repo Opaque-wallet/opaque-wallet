@@ -18,7 +18,7 @@ import { join } from 'node:path';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { requireService } from '../../deployments/index.ts';
-import { ARC_READY, createWallet } from './xrpl-wallet-page.ts';
+import { ARC_READY, createWallet } from './wallet-page.ts';
 
 const args = process.argv.slice(2);
 const ORIGIN = args.find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit';

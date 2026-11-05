@@ -22,8 +22,8 @@ import { join } from 'node:path';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { arcAddressOf } from '../../frontend/src/lib/arc-keys.ts';
-import { accountKeys } from '../../frontend/src/lib/xrpl-keys.ts';
-import { ARC_READY, acceptTerms, createWallet, passkeyOffer } from './xrpl-wallet-page.ts';
+import { accountKeys } from '../../frontend/src/lib/wallet-keys.ts';
+import { ARC_READY, acceptTerms, createWallet, passkeyOffer } from './wallet-page.ts';
 
 const args = process.argv.slice(2);
 const ORIGIN = args.find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit';

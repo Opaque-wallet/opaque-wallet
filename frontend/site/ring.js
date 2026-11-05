@@ -34,9 +34,9 @@ const MINE = 0;        // the note dropped in and marked yours
 const TRAVELLER = 0;   // the note that pays (it is yours)
 const APP_NOTES = [1, 4, 6];
 const APPS = [
-  { angle: -2.45, name: 'DEX', addr: 'rGEU…' },
+  { angle: -2.45, name: 'DEX', addr: '0x4f…' },
   { angle: -0.7, name: 'NFT market', addr: 'rUvv…' },
-  { angle: 1.57, name: 'Game', addr: 'rP3k…' },
+  { angle: 1.57, name: 'Game', addr: '0xb8…' },
 ];
 
 /** size: the ring's radius as a share of the canvas's shorter side; dot: a note's diameter as a share of that radius.

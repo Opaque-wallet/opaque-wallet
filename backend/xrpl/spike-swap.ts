@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 import { BatchFlags, Client, Wallet, type Batch } from 'xrpl';
 
-import { xrplDeployment } from '../../deployments/xrpl.ts';
+import { xrplDeployment } from '../../deployments/xrpl/index.ts';
 import { payoutBatch } from './batch.ts';
 import { deliverMinOf, quoteSwap } from './swap.ts';
 import { UNIT, type XrplAsset } from './protocol.ts';

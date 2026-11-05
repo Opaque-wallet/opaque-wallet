@@ -19,9 +19,9 @@ import { join } from 'node:path';
 
 import { Client } from 'xrpl';
 
-import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { xrplDeployment } from '../../deployments/xrpl.ts';
-import { createWallet, importWallet, PASSWORD } from './xrpl-wallet-page.ts';
+import { chromium } from '../../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { xrplDeployment } from '../../../deployments/xrpl/index.ts';
+import { createWallet, importWallet, PASSWORD } from '../../scripts/wallet-page.ts';
 
 const PAGE = process.argv[2] ?? 'https://www.opaque.credit/testnet/xrpl.html';
 const log = (s: string) => process.stdout.write(`${s}\n`);

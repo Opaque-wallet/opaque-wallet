@@ -20,7 +20,7 @@ import { join } from 'node:path';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { requireService } from '../../deployments/index.ts';
-import { ARC_READY, acceptTerms, createWallet, passkeyOffer, PASSWORD } from './xrpl-wallet-page.ts';
+import { ARC_READY, acceptTerms, createWallet, passkeyOffer, PASSWORD } from './wallet-page.ts';
 
 const ORIGIN = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit';
 const clean = ORIGIN.includes('opaque.credit');

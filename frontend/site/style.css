@@ -72,7 +72,10 @@ a { color: inherit; }
   height: 64px; padding: 0 10px 0 20px;
   border: 1px solid var(--line); border-radius: 18px;
   background: var(--raised); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
 }
+/* The bar waits out the opening, like the hero's own buttons, and slides in as the ring steps aside. */
+.js:has(.hero:not(.show-rest)) .nav__bar { opacity: 0; transform: translateY(-12px); pointer-events: none; }
 .brand { flex: none; }
 .brand img { width: auto; height: 26px; }
 .menu { display: flex; gap: 4px; margin-left: auto; }

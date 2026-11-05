@@ -22,6 +22,8 @@ then fill in each tab of the item in the developer dashboard with the text below
 > Your account is secured by a post-quantum, hash-based (FORS+C) key that never
 > leaves your browser. Deposits and withdrawals are signed by that key, and no
 > other wallet is needed: fund your Opaque address from any wallet or exchange.
+> On the XRP Ledger, XRP, RLUSD and USDC sit in pools the same way, and every
+> key that signs there is used once and then replaced.
 >
 > - Private sends of any whole amount, using the fewest notes
 > - Post-quantum account key, with a visible signature budget and key rotation
@@ -30,9 +32,10 @@ then fill in each tab of the item in the developer dashboard with the text below
 > - No accounts, no analytics, no trackers
 >
 > Early software, stated plainly: the mainnet contracts are not yet audited,
-> one attester signs spends, and all six relays are run by one operator. Sealed
-> payments are opened only inside a Chainlink CRE enclave. Use small amounts on
-> mainnet, or try it first on testnet.
+> one attester signs spends, and all six relays are run by one operator. On Arc,
+> sealed payments are opened only inside a Chainlink CRE enclave; on XRPL
+> testnet an ordinary server stands in for it. Use small amounts on mainnet, or
+> try it first on testnet.
 >
 
 **Category:** Privacy & Security (or Tools, if that is not offered)
@@ -41,12 +44,14 @@ then fill in each tab of the item in the developer dashboard with the text below
 
 **Store icon:** `extension/icons/128.png`
 
-**Screenshots** (1280×800): `extension/store/1-home.png`, `2-send.png`,
-`3-privacy.png`, `4-activity.png`
+**Screenshots** (1280×800, in this order): `extension/store/1-home.jpg`,
+`2-networks.jpg`, `3-connect.jpg`, `4-approve.jpg`, `5-apps.jpg`. Taken from a
+funded testnet wallet by `SHOTS=<dir> npm run xrpl:e2e:dapp` (in `backend/`).
 
-**Small promo tile** (440×280): `extension/store/promo-440x280.png`
+**Small promo tile** (440×280): `extension/store/promo-440x280.jpg`
 
-**Marquee promo tile** (1400×560): `extension/store/marquee-1400x560.png`
+**Marquee promo tile** (1400×560): `extension/store/marquee-1400x560.jpg`
+(both drawn by `node extension/store/make-promo.mjs`)
 
 **Global promo video:** leave empty.
 
@@ -79,6 +84,14 @@ then fill in each tab of the item in the developer dashboard with the text below
 > approves or rejects it. The only thing they write is the connected address,
 > in that site's own storage, so a reload reconnects without asking again.
 
+**Permission justification: storage**
+
+> Keeps the wallet unlocked while the side panel closes and reopens. After the
+> password is entered, the key that opens the wallet's encrypted records is
+> held in chrome.storage.session, which stays in memory and never touches the
+> disk. It is removed after 15 idle minutes, on Lock now, or when the browser
+> closes.
+
 **Remote code:** No, I am not using remote code.
 
 > All JavaScript ships in the package. The extension fetches configuration
@@ -93,8 +106,9 @@ then fill in each tab of the item in the developer dashboard with the text below
   service and its host see IP addresses, and account addresses are
   identifiers.
 
-Leave the rest unticked. Keys, note secrets and the backup passphrase never
-leave the device.
+Leave the rest unticked. The password never leaves the device. Keys and note
+secrets leave it only inside the encrypted backup, if the user turns it on, and
+the server cannot open that backup.
 
 Then certify all three:
 
@@ -105,26 +119,28 @@ Then certify all three:
 - I do not use or transfer user data to determine creditworthiness or for
   lending purposes
 
-**Privacy policy URL:** https://www.opaque.credit/privacy.html
+**Privacy policy URL:** https://www.opaque.credit/privacy
 
 ## Test instructions (for the reviewer)
 
-> No login or account is needed. Click the toolbar icon: the wallet opens in
-> the side panel and creates a local account.
+> No login or account is needed.
 >
-> To see a payment end to end without real funds, pick Arc Testnet in the
-> header first:
-> 1. Get testnet USDC at https://faucet.circle.com (network: Arc testnet).
-> 2. In the wallet, press Receive, and send about 2 USDC to the address shown.
-> 3. Set Deposit amount to 1 and press Deposit. The first deposit also sets up
->    the account on chain. About a minute.
-> 4. Open Send, enter any Arc address and 1 USDC, and press Review private
->    transfer. It settles in under a minute. Activity links the settlement on
->    testnet.arcscan.app.
+> 1. Click the toolbar icon: Opaque opens in the side panel. Accept the Terms
+>    of Use.
+> 2. Choose "Create a new wallet", reveal the 12 words, tick "I wrote them
+>    down", type the word it asks for, and set a password of at least 8
+>    characters.
 >
-> XRPL testnet, no funds needed: pick XRPL Testnet in the header, create a
-> wallet, and press "Get 95 test XRP". Then Send any amount to an XRPL testnet
-> address.
+> XRPL testnet, no funds needed: pick XRPL Testnet in the header, press "Get 95
+> test XRP" on Home, and wait about a minute. Then Send any amount to an XRPL
+> testnet address.
+>
+> Arc testnet: pick Arc Testnet in the header and get testnet USDC at
+> https://faucet.circle.com (network: Arc testnet). Press Receive and send
+> about 2 USDC to the address shown: on testnet it becomes private notes by
+> itself, in about a minute. Then open Send, enter any Arc address and 1 USDC,
+> and press Review private transfer. Activity links the settlement on
+> testnet.arcscan.app.
 
 ## Distribution
 

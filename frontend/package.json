@@ -6,8 +6,10 @@
   "description": "opaque's landing page and wallet. TypeScript, built with Vite.",
   "scripts": {
     "dev": "vite",
+    "dev:site": "vite site --port 5174",
+    "preview:site": "npm run build:site && vite preview --outDir dist --port 5174",
     "build": "VITE_NETWORK=mainnet vite build && VITE_NETWORK=testnet vite build --outDir dist/testnet",
-    "build:site": "rm -rf dist && VITE_NETWORK=mainnet vite build && rm -f dist/xrpl.html dist/xrpl-connect.html dist/xrpl-stack.json && VITE_NETWORK=testnet VITE_XRPL_STACK_URL=https://opaque-xrpl-testnet-production.up.railway.app/xrpl-stack.json vite build --outDir dist/testnet && rm -f dist/testnet/xrpl-stack.json && vite build site --outDir ../dist && cp vercel.xrpl.json dist/vercel.json",
+    "build:site": "rm -rf dist && VITE_NETWORK=mainnet vite build && rm -f dist/xrpl.html dist/xrpl-connect.html dist/xrpl-stack.json && VITE_NETWORK=testnet VITE_XRPL_STACK_URL=https://opaque-xrpl-testnet-production.up.railway.app/xrpl-stack.json vite build --outDir dist/testnet && rm -f dist/testnet/xrpl-stack.json && vite build site --outDir ../dist && cp vercel.site.json dist/vercel.json",
     "deploy": "npm run build:site && npx --yes vercel@64.5.0 deploy dist --prod --yes --project opaque-xrpl --scope swarnim-raj-s-projects",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",

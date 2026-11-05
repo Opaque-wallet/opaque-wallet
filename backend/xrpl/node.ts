@@ -18,7 +18,7 @@ import { Client, xrpToDrops } from 'xrpl';
 import { ProtocolFailure, type PoolScope, type RingSnapshot, type UnixSeconds } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
-import { xrplDeployment, type XrplPoolDeployment } from '../../deployments/xrpl.ts';
+import { xrplDeployment, type XrplPoolDeployment } from '../../deployments/xrpl/index.ts';
 import { checkoutUrl, type CheckoutConfig } from '../onramp/moonpay.ts';
 import { verifierId } from '../zk/index.ts';
 import { createAttester, type Attester, type XrplPool } from './attester.ts';

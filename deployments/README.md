@@ -10,6 +10,8 @@
 |---|---|
 | `arc-testnet.json` | The data |
 | `arc-mainnet.json` | Arc mainnet, loaded when the network is `mainnet` |
+| `eth-sepolia.json` | Ethereum Sepolia, loaded when the network is `sepolia` |
+| `xrpl/` | The XRP Ledger: `testnet.json` and `mainnet.json` (pools), loaded by `xrpl/index.ts`, and `evm-mainnet.json` (the XRPL EVM sidechain, for the forge scripts) |
 | `index.ts` | The typed loader: `deployment`, `requireContract`, `requireService`, `poolFor`, `meshTrustRoot`, `entryPoint` |
 
 ## Choosing the network
@@ -18,9 +20,9 @@
 
 | Where | Variable | Values |
 |---|---|---|
-| Backend, scripts, subgraph renderer (Node/Bun) | `OPAQUE_NETWORK` | `testnet` (default), `mainnet` |
-| Wallet (Vite build) | `VITE_NETWORK` | `testnet` (default), `mainnet` |
-| Forge scripts | `DEPLOYMENTS` | `arc-testnet.json` (default), `arc-mainnet.json` |
+| Backend, scripts, subgraph renderer (Node/Bun) | `OPAQUE_NETWORK` | `testnet` (default), `mainnet`, `sepolia` |
+| Wallet (Vite build) | `VITE_NETWORK` | `testnet` (default), `mainnet`, `sepolia` |
+| Forge scripts | `DEPLOYMENTS` | `arc-testnet.json` (default), `arc-mainnet.json`, `eth-sepolia.json` |
 
 Mainnet has its own attester, mesh master and egress key (`backend/mainnet.env`, gitignored). Nothing signs on both networks: FORS keys are few-time.
 

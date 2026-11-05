@@ -1,6 +1,6 @@
 // Arc accounts from the recovery phrase.
 //
-// The phrase's accounts (lib/xrpl-keys.ts) hold Arc money too: one phrase, one
+// The phrase's accounts (lib/wallet-keys.ts) hold Arc money too: one phrase, one
 // list of accounts, on every chain. An Arc account draws everything it holds
 // from its account key, under labels of its own:
 //
@@ -26,7 +26,7 @@ import { accountSalt, predictAccount } from '../../../backend/chain/pq-account.t
 import { ACCOUNT_MAX_USES, ARC_AUTHORITY, PHRASE_ROTATION_DEADLINE } from '../../../backend/chain/pq-wallet-chain.ts';
 import { deployment } from '../../../deployments/index.ts';
 import { scoped } from './storage-name.ts';
-import { stream, type AccountKeys } from './xrpl-keys.ts';
+import { stream, type AccountKeys } from './wallet-keys.ts';
 
 const CHAIN = deployment.network.chainId;
 

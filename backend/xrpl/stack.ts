@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The whole backend the XRPL wallet needs, on one machine, against the REAL
-// XRPL testnet pools in deployments/xrpl-testnet.json.
+// XRPL testnet pools in deployments/xrpl/testnet.json.
 //
 //   cd backend && npm run xrpl:stack            then  cd frontend && npm run dev
 //
@@ -11,7 +11,7 @@
 //   MOONPAY_API_KEY, MOONPAY_SECRET_KEY   offer Buy (sandbox; MOONPAY_LIVE=1 for live)
 //   PORT, PUBLIC_URL                      one public port, as backend/stack.ts does
 //   XRPL_MESH_MASTER                      with PUBLIC_URL: the weekly relay directories
-//                                         the root in deployments/xrpl-testnet.json pins
+//                                         the root in deployments/xrpl/testnet.json pins
 //   XRPL_ATTESTER_SEEDS                   first boot of a hosted node (xrpl/node.ts)
 //   WALLETCONNECT_PROJECT_ID              with PORT: offer WalletConnect, its relay
 //                                         and Verify reached through this service
@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 import type { RelaySnapshot, UnixSeconds } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 
-import { xrplDeployment, xrplMeshTrustRoot } from '../../deployments/xrpl.ts';
+import { xrplDeployment, xrplMeshTrustRoot } from '../../deployments/xrpl/index.ts';
 import { evaluatePublicReadiness } from '../../graph/src/privacy-score.ts';
 import { credentialJson } from '../cre/credential.ts';
 import { createExecutorServer } from '../cre/executor-server.ts';
@@ -85,7 +85,7 @@ const node = await startXrpl({
 for (const pool of node.pools.values()) await pool.source.sync();
 
 // Hosted: every relay key and directory derives from XRPL_MESH_MASTER, week by
-// week from the genesis in deployments/xrpl-testnet.json, so the root compiled
+// week from the genesis in deployments/xrpl/testnet.json, so the root compiled
 // into the built wallet verifies across restarts. Unset (a laptop): a fresh
 // random mesh each boot, whose root only a dev server's wallet takes.
 const MESH_MASTER = PUBLIC_URL === undefined ? undefined : process.env['XRPL_MESH_MASTER'];
@@ -96,7 +96,7 @@ const mesh = buildLocalMesh({
 });
 const pinned = MESH_MASTER === undefined ? undefined : xrplMeshTrustRoot();
 if (pinned !== undefined && meshRootAt(fromHex(MESH_MASTER as `0x${string}`), pinned.minVersion).signerCommitment !== pinned.signerCommitment) {
-  throw new Error('XRPL_MESH_MASTER does not derive the trust root pinned in deployments/xrpl-testnet.json');
+  throw new Error('XRPL_MESH_MASTER does not derive the trust root pinned in deployments/xrpl/testnet.json');
 }
 // The links a wallet needs, from the pinned root to the directory in force,
 // checked at boot: an expired directory or a broken chain stops here.

@@ -41,7 +41,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { ProtocolFailure, type GraphSelectionClient, type PoolScope, type RelaySnapshot, type RingSnapshot, type UnixSeconds } from '@opaque/protocol-types';
 import { asChainId, fromHex, spendHash, toHex } from '@opaque/protocol-types/codecs.js';
 
-import { deployment, meshTrustRoot, poolFor, requireContract, requireService, type PoolDeployment } from '../deployments/index.ts';
+import { deployment, meshTrustRoot, poolFor, requireAttester, requireContract, requireService, type PoolDeployment } from '../deployments/index.ts';
 import { GraphHttpClient } from '../graph/src/client.ts';
 import { evaluatePublicReadiness } from '../graph/src/privacy-score.ts';
 import { registryAttesterKeys } from './chain/attester-registry.ts';
@@ -124,7 +124,7 @@ if (credentialMac.length !== 32) throw new Error('CREDENTIAL_MAC must be 32 byte
 const ringPools = deployment.pools.filter((p) => p.proofMode === 'RING_8');
 const ring8 = poolFor(1_000_000, 'RING_8');
 const REGISTRY = requireContract('pqKeyRegistry');
-const ATTESTER = deployment.accounts.attester;
+const ATTESTER = requireAttester();
 const scopeOf = (p: PoolDeployment): PoolScope => ({ chainId: asChainId(BigInt(deployment.network.chainId)), pool: p.address, denomination: p.denomination }) as never;
 const poolAt = (s: PoolScope): PoolDeployment => {
   const pool = ringPools.find((p) => p.address === s.pool.toLowerCase());

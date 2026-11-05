@@ -2,9 +2,9 @@
 
 Private XRP and RLUSD on the XRP Ledger, plus private access to XRPL dapps. Mainnet XRPL has no smart contracts, so a quorum of attesters checks Opaque's ring proofs off ledger and co-signs every payout. The ledger itself enforces the rest: Batch makes a payout all-or-nothing, and Credentials refuse a second spend of the same note.
 
-Everything below runs against **XRPL testnet** today. Mainnet has no pools yet ([deployments/xrpl-mainnet.json](../deployments/xrpl-mainnet.json)).
+Everything below runs against **XRPL testnet** today. Mainnet has no pools yet ([deployments/xrpl/mainnet.json](../deployments/xrpl/mainnet.json)).
 
-Testnet pools ([deployments/xrpl-testnet.json](../deployments/xrpl-testnet.json)) all use notes of 1, 2 and 5 of every power of ten, from 1 to 1,000,000, and each pool's issuer is checked at setup:
+Testnet pools ([deployments/xrpl/testnet.json](../deployments/xrpl/testnet.json)) all use notes of 1, 2 and 5 of every power of ten, from 1 to 1,000,000, and each pool's issuer is checked at setup:
 
 | Pool | Asset | Issuer controls |
 |---|---|---|
@@ -60,14 +60,14 @@ A transaction that shows its keys without rotating them is followed at once by t
 | [backend/xrpl/queries.ts](../backend/xrpl/queries.ts) | The `XRPL` mesh query (REGISTER_TAG, TAG_STATUS, NULLIFIER_SPENT, ONRAMP_URL, FAUCET on testnet, READ, SUBMIT), both ends. |
 | [backend/xrpl/node.ts](../backend/xrpl/node.ts), [stack.ts](../backend/xrpl/stack.ts) | The XRPL backend, and the stack the wallet talks to. |
 | [backend/onramp/moonpay.ts](../backend/onramp/moonpay.ts) | Signed MoonPay checkout URLs, from structured fields only. |
-| [frontend/xrpl.html](../frontend/xrpl.html), [src/lib/xrpl-runtime.ts](../frontend/src/lib/xrpl-runtime.ts) | The XRPL wallet: Overview, Send, Receive (tag + Buy), Activity, Apps. |
+| [frontend/xrpl.html](../frontend/xrpl.html), [src/xrpl/runtime.ts](../frontend/src/xrpl/runtime.ts) | The XRPL wallet: Overview, Send, Receive (tag + Buy), Activity, Apps. |
 | [frontend/xrpl-connect.html](../frontend/xrpl-connect.html), [src/lib/opaque-adapter.ts](../frontend/src/lib/opaque-adapter.ts) | The wallet popup and the xrpl-connect adapter dapps use. |
 | [frontend/src/lib/walletconnect.ts](../frontend/src/lib/walletconnect.ts) | WalletConnect sessions, for dapps on any wallet SDK; their requests use the popup's approval card. |
 | [backend/deploy/xrpl.Dockerfile](../backend/deploy/xrpl.Dockerfile) | The hosted service's image: the stack. |
-| [frontend/vercel.xrpl.json](../frontend/vercel.xrpl.json) | The Vercel site's rewrites, redirects and headers (`npm run deploy`). |
+| [frontend/vercel.site.json](../frontend/vercel.site.json) | The Vercel site's rewrites, redirects and headers (`npm run deploy`). |
 | [demo/xrpl-dapp](../demo/xrpl-dapp) | An ordinary dapp on xrpl-connect, used by the X3 check and hosted at `opaque-xrpl-demo.vercel.app` (`npm run deploy`). |
 | [extension/](../extension) | The one Opaque extension, for every chain: Arc's and XRPL's wallet pages in Chrome's side panel, and the wallet XRPL dapps that support GemWallet or Crossmark find (`bridge.js`, `inject.ts`). |
-| [deployments/xrpl.ts](../deployments/xrpl.ts), `xrpl-*.json` | Compiled-in pools; the network is chosen at build or boot time, never by a server. |
+| [deployments/xrpl/index.ts](../deployments/xrpl/index.ts), `xrpl-*.json` | Compiled-in pools; the network is chosen at build or boot time, never by a server. |
 
 Changes to shared code, all additive:
 - `protocol-types` gains the `XRPL` mesh query kind, and spend encoding is unchanged.
@@ -80,7 +80,7 @@ Run everything from `backend/` unless noted. Every script uses `--use-system-ca`
 
 | Command | What it does |
 |---|---|
-| `npm run xrpl:setup [-- --force \| --add USDC \| --add MPT]` | Creates testnet pools and writes `deployments/xrpl-testnet.json`. Attester seeds and test-issuer seeds go in `backend/.stack/xrpl/` (0600, gitignored). |
+| `npm run xrpl:setup [-- --force \| --add USDC \| --add MPT]` | Creates testnet pools and writes `deployments/xrpl/testnet.json`. Attester seeds and test-issuer seeds go in `backend/.stack/xrpl/` (0600, gitignored). |
 | `npm run xrpl:stack`, then `cd frontend && npm run dev` | The wallet, at `/xrpl.html`. `MOONPAY_API_KEY` and `MOONPAY_SECRET_KEY` turn Buy on (sandbox; `MOONPAY_LIVE=1` for live). |
 | `npm run test:xrpl` | Offline unit tests for the XRPL layer and the MoonPay signer. |
 | `npm run spike` (repo root) | X0: Batch, Credentials and signer rotation on testnet. |
@@ -99,9 +99,9 @@ Run everything from `backend/` unless noted. Every script uses `--use-system-ca`
 
 The same split as Arc: the wallet on Vercel, the backend on Railway.
 
-- **Site and wallet: `https://www.opaque.credit`**, the Vercel project `opaque-xrpl` (also at `opaque-xrpl.vercel.app`, whose browser storage is its own). `/` is the one-page site ([frontend/site/](../frontend/site), plain JavaScript): a sticky scroll story played by the ring of eight on a canvas, with a still version for reduced motion. The wallet is `/testnet/xrpl.html`. Dapps use `/testnet/xrpl-connect.html`, which the adapter defaults to. Arc is served from the same build: its wallet at `/app` (mainnet) and `/testnet/app`, and the extension zip and privacy page where they always were. The home page is the only front page; Arc's old landing addresses (`/arc`, `/testnet/`) redirect to it, and every page drops `.html` (`cleanUrls`). Deploy from `frontend/` with `npm run deploy`: `build:site` builds Arc mainnet, then testnet (Arc and XRPL, pointed at the service's `xrpl-stack.json`), then the one-pager, with `vercel.xrpl.json` as its `vercel.json`.
+- **Site and wallet: `https://www.opaque.credit`**, the Vercel project `opaque-xrpl` (also at `opaque-xrpl.vercel.app`, whose browser storage is its own). `/` is the one-page site ([frontend/site/](../frontend/site), plain JavaScript): a sticky scroll story played by the ring of eight on a canvas, with a still version for reduced motion. The wallet is `/testnet/xrpl.html`. Dapps use `/testnet/xrpl-connect.html`, which the adapter defaults to. Arc is served from the same build: its wallet at `/app` (mainnet) and `/testnet/app`, and the extension zip and privacy page where they always were. The home page is the only front page; Arc's old landing addresses (`/arc`, `/testnet/`) redirect to it, and every page drops `.html` (`cleanUrls`). Deploy from `frontend/` with `npm run deploy`: `build:site` builds Arc mainnet, then testnet (Arc and XRPL, pointed at the service's `xrpl-stack.json`), then the one-pager, with `vercel.site.json` as its `vercel.json`.
 - **Backend: `https://opaque-xrpl-testnet-production.up.railway.app`**, the Railway service `opaque-xrpl-testnet` in the project `opaque`, next to the Arc services and sharing nothing with them. It runs `backend/xrpl/stack.ts`: relays, exit, attesters, the CRE stand-in (the mocked TEE) and the credential authority. Vercel can't host it: it is one long-running process with sockets, a volume and in-memory intents.
-- **Mesh.** Its relay directories derive from `XRPL_MESH_MASTER` (its own secret, never Arc's), week by week from the genesis in `deployments/xrpl-testnet.json`, whose root the built wallet pins. The service exits at the end of each week and Railway restarts it into the next generation.
+- **Mesh.** Its relay directories derive from `XRPL_MESH_MASTER` (its own secret, never Arc's), week by week from the genesis in `deployments/xrpl/testnet.json`, whose root the built wallet pins. The service exits at the end of each week and Railway restarts it into the next generation.
 - **Attesters.** `XRPL_ATTESTER_SEEDS` brings the seeds that own the pools' signer lists, on first boot only. After that, `backend/.stack` on the service's volume is the record: key positions, receive tags and the CRE stand-in's intent key. Losing that volume would lose registered tags, so it must stay.
 - **Deposit** (the Receive flow, renamed) makes a fresh tag. On testnet it also offers "Deposit 95 test XRP from the faucet": the `FAUCET` query, through the relays, has a fresh faucet account pay the tag, so a visitor needs no test XRP of their own.
 - Wallet pages are served with `frame-ancestors 'none'`, so the approval popup can't be framed and clicked through. The page talks to its own origin and the service only.
@@ -130,7 +130,7 @@ railway up --detach --service $S     # again after every change: it is not conne
 
 ## The recovery phrase and accounts
 
-A new wallet starts with a 12-word recovery phrase (BIP-39), shown hidden until revealed and confirmed by typing three of its words back. The same phrase holds the wallet's Arc accounts too, under labels of their own ([testing-the-wallet.md](testing-the-wallet.md#accounts-and-the-recovery-phrase)); it is stored once per origin, for every network. Each account of it, Account 1, 2, …, is a private wallet of its own: its notes, deposit tags, app accounts and history. There is no account address: what the ledger shows is the pool, so the account list shows each account's private balance instead. Code: [frontend/src/lib/xrpl-keys.ts](../frontend/src/lib/xrpl-keys.ts).
+A new wallet starts with a 12-word recovery phrase (BIP-39), shown hidden until revealed and confirmed by typing three of its words back. The same phrase holds the wallet's Arc accounts too, under labels of their own ([testing-the-wallet.md](testing-the-wallet.md#accounts-and-the-recovery-phrase)); it is stored once per origin, for every network. Each account of it, Account 1, 2, …, is a private wallet of its own: its notes, deposit tags, app accounts and history. There is no account address: what the ledger shows is the pool, so the account list shows each account's private balance instead. Code: [frontend/src/lib/wallet-keys.ts](../frontend/src/lib/wallet-keys.ts).
 
 - **Everything comes from the phrase.** Root = HMAC-SHA256("opaque/xrpl/v1", BIP-39 seed); account *n* = HMAC(root, "account/*n*"). Note *i* of a pool and size draws its secret from HMAC(account, "note/<network>/<pool>/<size>/*i*#block"), and an app's account from "site/<origin>". The known-answer test pins this: changing it would strand every phrase's notes.
 - **Importing finds them again.** The pools' logs list every enrolled commitment, so an imported account derives its numbers per pool and size until 250 in a row are absent, keeps the ones listed, and checks their nullifiers (spent or not). Account 1 then probes the next accounts (64 numbers each) and lists the used ones. About 10 s for an empty phrase. **Rescan the ledger** in the account menu repeats it.

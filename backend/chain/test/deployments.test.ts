@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { createPublicClient, http, parseAbi } from 'viem';
 
-import { deployment } from '../../../deployments/index.ts';
+import { deployment, requireAttester } from '../../../deployments/index.ts';
 
 // LIVE. deployments/arc-testnet.json is now the one place every address lives,
 // which makes it the one place a wrong address would break everything at once.
@@ -81,7 +81,7 @@ test('the ring verifier trusts the attester the config names, and that attester 
     abi: parseAbi(['function attester() view returns (address)']),
     functionName: 'attester',
   });
-  assert.equal(String(attester).toLowerCase(), deployment.accounts.attester, 'config and chain disagree on who attests');
+  assert.equal(String(attester).toLowerCase(), requireAttester(), 'config and chain disagree on who attests');
 
   // An attester with no registered key would make every spend revert with
   // NotRegistered — a pool that accepts deposits and can never pay out.
@@ -89,7 +89,7 @@ test('the ring verifier trusts the attester the config names, and that attester 
     address: deployment.contracts.pqKeyRegistry!.address,
     abi: parseAbi(['function stateOf(address) view returns ((bytes32,bytes32,uint64,uint64,uint64,uint64))']),
     functionName: 'stateOf',
-    args: [deployment.accounts.attester],
+    args: [requireAttester()],
   }) as unknown as readonly [string, string, bigint, bigint];
   assert.notEqual(pkCommitment, `0x${'0'.repeat(64)}`, 'the attester has no registered FORS key');
   assert.ok(useCount < maxUses, `the attester's few-time budget is spent (${useCount}/${maxUses}) — rotate it`);

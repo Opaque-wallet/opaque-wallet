@@ -44,10 +44,10 @@
         <p class="menu__heading">Product</p>
         <div class="menu__cols">
         <div class="menu__col"><p class="menu__label">Use Opaque</p>
-          <a class="menu__link" href="/testnet/xrpl"><strong>Private wallet</strong><span>Deposit, hold and send XRP, RLUSD and USDC</span></a>
+          <a class="menu__link" href="/testnet/xrpl"><strong>Private wallet</strong><span>Deposit, hold and send on Ethereum, Arc and the XRP Ledger</span></a>
           <a class="menu__link" href="#story"><strong>How a payment hides</strong><span>One of eight notes, three relays, a fresh address</span></a>
           <a class="menu__link" href="#connect"><strong>An account per app</strong><span>Apps see an address that leads nowhere</span></a>
-          <a class="menu__link" href="#keys"><strong>Single-use keys</strong><span>Every key signs once, then retires</span></a>
+          <a class="menu__link" href="#keys"><strong>Post-quantum keys</strong><span>Keys a quantum computer can't use</span></a>
         </div>
         <div class="menu__col"><p class="menu__label">Get Opaque</p>
           <a class="menu__link" href="/testnet/xrpl"><strong>Web wallet</strong><span>Runs in your browser, nothing to install</span></a>
@@ -56,7 +56,7 @@
           <a class="menu__link" href="/opaque-extension.zip" download><strong>Browser extension</strong><span>A wallet in Chrome's side panel</span></a>
         </div>
         <div class="menu__popular"><p class="menu__label">Popular</p>
-          <a class="menu__card menu__card--dark" href="/testnet/xrpl"><strong>Get test XRP →</strong><span>95 XRP from the faucet, straight into notes</span></a>
+          <a class="menu__card menu__card--dark" href="/testnet/xrpl"><strong>Try it on testnet →</strong><span>Free test tokens, straight into notes</span></a>
         </div>
         </div>
       </div>
@@ -67,14 +67,14 @@
           <a class="menu__link" href="/docs"><strong>Docs</strong><span>Use the wallet, and build on it</span></a>
           <a class="menu__link" href="/developers"><strong>Opaque API</strong><span>The SDK and MCP server, for your app or agent</span></a>
           <a class="menu__link" href="#story"><strong>How it works</strong><span>Follow one payment from deposit to app</span></a>
-          <a class="menu__link" href="#keys"><strong>Quantum timing</strong><span>Why an old key is worth seconds, not years</span></a>
+          <a class="menu__link" href="#keys"><strong>Quantum safety</strong><span>Why your keys outlast a quantum computer</span></a>
           <a class="menu__link" href="/privacy"><strong>Privacy</strong><span>What Opaque keeps, and what it never sees</span></a>
           <a class="menu__link" href="/terms"><strong>Terms</strong><span>What you agree to when you use Opaque</span></a>
         </div>
-        <div class="menu__col"><p class="menu__label">XRP Ledger</p>
-          <a class="menu__link" href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer"><strong>Testnet explorer ↗</strong><span>Look up any pool or app account</span></a>
-          <a class="menu__link" href="https://xrpl.org/resources/dev-tools/xrp-faucets" target="_blank" rel="noopener noreferrer"><strong>XRPL faucets ↗</strong><span>Test XRP for any testnet wallet</span></a>
-          <a class="menu__link" href="https://xrpl.org" target="_blank" rel="noopener noreferrer"><strong>XRPL.org ↗</strong><span>The ledger Opaque runs on</span></a>
+        <div class="menu__col"><p class="menu__label">Explorers</p>
+          <a class="menu__link" href="https://sepolia.etherscan.io" target="_blank" rel="noopener noreferrer"><strong>Ethereum Sepolia ↗</strong><span>Look up any pool or app account</span></a>
+          <a class="menu__link" href="https://explorer.arc.io" target="_blank" rel="noopener noreferrer"><strong>Arc ↗</strong><span>Private USDC, live on mainnet</span></a>
+          <a class="menu__link" href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer"><strong>XRPL testnet ↗</strong><span>Pools and app accounts on the XRP Ledger</span></a>
         </div>
         <div class="menu__popular"><p class="menu__label">Also from Opaque</p>
           <a class="menu__card" href="/app"><strong>Opaque on Arc</strong><span>Private USDC payments on Arc mainnet</span></a>
@@ -113,7 +113,7 @@
           <article class="step is-active">
             <p class="step__label">01 · Deposit</p>
             <h2 class="display step__title">Drop it in.</h2>
-            <p>Make a deposit tag and pay it from any XRPL wallet or exchange. What arrives becomes notes only your browser can spend.</p>
+            <p>Pay your deposit address from any wallet or exchange. What arrives becomes notes only your browser can spend.</p>
           </article>
           <article class="step">
             <p class="step__label">02 · Hide</p>
@@ -128,12 +128,12 @@
           <article class="step">
             <p class="step__label">04 · Paid</p>
             <h2 class="display step__title">Paid from the pool. Never from you.</h2>
-            <p>The ledger shows the pool paying a fresh address. Nothing on it points back to you, and a new note takes your place in the pool.</p>
+            <p>The chain shows the pool paying a fresh address. Nothing on it points back to you, and a new note takes your place in the pool.</p>
           </article>
           <article class="step">
             <p class="step__label">05 · Apps</p>
             <h2 class="display step__title">Every app gets its own account.</h2>
-            <p>Each app sees an address funded by the pool. On the ledger, none of them leads to another app, or to you.</p>
+            <p>Each app sees an address funded by the pool. On chain, none of them leads to another app, or to you.</p>
           </article>
         </div>
       </div>
@@ -151,21 +151,21 @@
             <div class="screen__body">
               <div class="screen__account"><span class="screen__mark" data-dots="#070608"></span><span><b>Account 1 ⌄</b><small>Notes in this browser</small></span><em>☰</em></div>
               <p class="screen__eyebrow">Private balance</p>
-              <p class="screen__balance">284.00 <small>XRP</small></p>
-              <p class="screen__hint">Hidden on the ledger · 22 notes</p>
+              <p class="screen__balance">2.84 <small>ETH</small></p>
+              <p class="screen__hint">Hidden on chain · 22 notes</p>
               <div class="screen__actions"><span><i>↗</i>Send</span><span><i>↙</i>Deposit</span><span><i>◫</i>Apps</span><span><i>◷</i>Activity</span></div>
               <div class="screen__card"><span><small>Apps on their own accounts</small><b>3 connected</b></span><em>Open</em></div>
               <p class="screen__head">Your private notes <em>›</em></p>
               <ul class="screen__list">
-                <li><i class="coin">X</i><span><b>XRP</b><small>14 notes</small></span><span><b>284.00</b><small>2×100 · 8×10 · 4×1</small></span></li>
-                <li><i class="coin coin--dark">R</i><span><b>RLUSD</b><small>3 notes</small></span><span><b>120.00</b><small>1×100 · 2×10</small></span></li>
-                <li><i class="coin coin--line">U</i><span><b>USDC</b><small>5 notes</small></span><span><b>50.00</b><small>5×10</small></span></li>
+                <li><i class="coin">E</i><span><b>ETH</b><small>14 notes</small></span><span><b>2.84</b><small>2×1 · 8×0.1 · 4×0.01</small></span></li>
+                <li><i class="coin coin--dark">U</i><span><b>USDC</b><small>3 notes</small></span><span><b>120.00</b><small>1×100 · 2×10</small></span></li>
+                <li><i class="coin coin--line">X</i><span><b>XRP</b><small>5 notes</small></span><span><b>50.00</b><small>5×10</small></span></li>
               </ul>
               <p class="screen__head">Apps <em>›</em></p>
               <ul class="screen__list">
-                <li><i class="coin coin--dark">D</i><span><b>DEX</b><small>Its own account</small></span><span><b>rGEU…9c1</b><small>funded by the pool</small></span></li>
+                <li><i class="coin coin--dark">D</i><span><b>DEX</b><small>Its own account</small></span><span><b>0x4f…9c1e</b><small>funded by the pool</small></span></li>
                 <li><i class="coin coin--dark">N</i><span><b>NFT market</b><small>Its own account</small></span><span><b>rUvv…2Lp</b><small>funded by the pool</small></span></li>
-                <li><i class="coin coin--dark">G</i><span><b>Game</b><small>Its own account</small></span><span><b>rP3k…7Qa</b><small>funded by the pool</small></span></li>
+                <li><i class="coin coin--dark">G</i><span><b>Game</b><small>Its own account</small></span><span><b>0xb8…7c4a</b><small>funded by the pool</small></span></li>
               </ul>
             </div>
             <div class="screen__tabs"><span class="is-on"><i>⌂</i>Overview</span><span><i>↗</i>Send</span><span class="screen__fab" data-dots="#070608"></span><span><i>◷</i>Activity</span><span><i>◫</i>Apps</span></div>
@@ -174,32 +174,32 @@
             <div class="screen__status"><b>9:41</b><span class="screen__bars"><i></i><i></i><i></i><i></i></span></div>
             <div class="screen__body">
               <div class="screen__top"><em>←</em><span><small>Review</small><b>Confirm private transfer</b></span></div>
-              <p class="screen__amount">120 <small>XRP</small></p>
-              <p class="screen__to">to rPEPP…Kq3Y</p>
+              <p class="screen__amount">1.2 <small>ETH</small></p>
+              <p class="screen__to">to 0x9f3c…41ae</p>
               <dl class="screen__rows">
-                <div><dt>Recipient receives</dt><dd>119.3997 XRP</dd></div>
-                <div><dt>Fees</dt><dd>0.6003 XRP</dd></div>
-                <div><dt>Notes spent</dt><dd>1 × 100 + 2 × 10</dd></div>
+                <div><dt>Recipient receives</dt><dd>1.194 ETH</dd></div>
+                <div><dt>Fees</dt><dd>0.006 ETH</dd></div>
+                <div><dt>Notes spent</dt><dd>1 × 1 + 2 × 0.1</dd></div>
                 <div><dt>Settles</dt><dd>now, within a minute</dd></div>
               </dl>
-              <p class="screen__note"><i></i>Paid from the pool through three relays. Nothing on the ledger points back to you.</p>
+              <p class="screen__note"><i></i>Paid from the pool through three relays. Nothing on chain points back to you.</p>
             </div>
             <div class="screen__buttons"><span>Reject</span><span class="is-go">Confirm</span></div>
-            <div class="screen__done"><span class="screen__check">✓</span><b>Sent privately</b><small>The ledger shows the pool paying rPEPP…Kq3Y.</small></div>
+            <div class="screen__done"><span class="screen__check">✓</span><b>Sent privately</b><small>The chain shows the pool paying 0x9f3c…41ae.</small></div>
           </div>
         </div>
       </div>
       <div class="tour__tiles">
         <article class="tile tile--orange">
-          <h3>Deposit from any XRPL wallet or exchange.</h3>
+          <h3>Deposit from any wallet or exchange.</h3>
           <div class="tile__art tile__drop" data-dots="#070608"></div>
         </article>
         <article class="tile tile--ink">
           <h3>Every app gets an account of its own.</h3>
-          <div class="tile__art tile__apps" aria-hidden="true"><span style="--i: 0"><b>DEX</b>rGEU…9c1</span><span style="--i: 1"><b>NFT</b>rUvv…2Lp</span><span style="--i: 2"><b>Game</b>rP3k…7Qa</span></div>
+          <div class="tile__art tile__apps" aria-hidden="true"><span style="--i: 0"><b>DEX</b>0x4f…9c1e</span><span style="--i: 1"><b>NFT</b>rUvv…2Lp</span><span style="--i: 2"><b>Game</b>0xb8…7c4a</span></div>
         </article>
         <article class="tile tile--ember">
-          <h3>Every key signs once, then retires.</h3>
+          <h3>Post-quantum keys, retired before they wear out.</h3>
           <div class="tile__art tile__keys" aria-hidden="true"><span><b>Key 1</b><em>retired</em></span><span><b>Key 2</b><em>retired</em></span><span class="is-live"><b>Key 3</b><em>signing</em></span></div>
         </article>
         <article class="tile tile--glow">
@@ -213,7 +213,7 @@
   <section class="connect" id="connect" aria-labelledby="connect-title">
     <div class="section-head" data-reveal>
       <h2 class="display section-title" id="connect-title">Connect anywhere.</h2>
-      <p>Use Opaque with XRPL apps the way you'd use any wallet. Each one still only ever sees its own account.</p>
+      <p>Use Opaque with apps the way you'd use any wallet. Each one still only ever sees its own account.</p>
     </div>
     <div class="cards">
       <article class="card" data-reveal style="--d: 0">
@@ -224,7 +224,7 @@
       <article class="card" data-reveal style="--d: 1">
         <div class="card__icon" data-ring="qr"></div>
         <h3>Scan a QR</h3>
-        <p>Any XRPL app with WalletConnect. Scan its code with Opaque on your phone, and requests arrive there.</p>
+        <p>Any app with WalletConnect. Scan its code with Opaque on your phone, and requests arrive there.</p>
       </article>
       <article class="card" data-reveal style="--d: 2">
         <div class="card__icon" data-ring="extension"></div>
@@ -237,13 +237,13 @@
 
   <section class="keys" id="keys" aria-labelledby="keys-title">
     <div class="keys__head" data-reveal>
-      <h2 class="display keys__title" id="keys-title">Every key signs once.</h2>
-      <p>Each signature hands the account to a key nobody has seen yet. A future quantum computer would get seconds, not years.</p>
+      <h2 class="display keys__title" id="keys-title">Built for Q-Day.</h2>
+      <p>On Ethereum and Arc your key is hash-based, so a quantum computer can't forge its signatures. On the XRP Ledger, every key signs once and hands the account to a key nobody has seen yet.</p>
     </div>
     <dl class="facts">
       <div data-reveal style="--d: 0"><dt>notes in every ring</dt><dd data-count="8">8</dd></div>
       <div data-reveal style="--d: 1"><dt>relays on every route</dt><dd data-count="3">3</dd></div>
-      <div data-reveal style="--d: 2"><dt>signature per key</dt><dd data-count="1">1</dd></div>
+      <div data-reveal style="--d: 2"><dt>retired keys with any power left</dt><dd data-count="0" data-from="3">0</dd></div>
       <div data-reveal style="--d: 3"><dt>links between your apps</dt><dd data-count="0" data-from="8">0</dd></div>
     </dl>
   </section>
@@ -251,7 +251,7 @@
   <section class="proof" id="proof" aria-labelledby="proof-title">
     <div class="section-head" data-reveal>
       <h2 class="display section-title" id="proof-title">Nothing leads back.</h2>
-      <p>Look up any Opaque payment on the XRPL explorer. You'll find the pool, a fresh address and a key that has already retired. You won't find you.</p>
+      <p>Look up any Opaque payment on a block explorer. You'll find the pool, a fresh address and a post-quantum signature. You won't find you.</p>
     </div>
     <div class="proof__grid">
       <article class="proof__card proof__card--pattern" data-reveal style="--d: 0">
@@ -267,7 +267,7 @@
         </div>
       </article>
       <article class="proof__card proof__card--ledger" data-reveal style="--d: 2">
-        <h3>What the ledger sees</h3>
+        <h3>What the chain sees</h3>
         <div class="ledger">
           <div class="ledger__ring">
             <svg viewBox="0 0 120 120" aria-hidden="true">
@@ -282,17 +282,17 @@
           <ul class="ledger__list">
             <li style="--c: var(--orange)"><b>Who paid</b><span>the pool</span></li>
             <li style="--c: var(--soft)"><b>Your apps</b><span>not linked</span></li>
-            <li style="--c: #ffcf9e"><b>Signing key</b><span>used once</span></li>
+            <li style="--c: #ffcf9e"><b>Signing key</b><span>post-quantum</span></li>
             <li style="--c: var(--cream)"><b>Your note</b><span>one of eight</span></li>
           </ul>
         </div>
       </article>
       <article class="proof__card proof__card--flow" data-reveal style="--d: 3">
-        <h3>Payments, the way the ledger shows them.</h3>
+        <h3>Payments, the way the chain shows them.</h3>
         <div class="flow" aria-hidden="true">
-          <div class="flow__row"><span>rDep…4Fq <i>→</i> pool <em>Deposit</em></span><span>pool <i>→</i> rPEPP…Kq3Y <em>Paid</em></span><span>pool <i>→</i> rGEU…9c1 <em>App</em></span></div>
+          <div class="flow__row"><span>0xde…04fa <i>→</i> pool <em>Deposit</em></span><span>pool <i>→</i> 0x9f3c…41ae <em>Paid</em></span><span>pool <i>→</i> 0x4f…9c1e <em>App</em></span></div>
           <div class="flow__row"><span>pool <i>→</i> rUvv…2Lp <em>App</em></span><span>rExc…h7W <i>→</i> pool <em>Deposit</em></span><span>pool <i>→</i> rN7d…Qm2 <em>Paid</em></span></div>
-          <div class="flow__row"><span>pool <i>→</i> rP3k…7Qa <em>App</em></span><span>rBk2…sQ9 <i>→</i> pool <em>Deposit</em></span><span>pool <i>→</i> rHb9…TJ4 <em>Paid</em></span></div>
+          <div class="flow__row"><span>pool <i>→</i> 0xb8…7c4a <em>App</em></span><span>0x2b…9d0f <i>→</i> pool <em>Deposit</em></span><span>pool <i>→</i> 0x71…a3c2 <em>Paid</em></span></div>
         </div>
       </article>
     </div>
@@ -303,7 +303,7 @@
       <div class="api__copy">
         <p class="api__badge"><img src="./logo.png" alt="opaque" width="942" height="200"><span>API</span></p>
         <h2 class="display api__title" id="api-title">Private payments, inside your app.</h2>
-        <p>The SDK and MCP server behind the wallet: private, post-quantum payments on Arc and the XRP Ledger, with the keys on your machine.</p>
+        <p>The SDK and MCP server behind the wallet: private, post-quantum payments on Ethereum, Arc and the XRP Ledger, with the keys on your machine.</p>
         <a class="btn btn--primary" href="/developers">Start building →</a>
         <ul class="api__who" aria-label="Built for"><li>Wallets</li><li>Fintechs</li><li>Stablecoins</li><li>Agents</li></ul>
       </div>
@@ -311,7 +311,7 @@
         <li><b>Your app</b><span>Wallets · Fintechs · Stablecoins · Agents</span></li>
         <li class="is-here"><b>Opaque SDK · MCP server</b><span>Keys, notes and proofs, on your machine</span></li>
         <li><b>Six relays, three hops</b><span>The services never learn who asked</span></li>
-        <li><b>Arc · XRP Ledger</b><span>Paid from a pool, through a ring of 8</span></li>
+        <li><b>Ethereum · Arc · XRP Ledger</b><span>Paid from a pool, through a ring of 8</span></li>
       </ol>
     </div>
   </section>
@@ -321,7 +321,7 @@
       <div class="final__note" aria-hidden="true">
         <span class="final__note-top"><img src="./logo.png" alt="" width="942" height="200"><em>Private note</em></span>
         <span class="final__note-ring" data-dots="#070608"></span>
-        <span class="final__note-foot"><b>100 XRP</b><em>1 of 8 · spends once</em></span>
+        <span class="final__note-foot"><b>1 ETH</b><em>1 of 8 · spends once</em></span>
       </div>
       <div class="final__phone" aria-hidden="true"></div>
       <canvas class="final__ring" aria-hidden="true"></canvas>
@@ -330,7 +330,7 @@
         <div class="actions">
           <a class="btn btn--primary" href="/testnet/xrpl">Open the wallet</a>
         </div>
-        <p class="fine">Testnet today. Test XRP has no value.</p>
+        <p class="fine">Testnet today. Test tokens have no value.</p>
       </div>
     </div>
   </section>
@@ -339,8 +339,8 @@
     <article class="duo__card duo__card--orange" data-reveal>
       <span class="duo__art" data-dots="#070608"></span>
       <h2 class="display">Try it on testnet.</h2>
-      <p>Take 95 test XRP from the faucet and send some privately. Test XRP has no value, so nothing is at stake.</p>
-      <a class="btn btn--dark" href="/testnet/xrpl">Get test XRP</a>
+      <p>Take free test tokens from a faucet and send some privately. They have no value, so nothing is at stake.</p>
+      <a class="btn btn--dark" href="/testnet/xrpl">Get test tokens</a>
     </article>
     <article class="duo__card duo__card--dark" data-reveal style="--d: 1">
       <span class="duo__art" data-dots="#ff7a18"></span>
@@ -359,7 +359,7 @@
         <a href="/testnet/xrpl">Open the wallet</a>
         <a href="#story">How a payment hides</a>
         <a href="#connect">An account per app</a>
-        <a href="#keys">Single-use keys</a>
+        <a href="#keys">Post-quantum keys</a>
       </div>
       <div><p class="footer__h">Get Opaque</p>
         <a href="/testnet/xrpl">Web wallet</a>
@@ -367,10 +367,10 @@
         <a href="/testnet/xrpl-connect">WalletConnect <span class="badge">New</span></a>
         <a href="/opaque-extension.zip" download>Browser extension <span class="badge">New</span></a>
       </div>
-      <div><p class="footer__h">XRP Ledger</p>
-        <a href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer">Testnet explorer ↗</a>
-        <a href="https://xrpl.org/resources/dev-tools/xrp-faucets" target="_blank" rel="noopener noreferrer">XRPL faucets ↗</a>
-        <a href="https://xrpl.org" target="_blank" rel="noopener noreferrer">XRPL.org ↗</a>
+      <div><p class="footer__h">Explorers</p>
+        <a href="https://sepolia.etherscan.io" target="_blank" rel="noopener noreferrer">Ethereum Sepolia ↗</a>
+        <a href="https://explorer.arc.io" target="_blank" rel="noopener noreferrer">Arc ↗</a>
+        <a href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer">XRPL testnet ↗</a>
       </div>
       <div><p class="footer__h">Opaque</p>
         <a href="/app">Opaque on Arc</a>
@@ -381,7 +381,7 @@
       </div>
     </nav>
   </div>
-  <div class="footer__bottom"><p>Private payments. © 2026 Opaque.</p><p>Live on Arc. On the XRP Ledger testnet.</p></div>
+  <div class="footer__bottom"><p>Private payments. © 2026 Opaque.</p><p>Live on Arc. On testnet on Ethereum and the XRP Ledger.</p></div>
 </footer>
 
 <script type="module" src="./main.js"></script>

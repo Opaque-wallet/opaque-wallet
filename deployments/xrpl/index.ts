@@ -4,8 +4,8 @@
 // because a server that could name the pools could take the deposits. And
 // dependency-free, so the wallet, the backend and the tests all import it.
 
-import testnet from './xrpl-testnet.json' with { type: 'json' };
-import mainnet from './xrpl-mainnet.json' with { type: 'json' };
+import testnet from './testnet.json' with { type: 'json' };
+import mainnet from './mainnet.json' with { type: 'json' };
 
 const NETWORKS = { testnet, mainnet } as const;
 const selected =
@@ -13,7 +13,7 @@ const selected =
   (import.meta as { env?: Record<string, string | undefined> }).env?.['VITE_NETWORK'] ??
   'testnet';
 if (!(selected in NETWORKS)) throw new Error(`unknown network "${selected}": use testnet or mainnet`);
-const FILE = `deployments/xrpl-${selected}.json`;
+const FILE = `deployments/xrpl/${selected}.json`;
 
 export type XrplAssetConfig =
   | { readonly kind: 'XRP' }

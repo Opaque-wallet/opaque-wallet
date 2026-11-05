@@ -32,7 +32,7 @@ import { createPublicClient, encodeAbiParameters, encodeFunctionData, getContrac
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { requireService } from '../../deployments/index.ts';
-import { acceptTerms, ARC_READY, createWallet, passkeyOffer, unlockIfAsked } from './xrpl-wallet-page.ts';
+import { acceptTerms, ARC_READY, createWallet, passkeyOffer, unlockIfAsked } from './wallet-page.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);

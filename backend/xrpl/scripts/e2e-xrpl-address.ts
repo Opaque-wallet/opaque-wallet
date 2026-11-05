@@ -23,9 +23,9 @@ import { join } from 'node:path';
 import { xAddressToClassicAddress } from 'ripple-address-codec';
 import { Client, Wallet } from 'xrpl';
 
-import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { createWallet, importWallet, unlockIfAsked } from './xrpl-wallet-page.ts';
-import { xrplDeployment } from '../../deployments/xrpl.ts';
+import { chromium } from '../../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { createWallet, importWallet, unlockIfAsked } from '../../scripts/wallet-page.ts';
+import { xrplDeployment } from '../../../deployments/xrpl/index.ts';
 
 const PAGE = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit/testnet/xrpl';
 const LARGE = process.argv.includes('--large');

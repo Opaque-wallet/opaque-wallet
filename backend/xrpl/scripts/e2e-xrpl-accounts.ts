@@ -23,11 +23,11 @@ import { fileURLToPath } from 'node:url';
 
 import { Client } from 'xrpl';
 
-import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { openWallet, unlockIfAsked } from './xrpl-wallet-page.ts';
-import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
+import { chromium } from '../../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet, unlockIfAsked } from '../../scripts/wallet-page.ts';
+import { xrplDeployment, xrplPool } from '../../../deployments/xrpl/index.ts';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const WALLET = 'https://www.opaque.credit';
 const APP_A = 'https://opaque-xrpl-demo.vercel.app';
 const APP_B = 'http://localhost:5298';

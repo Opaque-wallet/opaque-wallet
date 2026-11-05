@@ -4,7 +4,7 @@
 // the same accounts; what differs per chain (an account's address and balance,
 // how its notes are looked for again) comes from the page.
 
-import { accountKeys, accountKeyText, accountLabel, importAccountKey, importedAccounts, isAccountKeyText, isPhrase, newPhrase, normalizePhrase, savePhrase, saveWalletState, storedPhrase, walletState, type AccountKeys } from './xrpl-keys.ts';
+import { accountKeys, accountKeyText, accountLabel, importAccountKey, importedAccounts, isAccountKeyText, isPhrase, newPhrase, normalizePhrase, savePhrase, saveWalletState, storedPhrase, walletState, type AccountKeys } from './wallet-keys.ts';
 import { changePassword, confirmPassword, hasPassword, lockNow, MIN_PASSWORD, setPassword } from './lock.ts';
 import { backupState, createBackup, hasSomethingToBackUp, passkeySupported, removeBackup, restoreFromPasskey, syncBackup, type BackupTransport } from './passkey-backup.ts';
 

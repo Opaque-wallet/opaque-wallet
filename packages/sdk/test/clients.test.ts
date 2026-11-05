@@ -8,8 +8,8 @@ import { test } from 'node:test';
 
 import { ARC_AUTHORITY, createPqAccountOps } from '../../../backend/chain/pq-wallet-chain.ts';
 import type { WalletRuntime } from '../../../frontend/src/lib/runtime.ts';
-import type { XrplWallet } from '../../../frontend/src/lib/xrpl-runtime.ts';
-import { accountKeys } from '../../../frontend/src/lib/xrpl-keys.ts';
+import type { XrplWallet } from '../../../frontend/src/xrpl/runtime.ts';
+import { accountKeys } from '../../../frontend/src/lib/wallet-keys.ts';
 import { openArc } from '../src/arc.ts';
 import type { FileStore } from '../src/store.ts';
 import { openXrpl } from '../src/xrpl.ts';

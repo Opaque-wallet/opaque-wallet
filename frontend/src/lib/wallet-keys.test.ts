@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { accountFromKeyText, accountKeys, accountKeyText, isAccountKeyText, isPhrase, newPhrase, normalizePhrase, stream } from './xrpl-keys.ts';
+import { accountFromKeyText, accountKeys, accountKeyText, isAccountKeyText, isPhrase, newPhrase, normalizePhrase, stream } from './wallet-keys.ts';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');

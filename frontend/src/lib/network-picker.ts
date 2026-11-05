@@ -1,14 +1,15 @@
 // The header's network button and its sheet, shared by every network's wallet
-// page: Arc's (app.html) and XRPL's (xrpl.html). Each network is its own build,
+// page: Arc's (app.html) and XRPL's (xrpl.html); Ethereum's rows show Soon
+// until its page exists. Each network is its own build,
 // mainnet at the site root and testnet under testnet/ (`npm run build:site`),
 // with storage names of its own, so switching network is a page load and never
 // a change of keys. A new chain is an entry here and a page in
 // extension/build.mjs, never a second wallet.
 
-import { deployment, networks } from '../../../deployments/index.ts';
+import { deployment, networks, type NetworkId } from '../../../deployments/index.ts';
 
-/** An Arc network id, or 'xrpl': the XRPL wallet page (testnet/xrpl.html). */
-export type WalletPage = (typeof networks)[number]['id'] | 'xrpl';
+/** An EVM network id, or 'xrpl': the XRPL wallet page (testnet/xrpl.html). */
+export type WalletPage = NetworkId | 'xrpl';
 
 /** The directory of the build at `sitePath`, relative to this page; '' for this build. */
 const dirOf = (sitePath: string): string =>
@@ -16,6 +17,8 @@ const dirOf = (sitePath: string): string =>
 
 interface Network { readonly id: string; readonly chain: string; readonly name: string; readonly note: string; readonly href?: string; readonly flag?: string }
 const NETWORKS: readonly Network[] = [
+  { id: 'sepolia', chain: 'Ethereum', name: 'Sepolia', note: 'Private test USDC, no value' },
+  { id: 'devnet-8141', chain: 'Ethereum', name: 'EIP-8141 devnet', note: 'Frame transactions, no value' },
   ...networks.map((n) => ({
     id: n.id as string, chain: 'Arc', name: n.displayName, href: `${dirOf(n.sitePath)}app.html`,
     note: n.id === 'mainnet' ? 'Private USDC, real funds' : 'Private test USDC, no value',
@@ -50,7 +53,7 @@ export function networkPicker(button: HTMLButtonElement, current: WalletPage): v
       if (row instanceof HTMLAnchorElement) row.href = n.href!;
       else { row.type = 'button'; row.disabled = n.href === undefined; }
       if (n.id === current) row.setAttribute('aria-current', 'true');
-      row.innerHTML = `<i class="tok tok-${chain === 'Arc' ? 'arc' : 'xrp'}">${chain[0]}</i><span><b></b><small></small></span>`;
+      row.innerHTML = `<i class="tok tok-${{ Arc: 'arc', Ethereum: 'eth' }[chain] ?? 'xrp'}">${chain[0]}</i><span><b></b><small></small></span>`;
       row.querySelector('b')!.textContent = n.name;
       row.querySelector('small')!.textContent = n.note;
       if (n.flag !== undefined) row.append(Object.assign(document.createElement('em'), { className: 'net-flag', textContent: n.flag }));

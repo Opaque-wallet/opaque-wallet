@@ -24,9 +24,9 @@ import { fileURLToPath } from 'node:url';
 
 import { Client } from 'xrpl';
 
-import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { openWallet } from './xrpl-wallet-page.ts';
-import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
+import { chromium } from '../../../packages/pq-wallet/node_modules/playwright/index.mjs';
+import { openWallet } from '../../scripts/wallet-page.ts';
+import { xrplDeployment, xrplPool } from '../../../deployments/xrpl/index.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = 5199;
@@ -56,9 +56,9 @@ const pool = xrplPool('XRP');
 let browser: any;
 
 try {
-  children.push(await start('node', ['--use-system-ca', 'xrpl/stack.ts'], join(HERE, '..'), /wallet cfg/,
+  children.push(await start('node', ['--use-system-ca', 'xrpl/stack.ts'], join(HERE, '..', '..'), /wallet cfg/,
     { MOONPAY_API_KEY: 'pk_test_opaque', MOONPAY_SECRET_KEY: 'sk_test_opaque' }));
-  children.push(await start('npx', ['vite', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'], join(HERE, '..', '..', 'frontend'), /ready in|Local:/));
+  children.push(await start('npx', ['vite', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'], join(HERE, '..', '..', '..', 'frontend'), /ready in|Local:/));
   await client.connect();
   const [{ wallet: payer }, { wallet: recipient }] = [await client.fundWallet(), await client.fundWallet()];
 

@@ -18,7 +18,7 @@ import { BatchFlags, GlobalFlags, type Batch } from 'xrpl';
 
 import type { PoolScope } from '@opaque/protocol-types';
 
-import { xrplDeployment, xrplPool } from '../../deployments/xrpl.ts';
+import { xrplDeployment, xrplPool } from '../../deployments/xrpl/index.ts';
 import { createNoteSecret, deriveCommitment, deriveNullifier } from '../zk/index.ts';
 import { attesterChain, signerListOf } from './attester.ts';
 import { log, startHarness } from './harness.ts';

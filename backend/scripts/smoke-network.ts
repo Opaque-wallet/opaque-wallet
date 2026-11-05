@@ -16,7 +16,7 @@ import { createMeshBootstrap } from '../mesh/bootstrap.ts';
 import { chainTo } from '../mesh/directory.ts';
 import { bundlerCall, readOne, readState, STATE_ABI, type WalletRpcSend } from '../chain/wallet-rpc.ts';
 import { MarkovPathPolicy } from '../../graph/src/path-policy.ts';
-import { deployment, entryPoint, meshTrustRoot, NETWORK, requireContract, requireService } from '../../deployments/index.ts';
+import { deployment, entryPoint, meshTrustRoot, NETWORK, requireAttester, requireContract, requireService } from '../../deployments/index.ts';
 
 const stackUrl = process.env['STACK_URL'] ?? `${new URL(requireService('meshExitUrl')).origin}/stack.json`;
 const reviver = (_k: string, v: unknown) => (typeof v === 'string' && /^\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v);
@@ -78,7 +78,7 @@ await check('every pool answers capabilities() over the mesh as configured', asy
   return `block ${blockNumber}`;
 });
 await check('registry, USDC and EntryPoint reads pass the exit allowlist', async () => {
-  const attester = deployment.accounts.attester;
+  const attester = requireAttester();
   const state = (await readOne(walletRpc, requireContract('pqKeyRegistry'), 'stateOf', [attester])).value as { useCount: bigint; maxUses: bigint };
   expect(state.maxUses > 0n, 'attester has no registered key');
   await readOne(walletRpc, deployment.tokens.usdc.address, 'balanceOf', [attester]);

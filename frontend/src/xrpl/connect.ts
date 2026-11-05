@@ -7,12 +7,12 @@
 // on other wallet SDKs: paste the link, and their requests join the same queue.
 
 // First: it seals and opens what the wallet stores, so nothing reads storage before it.
-import { unlockGate } from './lib/lock.ts';
-import { xrplDeployment } from '../../deployments/xrpl.ts';
-import { hasBrowserWallet, startXrplWallet, type XrplWallet } from './lib/xrpl-runtime.ts';
-import { accountLabel, activeAccount } from './lib/xrpl-keys.ts';
-import { termsAccepted } from './lib/wallet-ui.ts';
-import { startWalletConnect } from './lib/walletconnect.ts';
+import { unlockGate } from '../lib/lock.ts';
+import { xrplDeployment } from '../../../deployments/xrpl/index.ts';
+import { hasBrowserWallet, startXrplWallet, type XrplWallet } from './runtime.ts';
+import { accountLabel, activeAccount } from '../lib/wallet-keys.ts';
+import { termsAccepted } from '../lib/wallet-ui.ts';
+import { startWalletConnect } from '../lib/walletconnect.ts';
 
 // The extension serves this page to any https site (web_accessible_resources), so a site
 // could frame it, unlocked, under its own page and steer a click onto Approve. It runs
@@ -69,6 +69,40 @@ function describe(tx: Record<string, unknown>): string {
   }
 }
 
+/** Fields that hold an amount: drops as XRP, objects as value and currency. */
+const AMOUNT_FIELDS = new Set(['Amount', 'Amount2', 'SendMax', 'DeliverMin', 'TakerGets', 'TakerPays', 'LimitAmount', 'EPrice', 'LPTokenOut', 'LPTokenIn', 'BidMin', 'BidMax']);
+/** dappTx drops these whatever the site sends: the wallet sets them when it signs. */
+const SET_BY_OPAQUE = ['Sequence', 'Fee', 'LastLedgerSequence', 'NetworkID', 'SigningPubKey'];
+
+/** The card's rows, as a wallet shows them: label, value, and whether the value is an address or code. */
+function facts(rows: readonly (readonly [string, string, boolean?])[]): void {
+  el('request-facts').replaceChildren(...rows.flatMap(([label, value, mono]) => {
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = label;
+    dd.textContent = value;
+    if (mono === true) dd.className = 'mono';
+    return [dt, dd];
+  }));
+}
+
+/** Every field the site asked for, beside what Opaque adds and what it pays. */
+function txFacts(tx: Record<string, unknown>, method: Method, account: string | undefined): void {
+  const ignored = SET_BY_OPAQUE.filter((k) => tx[k] !== undefined);
+  facts([
+    ['Network', xrplDeployment.network.displayName],
+    ['Account', account ?? 'none: connect first', account !== undefined],
+    ['Type', String(tx['TransactionType']), true],
+    ...Object.entries(tx)
+      .filter(([k]) => k !== 'TransactionType' && k !== 'Account' && !SET_BY_OPAQUE.includes(k))
+      .map(([k, v]) => [k, AMOUNT_FIELDS.has(k) ? amount(v) : typeof v === 'object' ? JSON.stringify(v) : String(v), true] as const),
+    // site.ts: signAndSubmit pays 4 base fees for its Batch; sign pays one each for the transaction and its rotation.
+    ['Network fee', method === 'sign' ? '2 × the base fee, about 0.00002 XRP, from this site account' : '4 × the base fee, about 0.00004 XRP, from this site account'],
+    ['Opaque adds', method === 'sign' ? 'A key rotation, sent right after it: this key never signs again' : 'A key rotation in the same Batch: this key never signs again'],
+    ['Set by Opaque', `Sequence, Fee, LastLedgerSequence${ignored.length === 0 ? '' : `; the site's ${ignored.join(', ')} ignored`}`],
+  ]);
+}
+
 /** Waits for Approve or Reject on the card on screen. */
 const decision = (): Promise<boolean> => new Promise((resolve) => {
   const approve = el<HTMLButtonElement>('approve');
@@ -76,6 +110,13 @@ const decision = (): Promise<boolean> => new Promise((resolve) => {
   const done = (ok: boolean) => { approve.onclick = null; reject.onclick = null; resolve(ok); };
   approve.onclick = () => done(true);
   reject.onclick = () => done(false);
+});
+
+el('copy-raw').addEventListener('click', () => {
+  navigator.clipboard.writeText(el('request-details').textContent ?? '').then(
+    () => { el('copy-raw').textContent = 'Copied'; setTimeout(() => { el('copy-raw').textContent = 'Copy'; }, 1500); },
+    () => { getSelection()?.selectAllChildren(el('request-details')); },
+  );
 });
 
 async function handle(p: Pending): Promise<void> {
@@ -88,7 +129,9 @@ async function handle(p: Pending): Promise<void> {
   el('request-note').textContent = p.note ?? '';
   el('progress').hidden = true;
   el('fund-box').hidden = true;
-  el('request-details').hidden = true;
+  el('request-facts').replaceChildren();
+  el('request-perms').hidden = true;
+  el('request-raw').hidden = true;
   const progress = (line: string) => { el('progress').hidden = false; el('progress').textContent = line; };
   const buttons = (on: boolean) => { el<HTMLButtonElement>('approve').disabled = !on; el<HTMLButtonElement>('reject').disabled = !on; };
   buttons(false);
@@ -105,16 +148,22 @@ async function handle(p: Pending): Promise<void> {
       el('request-summary').textContent = `You hold ${balance.units} private XRP.`;
       el('fund-box').hidden = false;
     }
+    facts([['Network', xrplDeployment.network.displayName], ['Account', site?.address ?? 'A new one, for this site only', site !== undefined]]);
+    el('request-perms').hidden = false;
   } else if (p.method === 'signMessage') {
     el('request-title').textContent = 'Sign a message';
     el('request-summary').textContent = 'Signed by this site account\'s original key. It can no longer move funds, but a future quantum computer could forge messages from it.';
-    el('request-details').hidden = false;
+    facts([['Network', xrplDeployment.network.displayName], ['Account', site?.address ?? 'none: connect first', site !== undefined], ['Signed by', 'The original (master) key, which is turned off']]);
+    el('request-raw').hidden = false;
+    el('request-raw-label').textContent = 'Message';
     el('request-details').textContent = String(p.params['message'] ?? `hex ${String(p.params['hex'])}`);
   } else {
     const tx = (p.params['transaction'] ?? {}) as Record<string, unknown>;
     el('request-title').textContent = p.method === 'sign' ? 'Sign (the site submits it)' : 'Sign and submit';
     el('request-summary').textContent = site === undefined ? 'This site has no account: connect first.' : describe(tx);
-    el('request-details').hidden = false;
+    txFacts(tx, p.method, site?.address);
+    el('request-raw').hidden = false;
+    el('request-raw-label').textContent = 'Raw request (JSON)';
     el('request-details').textContent = JSON.stringify(tx, null, 2);
   }
 
@@ -243,10 +292,17 @@ function offerWalletConnect(w: XrplWallet): void {
   });
   el<HTMLFormElement>('wc-form').addEventListener('submit', (event) => {
     event.preventDefault();
-    const uri = el<HTMLInputElement>('wc-uri').value.trim();
+    // A link never holds whitespace; a pasted one often does ("wc: …").
+    const uri = el<HTMLInputElement>('wc-uri').value.replace(/\s+/g, '');
     if (!uri.startsWith('wc:')) { el('wc-status').textContent = 'A WalletConnect link starts with wc:'; return; }
+    // Topic and key are each 64 hex digits; anything else would wait on a relay that never answers.
+    if (!/^wc:[0-9a-f]{64}@2\?/i.test(uri) || !/[?&]relay-protocol=/.test(uri) || !/[?&]symKey=[0-9a-f]{64}(&|$)/i.test(uri)) {
+      el('wc-status').textContent = 'That isn\'t a complete WalletConnect link. Use the app\'s copy button or scan its QR code.';
+      return;
+    }
     el('wc-status').textContent = 'Pairing through Opaque…';
-    void start().then((c) => c.pair(uri)).then(() => {
+    const late = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('no answer in 30 s; the link may have expired, so ask the app for a new one')), 30_000));
+    void start().then((c) => Promise.race([c.pair(uri), late])).then(() => {
       try { localStorage.setItem(WC_USED, '1'); } catch { /* the session still works while this page is open */ }
       el<HTMLInputElement>('wc-uri').value = '';
       el('wc-status').textContent = 'Paired. The app\'s request appears here; keep this page open while you use it.';

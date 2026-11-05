@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { privateKeyToAddress } from 'viem/accounts';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { ARC_READY, createWallet, PASSWORD } from './xrpl-wallet-page.ts';
+import { ARC_READY, createWallet, PASSWORD } from './wallet-page.ts';
 
 const ORIGIN = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'https://www.opaque.credit';
 const clean = ORIGIN.includes('opaque.credit');

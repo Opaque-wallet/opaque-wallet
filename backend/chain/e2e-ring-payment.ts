@@ -30,7 +30,7 @@ import type {
 } from '@opaque/protocol-types';
 import { asChainId, fromHex, spendHash } from '@opaque/protocol-types/codecs.js';
 
-import { deployment, poolFor, requireContract } from '../../deployments/index.ts';
+import { deployment, poolFor, requireAttester, requireContract } from '../../deployments/index.ts';
 import { issueCredential } from '../cre/credential.ts';
 import { createExecutorServer } from '../cre/executor-server.ts';
 import { createIntentSealer, generateIntentKeypair } from '../cre/seal-client.ts';
@@ -56,7 +56,7 @@ const log = (s: string) => process.stdout.write(`${s}\n`);
 
 const ring8 = poolFor(1_000_000, 'RING_8');
 const REGISTRY = requireContract('pqKeyRegistry');
-const ATTESTER = deployment.accounts.attester;
+const ATTESTER = requireAttester();
 const scope = { chainId: asChainId(BigInt(deployment.network.chainId)), pool: ring8.address, denomination: ring8.denomination } as never;
 const publicClient = createPublicClient({ chain: ARC, transport: http() });
 const RECIPIENT = ATTESTER; // an address we control, so the USDC is not lost
