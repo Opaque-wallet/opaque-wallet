@@ -9,7 +9,7 @@
 // mesh yet, so the page shows the transaction, not Opaque's network privacy.
 
 import { accountOf, balanceOf, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyOf, MAX_FEE, MAX_USES, nonceOf, parseEther, sendCalls, settled, txUrl, type ForsKey } from '../../../backend/ethereum/frame.ts';
-import { quote, swapCall, tokenBalance } from '../../../backend/ethereum/uniswap.ts';
+import { quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswap.ts';
 import { unlockGate } from '../lib/lock.ts';
 import { networkPicker } from '../lib/network-picker.ts';
 import { accountLabel, activeAccount, stream } from '../lib/wallet-keys.ts';
@@ -19,7 +19,8 @@ const el = <T extends HTMLElement = HTMLElement>(id: string): T => document.getE
 /** Lets a status paint before a step that holds the page (signing takes about a second). */
 const paint = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => setTimeout(ok, 0)));
 const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
-const amount = (wei: bigint): string => Number(formatEther(wei)).toFixed(4);
+/** 4 decimals, or 6 below 0.01, where 4 would round a swap's minimum to its quote. */
+const amount = (wei: bigint): string => { const n = Number(formatEther(wei)); return n.toFixed(n > 0 && n < 0.01 ? 6 : 4); };
 /** Leaves room for the transaction's own gas when sending everything. */
 const GAS_RESERVE = parseEther('0.0005');
 
@@ -27,6 +28,9 @@ let key: ForsKey;
 let account: `0x${string}`;
 let created = false;
 let eth = 0n;
+let usd = 0n;
+/** The swap's direction: ETH for pqUSD, or pqUSD back for ETH. */
+let ethIn = true;
 /** Signatures this key has left. */
 let left = MAX_USES;
 
@@ -74,9 +78,8 @@ function facts(rows: readonly (readonly [string, string])[]): void {
 }
 
 async function refresh(): Promise<void> {
-  const [made, wei, nonce, usd] = await Promise.all([hasCode(account), balanceOf(account), nonceOf(account), tokenBalance(account)]);
-  created = made;
-  eth = wei;
+  let nonce: bigint;
+  [created, eth, nonce, usd] = await Promise.all([hasCode(account), balanceOf(account), nonceOf(account), tokenBalance(account)]);
   left = created ? MAX_USES - (nonce - FIRST_NONCE) : MAX_USES;
   el('balance-main').textContent = amount(eth);
   el('balance-sub').textContent = created ? `${left} of ${MAX_USES} signatures left on this key` : 'Not created yet: its address already works';
@@ -98,8 +101,9 @@ async function refresh(): Promise<void> {
   el('address-state').textContent = created ? 'Created' : 'Not created yet';
   el('address-create').hidden = created;
   el('send-have').textContent = `${amount(eth)} ETH`;
-  el('swap-have').textContent = `${amount(eth)} ETH`;
-  el('swap-have-to').textContent = `${amount(usd)} pqUSD`;
+  const [pay, get] = ethIn ? [`${amount(eth)} ETH`, `${amount(usd)} pqUSD`] : [`${amount(usd)} pqUSD`, `${amount(eth)} ETH`];
+  el('swap-have').textContent = pay;
+  el('swap-have-to').textContent = get;
 }
 
 function logged(hash: `0x${string}`, what: string): void {
@@ -167,15 +171,19 @@ const needAccount = (statusId: string): boolean => {
   return false;
 };
 
+/** Counts quotes asked for, so a slow answer never overwrites a newer one. */
+let quotes = 0;
 /** What the amount in the swap box buys now, from the pool's own state. */
 async function quoteSwap(): Promise<void> {
+  const asked = ++quotes;
   let wei: bigint;
   try { wei = parseEther(el<HTMLInputElement>('swap-amount').value.trim() || '0'); } catch { el('swap-quote').hidden = true; return; }
   if (wei <= 0n) { el('swap-out').textContent = '0'; el('swap-quote').hidden = true; return; }
-  const out = await quote(wei);
+  const out = await quote(wei, ethIn);
+  if (asked !== quotes) return;
   el('swap-out').textContent = amount(out);
-  el('swap-rate').textContent = `1 ETH ≈ ${(Number(out) / Number(wei)).toFixed(2)} pqUSD`;
-  el('swap-min').textContent = `${amount((out * 99n) / 100n)} pqUSD`;
+  el('swap-rate').textContent = `1 ETH ≈ ${(ethIn ? Number(out) / Number(wei) : Number(wei) / Number(out)).toFixed(2)} pqUSD`;
+  el('swap-min').textContent = `${amount((out * 99n) / 100n)} ${ethIn ? 'pqUSD' : 'ETH'}`;
   el('swap-quote').hidden = false;
 }
 
@@ -224,34 +232,50 @@ el('send-form').addEventListener('submit', (e) => {
 });
 
 el('swap-amount').addEventListener('input', () => void quoteSwap().catch(() => undefined));
+el('swap-flip').addEventListener('click', () => {
+  ethIn = !ethIn;
+  const [from, to] = [el('swap-from-label').innerHTML, el('swap-to-label').innerHTML];
+  el('swap-from-label').innerHTML = to;
+  el('swap-to-label').innerHTML = from;
+  // What the other side came to becomes what is paid, as the sides change places.
+  if (Number(el('swap-out').textContent) > 0) el<HTMLInputElement>('swap-amount').value = el('swap-out').textContent!;
+  void refresh().catch(() => undefined);
+  void quoteSwap().catch(() => undefined);
+});
 el('swap-go').addEventListener('click', () => {
   if (!needAccount('swap-status')) return;
   let wei: bigint;
-  try { wei = parseEther(el<HTMLInputElement>('swap-amount').value.trim()); } catch { el('swap-status').textContent = 'Enter an amount in ETH, like 0.001.'; return; }
+  const [payIn, getOut] = ethIn ? ['ETH', 'pqUSD'] : ['pqUSD', 'ETH'];
+  try { wei = parseEther(el<HTMLInputElement>('swap-amount').value.trim()); } catch { el('swap-status').textContent = `Enter an amount in ${payIn}, like ${ethIn ? '0.001' : '1'}.`; return; }
+  // A swap that reverts still spends one of the key's signatures, so it must not be sent.
+  if (wei > (ethIn ? eth : usd)) { el('swap-status').textContent = `You have ${amount(ethIn ? eth : usd)} ${payIn}.`; return; }
+  const dir = ethIn;
   void (async () => {
     el('swap-status').textContent = 'Getting a quote…';
-    let call: Awaited<ReturnType<typeof swapCall>>['call'];
+    let calls: Awaited<ReturnType<typeof swapCalls>>['calls'];
     try {
-      const swap = await swapCall(wei);
-      call = swap.call;
+      const swap = await swapCalls(wei, dir);
+      calls = swap.calls;
       el('swap-status').textContent = '';
       if (!(await confirmSign('Confirm swap', [
-        ['You pay', `${formatEther(wei)} ETH`],
-        ['You get', `about ${amount(swap.expected)} pqUSD`],
-        ['You get at least', `${amount((swap.expected * 99n) / 100n)} pqUSD`],
+        ['You pay', `${formatEther(wei)} ${payIn}`],
+        ['You get', `about ${amount(swap.expected)} ${getOut}`],
+        ['You get at least', `${amount((swap.expected * 99n) / 100n)} ${getOut}`],
+        ...(dir ? [] : [['Approves', `exactly ${formatEther(wei)} pqUSD, to Permit2 and the router, for this transaction only`] as const]),
         ['Interacting with', 'Uniswap v4 Universal Router'],
-        ['Contract', short(call.to)],
+        ['Contract', short(calls.at(-1)!.to)],
       ]))) { el('swap-status').textContent = 'Rejected. Nothing was signed.'; return; }
     } catch (error) { el('swap-status').textContent = `Didn't go through: ${(error as Error).message}`; return; }
     await step('swap-status', 'Signing the swap with your post-quantum key…', async () => {
-      const before = await tokenBalance(account);
-      const hash = await sendCalls(account, key, [call]);
+      const before = dir ? await tokenBalance(account) : await balanceOf(account);
+      const hash = await sendCalls(account, key, calls, true);
       el('swap-status').textContent = 'Swapping on Uniswap v4, through the alt mempool…';
-      await settled(hash);
-      const got = (await tokenBalance(account)) - before;
-      logged(hash, `Swapped ${formatEther(wei)} ETH for ${amount(got)} pqUSD`);
+      const r = await settled(hash);
+      // ETH out: what the balance gained, plus the fee the transaction paid out of it.
+      const got = (dir ? await tokenBalance(account) : (await balanceOf(account)) + BigInt(r.gasUsed) * BigInt(r.effectiveGasPrice)) - before;
+      logged(hash, `Swapped ${formatEther(wei)} ${payIn} for ${amount(got)} ${getOut}`);
       void quoteSwap().catch(() => undefined);
-      return `Swapped on Uniswap v4: ${amount(got)} pqUSD. The only signature in it is FORS+C.`;
+      return `Swapped on Uniswap v4: ${amount(got)} ${getOut}. The only signature in it is FORS+C.`;
     });
   })();
 });

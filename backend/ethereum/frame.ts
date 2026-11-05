@@ -61,7 +61,7 @@ export const balanceOf = async (a: Address): Promise<bigint> => BigInt(await cal
 export const hasCode = async (a: Address): Promise<boolean> => (await call('eth_getCode', [a, 'latest'])) !== '0x';
 export const txUrl = (hash: Hex): string => `${devnet.explorer}/tx/${hash}`;
 
-export interface FrameReceipt { status: Hex; blockNumber: Hex; payer?: Address; frameReceipts?: { status: Hex; gasUsed: Hex }[] }
+export interface FrameReceipt { status: Hex; blockNumber: Hex; gasUsed: Hex; effectiveGasPrice: Hex; payer?: Address; frameReceipts?: { status: Hex; gasUsed: Hex }[] }
 export async function mined(hash: Hex, wait = (ms: number) => new Promise((ok) => setTimeout(ok, ms))): Promise<FrameReceipt> {
   for (let i = 0; i < 60; i++) {
     const r = await call('eth_getTransactionReceipt', [hash]);

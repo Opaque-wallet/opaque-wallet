@@ -13,6 +13,7 @@
 //   node --use-system-ca ethereum/frame-tx.ts pool      one atomic FORS-signed transaction: deploy pqUSD, approve,
 //                                                       create the ETH/pqUSD v4 pool, add liquidity (once)
 //   node --use-system-ca ethereum/frame-tx.ts swap [eth]  swap ETH for pqUSD on Uniswap v4, signed by FORS+C alone
+//   node --use-system-ca ethereum/frame-tx.ts swap <n> pqusd  swap n pqUSD back for ETH: approvals and swap in one atomic batch
 //
 // Keys live in .stack/eth-devnet/ (0600) and are never printed: the deployer's
 // secp256k1 key, which only deploys the factory, and each account's FORS seed.
@@ -28,8 +29,8 @@ import { toWire } from '@forshtat/hegota-support/rpc';
 import { encodeDeployData, formatEther, getContractAddress, hexToBytes, parseEther, toHex, type Abi, type Address, type Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
-import { accountOf, accountTx, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, forsKey, keyOf, mined, nonceOf, sendCalls, settled, txUrl } from './frame.ts';
-import { pqUSD, poolSetup, swapCall, tokenBalance } from './uniswap.ts';
+import { accountOf, accountTx, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, forsKey, hasCode, keyOf, MAX_USES, mined, nonceOf, sendCalls, settled, txUrl } from './frame.ts';
+import { pqUSD, poolSetup, swapCalls, tokenBalance } from './uniswap.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIR = join(HERE, '..', '.stack', 'eth-devnet');
@@ -51,10 +52,15 @@ const state = (): { account?: Address; seed?: string } => (existsSync(STATE) ? J
 const deployer = () => privateKeyToAccount(secret('deployer.key', generatePrivateKey));
 const eth = async (a: Address) => `${formatEther(await balanceOf(a))} ETH`;
 
-/** The account this script acts as, and its key. */
-function current(): { account: Address; key: ReturnType<typeof forsKey> } {
+/**
+ * The account this script acts as, and its key. A key's last signature is kept
+ * for handing the account to its next key (rotate): spent on anything else, it
+ * would leave the account, and the devnet ETH and pqUSD it holds, with no key.
+ */
+async function current(): Promise<{ account: Address; key: ReturnType<typeof forsKey> }> {
   const { account, seed } = state();
   if (account === undefined || seed === undefined) throw new Error('create an account first');
+  if ((await hasCode(account)) && MAX_USES - ((await nonceOf(account)) - FIRST_NONCE) <= 1n) throw new Error(`${account} has one signature left, kept for rotating its key`);
   return { account, key: forsKey(hexToBytes(secret(seed, () => { throw new Error(`${seed} is missing`); }))) };
 }
 
@@ -123,7 +129,7 @@ async function create(): Promise<void> {
 }
 
 async function send(): Promise<void> {
-  const { account, key } = current();
+  const { account, key } = await current();
   const to = (process.argv[3] ?? deployer().address) as Address;
   const value = process.argv[4] === undefined ? 1_000_000_000n : parseEther(process.argv[4]);
   // A transfer to an address with no account yet creates one: state gas (EIP-8037).
@@ -134,7 +140,7 @@ async function send(): Promise<void> {
 
 /** Someone without the account's key, here a fresh FORS key, must get nothing past VERIFY. */
 async function attack(): Promise<void> {
-  const { account } = current();
+  const { account } = await current();
   const tx = await accountTx(account, forsKey(randomBytes(32)), [{ to: deployer().address, value: 1n, gas: 50_000n }]);
   try {
     const hash: Hex = await call('eth_sendFrameTransaction', [toWire(tx)]);
@@ -148,7 +154,7 @@ async function attack(): Promise<void> {
 /** The ETH/pqUSD pool, in one atomic transaction the account signs with FORS+C. */
 async function pool(): Promise<void> {
   if ((devnet.uniswap as { pqUSD: string | null }).pqUSD !== null) throw new Error(`the pool exists already: pqUSD ${pqUSD()}`);
-  const { account, key } = current();
+  const { account, key } = await current();
   const { abi, bytecode } = JSON.parse(readFileSync(artifactOf('TestToken'), 'utf8')) as { abi: Abi; bytecode: { object: Hex } };
   const initCode = encodeDeployData({ abi, bytecode: bytecode.object, args: ['Post-Quantum Test Dollar', 'pqUSD', account, parseEther('1000000')] });
   const { token, calls } = await poolSetup(account, initCode, parseEther('0.1'), 2000n);
@@ -161,16 +167,19 @@ async function pool(): Promise<void> {
   console.log('written to deployments/eth-devnet.json');
 }
 
-/** ETH for pqUSD on Uniswap v4, with FORS+C the only signature. */
+/** ETH for pqUSD on Uniswap v4, or pqUSD back for ETH, with FORS+C the only signature. */
 async function swap(): Promise<void> {
-  const { account, key } = current();
+  const { account, key } = await current();
+  const ethIn = process.argv[4] !== 'pqusd';
   const amount = parseEther(process.argv[3] ?? '0.001');
   const before = await tokenBalance(account);
-  const { call: c, expected } = await swapCall(amount);
-  const hash = await sendCalls(account, key, [c]);
+  const { calls, expected } = await swapCalls(amount, ethIn);
+  const hash = await sendCalls(account, key, calls, true);
   await settled(hash);
-  const got = (await tokenBalance(account)) - before;
-  console.log(`swapped ${formatEther(amount)} ETH for ${formatEther(got)} pqUSD (quoted ${formatEther(expected)}): ${hash}\n${txUrl(hash)}`);
+  const usd = (await tokenBalance(account)) - before;
+  console.log(ethIn
+    ? `swapped ${formatEther(amount)} ETH for ${formatEther(usd)} pqUSD (quoted ${formatEther(expected)}): ${hash}\n${txUrl(hash)}`
+    : `swapped ${formatEther(-usd)} pqUSD for ETH (quoted ${formatEther(expected)} ETH), ${calls.length} frames in one atomic batch: ${hash}\n${txUrl(hash)}`);
 }
 
 const commands: Record<string, () => Promise<void>> = { fund, factory, 'devnet-faucet': devnetFaucet, create, send, attack, pool, swap };

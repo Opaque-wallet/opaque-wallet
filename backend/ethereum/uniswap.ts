@@ -94,14 +94,15 @@ export async function poolSetup(account: Address, tokenInitCode: Hex, eth: bigin
 }
 
 /**
- * What `amountIn` ETH buys now, from the pool's own state: its price and
+ * What `amountIn` buys now, ETH for pqUSD or (`ethIn` false) pqUSD for ETH,
+ * from the pool's own state: its price and
  * liquidity read out of PoolManager storage (v4-core StateLibrary: pools at
  * slot 6, liquidity 3 slots past the pool's), then one v4 swap step. Exact for
  * this pool: a single full-range position, so a swap never crosses a tick.
  * Checked on chain: the price and liquidity read back are exactly the ones the
  * pool was made with, and a swap delivers what this quotes.
  */
-export async function quote(amountIn: bigint): Promise<bigint> {
+export async function quote(amountIn: bigint, ethIn = true): Promise<bigint> {
   const id = keccak256(encodeAbiParameters(parseAbiParameters(POOL_KEY), [poolKey(pqUSD())]));
   const slot = BigInt(keccak256(encodeAbiParameters(parseAbiParameters('bytes32, uint256'), [id, 6n])));
   const read = async (at: bigint) => BigInt(await call('eth_call', [{ to: UNI.poolManager, data: encodeFunctionData({ abi: EXTSLOAD_ABI, functionName: 'extsload', args: [`0x${at.toString(16).padStart(64, '0')}`] }) }, 'latest']));
@@ -109,35 +110,57 @@ export async function quote(amountIn: bigint): Promise<bigint> {
   const sqrtP = slot0 & ((1n << 160n) - 1n);
   const fee = (slot0 >> 208n) & 0xffffffn; // lpFee; this pool's protocol fee is 0
   const inLessFee = (amountIn * (1_000_000n - fee)) / 1_000_000n;
-  // zeroForOne: the price falls to L*Q96*sqrtP / (L*Q96 + in*sqrtP), rounded up; out is L * (sqrtP - next) / Q96.
   const lq = liquidity << 96n;
-  const next = (lq * sqrtP + (lq + inLessFee * sqrtP) - 1n) / (lq + inLessFee * sqrtP);
-  return (liquidity * (sqrtP - next)) >> 96n;
+  if (ethIn) {
+    // zeroForOne: the price falls to L*Q96*sqrtP / (L*Q96 + in*sqrtP), rounded up; out is L * (sqrtP - next) / Q96.
+    const next = (lq * sqrtP + (lq + inLessFee * sqrtP) - 1n) / (lq + inLessFee * sqrtP);
+    return (liquidity * (sqrtP - next)) >> 96n;
+  }
+  // oneForZero: the price rises by in*Q96 / L, rounded down; out is L*Q96 * (next - sqrtP) / next / sqrtP.
+  const next = sqrtP + (inLessFee << 96n) / liquidity;
+  return (lq * (next - sqrtP)) / next / sqrtP;
 }
 
 /**
- * The router call that swaps `amountIn` ETH for pqUSD, delivered to the caller.
+ * The router call that swaps `amountIn` ETH for pqUSD, or pqUSD for ETH, delivered to the caller.
  * ExactInputSingleParams carries minHopPriceX36: the devnet's router is the
  * newer v4-periphery (an impossible minHopPriceX36 trips its price check).
  */
-async function swapData(amountIn: bigint, minOut: bigint): Promise<Hex> {
+async function swapData(amountIn: bigint, minOut: bigint, ethIn: boolean): Promise<Hex> {
   const token = pqUSD();
+  const [tokenIn, tokenOut] = ethIn ? [ETH, token] : [token, ETH];
   const input = encodeAbiParameters(parseAbiParameters('bytes, bytes[]'), [
     actions(A.SWAP_EXACT_IN_SINGLE, A.SETTLE_ALL, A.TAKE_ALL),
     [
       encodeAbiParameters(parseAbiParameters(`(${POOL_KEY} poolKey, bool zeroForOne, uint128 amountIn, uint128 amountOutMinimum, uint256 minHopPriceX36, bytes hookData)`),
-        [{ poolKey: poolKey(token), zeroForOne: true, amountIn, amountOutMinimum: minOut, minHopPriceX36: 0n, hookData: '0x' }]),
-      encodeAbiParameters(parseAbiParameters('address, uint256'), [ETH, amountIn]),
-      encodeAbiParameters(parseAbiParameters('address, uint256'), [token, minOut]),
+        [{ poolKey: poolKey(token), zeroForOne: ethIn, amountIn, amountOutMinimum: minOut, minHopPriceX36: 0n, hookData: '0x' }]),
+      encodeAbiParameters(parseAbiParameters('address, uint256'), [tokenIn, amountIn]),
+      encodeAbiParameters(parseAbiParameters('address, uint256'), [tokenOut, minOut]),
     ],
   ]);
   return encodeFunctionData({ abi: ROUTER_ABI, functionName: 'execute', args: [V4_SWAP, [input], await deadline()] });
 }
 
-/** The SENDER frame that swaps `amountIn` ETH for pqUSD at no less than 99% of the quote. */
-export async function swapCall(amountIn: bigint): Promise<{ call: Call; expected: bigint }> {
-  const expected = await quote(amountIn);
-  const data = await swapData(amountIn, (expected * 99n) / 100n);
+/**
+ * The SENDER frames that swap `amountIn` at no less than 99% of the quote: ETH
+ * for pqUSD, or (`ethIn` false) pqUSD for ETH. pqUSD reaches the router through
+ * Permit2, so that swap first approves exactly `amountIn`, to Permit2 and then
+ * to the router until this block ends (Permit2 reads expiration 0 as now).
+ * Send them as one atomic batch: one signature, all or nothing.
+ */
+export async function swapCalls(amountIn: bigint, ethIn = true): Promise<{ calls: Call[]; expected: bigint }> {
+  const expected = await quote(amountIn, ethIn);
+  const data = await swapData(amountIn, (expected * 99n) / 100n, ethIn);
   // The pqUSD balance the swap creates is a new storage slot: state gas.
-  return { call: { to: UNI.universalRouter, value: amountIn, data, gas: 800_000n, state: 300_000n }, expected };
+  const swap: Call = { to: UNI.universalRouter, value: ethIn ? amountIn : 0n, data, gas: 800_000n, state: 300_000n };
+  if (ethIn) return { calls: [swap], expected };
+  const token = pqUSD();
+  return {
+    calls: [
+      { to: token, data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [UNI.permit2, amountIn] }), gas: 100_000n, state: 200_000n },
+      { to: UNI.permit2, data: encodeFunctionData({ abi: PERMIT2_ABI, functionName: 'approve', args: [token, UNI.universalRouter, amountIn, 0] }), gas: 100_000n, state: 200_000n },
+      swap,
+    ],
+    expected,
+  };
 }

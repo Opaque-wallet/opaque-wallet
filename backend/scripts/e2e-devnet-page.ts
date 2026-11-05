@@ -93,6 +93,20 @@ try {
   check(Number(/: ([0-9.]+) pqUSD/.exec(swapped)?.[1]) >= quoted * 0.99 - 0.0001, `swapped on Uniswap v4 with a FORS+C signature only: ${swapped}`);
   check((await page.textContent('#facts'))?.includes('6 of 8'), 'the key has 6 signatures left');
 
+  // And back: pqUSD for ETH, its two approvals and the swap in one atomic batch.
+  await page.click('#swap-flip');
+  await page.fill('#swap-amount', '1');
+  await page.waitForFunction(() => { const n = Number(document.getElementById('swap-out')?.textContent); return n > 0 && n < 0.01; }, undefined, { timeout: 60_000 });
+  const back = Number(await page.textContent('#swap-out'));
+  check((await page.textContent('#swap-from-label'))?.includes('pqUSD'), `flipped: 1 pqUSD quotes ${back} ETH`);
+  await page.click('#swap-go');
+  await page.waitForSelector('#sign-dialog[open]');
+  check((await page.textContent('#sign-rows'))?.includes('exactly 1 pqUSD'), 'the signature request shows the approval is for exactly the amount');
+  await page.click('#sign-confirm');
+  const returned = await statusIs('swap-status', 'Swapped on Uniswap v4');
+  check(Number(/: ([0-9.]+) ETH/.exec(returned)?.[1]) >= back * 0.99 - 0.0001, `swapped pqUSD back for ETH, approvals and swap in one FORS+C-signed batch: ${returned}`);
+  check((await page.textContent('#facts'))?.includes('5 of 8'), 'the key has 5 signatures left');
+
   if (process.env['SHOT']) {
     await page.click('#tab-home');
     await page.screenshot({ path: join(process.env['SHOT'], 'devnet-phone.jpg'), type: 'jpeg', quality: 80, fullPage: true });

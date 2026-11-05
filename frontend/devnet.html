@@ -106,11 +106,12 @@
           <div class="swap">
             <div class="swap-side">
               <div class="swap-head"><span>You pay</span><span>Balance <b id="swap-have">—</b></span></div>
-              <div class="swap-line"><input id="swap-amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0" maxlength="9" value="0.001" aria-label="Amount to pay"><span class="tok-label"><i class="tok tok-eth">E</i><b>ETH</b></span></div>
+              <div class="swap-line"><input id="swap-amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0" maxlength="9" value="0.001" aria-label="Amount to pay"><span class="tok-label" id="swap-from-label"><i class="tok tok-eth">E</i><b>ETH</b></span></div>
             </div>
+            <button class="icon-btn swap-flip" id="swap-flip" type="button" aria-label="Swap the two assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4v15M4.5 15.5 8 19l3.5-3.5M16 20V5M12.5 8.5 16 5l3.5 3.5"/></svg></button>
             <div class="swap-side">
               <div class="swap-head"><span>You get</span><span>Balance <b id="swap-have-to">—</b></span></div>
-              <div class="swap-line"><output id="swap-out">0</output><span class="tok-label"><i class="tok tok-usdc">U</i><b>pqUSD</b></span></div>
+              <div class="swap-line"><output id="swap-out">0</output><span class="tok-label" id="swap-to-label"><i class="tok tok-usdc">U</i><b>pqUSD</b></span></div>
             </div>
           </div>
           <dl class="swap-quote" id="swap-quote" hidden>
@@ -127,7 +128,7 @@
         <p class="eyebrow">How a post-quantum swap works</p>
         <ol class="steps">
           <li><b>Uniswap v4</b><small>The Universal Router swaps on the ETH/pqUSD pool, with a minimum of 99% of the quote.</small></li>
-          <li><b>One SENDER frame</b><small>Your account calls the router itself: the frames are the batch, so no contract wallet logic stands in between.</small></li>
+          <li><b>Frames are the batch</b><small>Your account calls the router itself. Paying with pqUSD adds its two approvals, for exactly the amount, as frames of the same atomic transaction: one signature, all or nothing.</small></li>
           <li><b>Signed by FORS+C</b><small>The same hash-based key and the same VERIFY frame sign the whole swap.</small></li>
         </ol>
       </aside>
