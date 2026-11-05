@@ -82,5 +82,12 @@
     },
     "attester": "0x8444ebe17f40cd4ea3d6a99c4976a286b531d6f8",
     "faucet": "0x462437c867120d7b0b009243f6a71e484d7c4751"
+  },
+  "mesh": {
+    "genesis": 1793914557,
+    "trustRoot": {
+      "signerCommitment": "0x3129136571700808b63f5000e0f2278dde6f75490f4d84bb26d8925ff35803a4",
+      "minVersion": 0
+    }
   }
 }
