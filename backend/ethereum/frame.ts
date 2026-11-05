@@ -10,7 +10,7 @@
 
 import { getProfile } from '@forshtat/hegota-support/profiles';
 import { rpc, toWire } from '@forshtat/hegota-support/rpc';
-import { frame, newTx, sigHash, type Frame, type FrameTx } from '@forshtat/hegota-support/tx';
+import { frame, newTx, sigHash, txHash, type Frame, type FrameTx } from '@forshtat/hegota-support/tx';
 import { encodeSignature, keyGen, pkCommitment, sign } from '@opaque/pq-wallet';
 import type { Bytes32 } from '@opaque/protocol-types';
 import { decodeFunctionResult, encodeAbiParameters, encodeFunctionData, keccak256, parseAbi, stringToHex, type Address, type Hex } from 'viem';
@@ -41,7 +41,21 @@ export type ForsKey = ReturnType<typeof keyGen>;
 export const forsKey = (seed: Uint8Array): ForsKey => keyGen(seed, PARAMS);
 export const keyOf = (key: ForsKey): Hex => pkCommitment(key.publicKey) as Hex;
 
-export const call = (method: string, params: unknown[] = []): Promise<any> => rpc(devnet.gateway, method, params);
+/**
+ * One JSON-RPC call to the gateway, tried up to 3 times when the network, not
+ * the node, fails: a flaky connection should not end a step. Resending a signed
+ * transaction is safe, since the node then answers "already known".
+ */
+export async function call(method: string, params: unknown[] = []): Promise<any> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await rpc(devnet.gateway, method, params);
+    } catch (e) {
+      if ((e as { code?: string }).code !== 'RPC_UNREACHABLE' || attempt === 3) throw e;
+      await new Promise((ok) => setTimeout(ok, 1500 * attempt));
+    }
+  }
+}
 export const nonceOf = async (a: Address): Promise<bigint> => BigInt(await call('eth_getTransactionCount', [a, 'latest']));
 export const balanceOf = async (a: Address): Promise<bigint> => BigInt(await call('eth_getBalance', [a, 'latest']));
 export const hasCode = async (a: Address): Promise<boolean> => (await call('eth_getCode', [a, 'latest'])) !== '0x';
@@ -123,6 +137,8 @@ async function send(tx: FrameTx): Promise<Hex> {
   ]);
   if (gateway.status === 'fulfilled') return gateway.value;
   if (miner.status === 'fulfilled') return miner.value;
+  // A retry of a send that did arrive: both nodes know it already.
+  if (/already known/i.test(String((gateway.reason as Error)?.message))) return txHash(profile, tx);
   // The gateway runs the admission rules, so its reason is the one worth showing.
   throw gateway.reason;
 }

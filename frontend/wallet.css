@@ -206,6 +206,7 @@ button.intent:hover { background: var(--surface); }
 .amount-head .link { color: var(--muted); font-size: 13px; }
 .amount strong { display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 18px 0 8px; font-weight: 600; }
 .amount input { width: 4.2ch; padding: 0; border: 0; outline: 0; background: none; font: 600 56px/1.05 var(--display); letter-spacing: -0.03em; text-align: right; }
+.amount input.wide { width: 5.4ch; }
 @supports (field-sizing: content) { .amount input { width: auto; min-width: 1ch; field-sizing: content; } }
 .amount strong small { color: var(--muted); font-size: 22px; font-weight: 500; }
 .amount p { justify-self: center; max-width: 36em; padding: 10px 14px; border-radius: 14px; background: var(--bg); color: var(--muted); font-size: 12.5px; line-height: 1.55; }
@@ -213,6 +214,9 @@ button.intent:hover { background: var(--surface); }
 
 /* A token picker: its badge, then a pill-shaped select over the whole of it. */
 .tok-pick { position: relative; flex: none; display: inline-flex; }
+/* A fixed asset, where the page offers no choice of one. */
+.tok-label { flex: none; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.tok-label .tok { width: 30px; height: 30px; font-size: 12.5px; }
 .tok-pick .tok { position: absolute; left: 5px; top: 50%; width: 30px; height: 30px; font-size: 12.5px; transform: translateY(-50%); pointer-events: none; }
 .tok-pick select {
   appearance: none; height: 42px; padding: 0 34px 0 43px; border: 1px solid var(--line); border-radius: 999px; outline: 0; color: var(--text); font: 600 15px var(--display); cursor: pointer;

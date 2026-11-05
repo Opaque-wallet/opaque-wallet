@@ -23,16 +23,19 @@ const page = await browser.newPage({ viewport: { width: 420, height: 900 } });
 const errors: string[] = [];
 page.on('pageerror', (e: Error) => errors.push(e.message));
 const check = (ok: unknown, what: string) => { if (!ok) throw new Error(what); console.log(`ok  ${what}`); };
-/** Waits for the page's status line to start with `prefix`; fails on "Didn't go through". */
-async function statusIs(prefix: string, timeout = 240_000): Promise<string> {
-  await page.waitForFunction((p: string) => {
-    const s = document.getElementById('status')?.textContent ?? '';
-    return s.startsWith(p) || s.startsWith('Didn\'t go through');
-  }, prefix, { timeout });
-  const s = await page.textContent('#status');
+/** Waits for status `id` to start with `prefix`; fails on "Didn't go through". */
+async function statusIs(id: string, prefix: string, timeout = 240_000): Promise<string> {
+  await page.waitForFunction(([i, p]: string[]) => {
+    const s = document.getElementById(i!)?.textContent ?? '';
+    return s.startsWith(p!) || s.startsWith('Didn\'t go through');
+  }, [id, prefix], { timeout }).catch(async (e: Error) => {
+    throw new Error(`${e.message}; #${id} still says: ${await page.textContent(`#${id}`)}`);
+  });
+  const s = (await page.textContent(`#${id}`)) ?? '';
   if (!s.startsWith(prefix)) throw new Error(s);
   return s;
 }
+const ready = () => page.waitForFunction(() => (document.getElementById('account-short')?.textContent ?? '').startsWith('0x'), undefined, { timeout: 120_000 });
 
 try {
   await page.goto(`${SITE}/testnet/xrpl`);
@@ -41,44 +44,55 @@ try {
   check(true, 'a wallet, made on the XRPL page with a recovery phrase');
 
   await page.goto(`${SITE}/testnet/devnet`);
-  await page.waitForSelector('#home:not([hidden])', { timeout: 60_000 });
-  await statusIs('Account 1, on the EIP-8141 devnet', 120_000);
+  await ready();
   check((await page.textContent('#network-switch'))?.includes('Fully post-quantum'), 'the network picker says Fully post-quantum');
-  check(await page.isVisible('#create'), 'the account is not created yet, and its address is already known');
+  check(await page.isVisible('#promo-create'), 'the account is not created yet, and its address is already known');
 
-  await page.click('#faucet');
-  const funded = await statusIs('Funded').catch((e: Error) => e.message);
-  if (/faucet is empty/i.test(funded)) {
-    // The devnet's shared faucet runs dry; our own account funds the address instead, with a FORS-signed transfer.
-    const address = await page.getAttribute('#facts', 'data-account');
+  await page.click('#promo-fund-go');
+  const funded = await statusIs('home-status', 'Funded').catch((e: Error) => e.message);
+  if (!funded.startsWith('Funded')) {
+    // Both faucets dry: our own account funds the address, with a FORS-signed transfer.
+    const address = (await page.textContent('#address-x'))!.trim();
     execFileSync('node', ['--use-system-ca', 'ethereum/frame-tx.ts', 'send', address, '0.05'], { stdio: 'inherit' });
     await page.reload();
-    await statusIs('Account 1, on the EIP-8141 devnet', 120_000);
-  } else if (!funded.startsWith('Funded')) throw new Error(funded);
-  check(Number(await page.textContent('#balance')) > 0, 'the address was funded before the account exists (by the faucet, or by our own account when the faucet is dry)');
+    await ready();
+  }
+  check(Number(await page.textContent('#balance-main')) > 0, `the address was funded before the account exists (${funded})`);
 
-  await page.click('#create');
-  await statusIs('Created');
-  check(await page.isVisible('#send-form'), 'the factory created the account: no ECDSA key signed anything');
+  await page.click('#promo-create-go');
+  await statusIs('home-status', 'Created');
+  check(!(await page.isVisible('#promo-create')), 'the factory created the account: no ECDSA key signed anything');
 
-  await page.fill('#send-to', '0x000000000000000000000000000000000000dEaD');
+  await page.click('#tab-send');
+  await page.fill('#recipient', '0x000000000000000000000000000000000000dEaD');
   await page.fill('#send-amount', '0.001');
-  await page.click('#send');
-  await statusIs('Sent.');
-  const link = await page.getAttribute('#activity a', 'href');
+  await page.click('#send-button');
+  await statusIs('send-status', 'Sent.');
+  const link = await page.getAttribute('#sent-list a', 'href');
   check(link?.includes('/tx/0x'), `sent with a FORS+C signature only: ${link}`);
   check((await page.textContent('#facts'))?.includes('7 of 8'), 'the key has 7 signatures left');
 
-  await page.waitForFunction(() => (document.getElementById('swap-quote')?.textContent ?? '').startsWith('About'), undefined, { timeout: 60_000 });
-  const quoted = Number(/About ([0-9.]+) pqUSD/.exec((await page.textContent('#swap-quote')) ?? '')?.[1]);
-  check(quoted > 0, `a quote from the pool's own state: ${quoted} pqUSD for 0.001 ETH`);
+  await page.click('#tab-swap');
   await page.fill('#swap-amount', '0.001');
-  await page.click('#swap');
-  const swapped = await statusIs('Swapped on Uniswap v4');
+  await page.waitForFunction(() => Number(document.getElementById('swap-out')?.textContent) > 0, undefined, { timeout: 60_000 });
+  const quoted = Number(await page.textContent('#swap-out'));
+  check(quoted > 0, `a quote from the pool's own state: ${quoted} pqUSD for 0.001 ETH (${await page.textContent('#swap-rate')})`);
+  await page.click('#swap-go');
+  const swapped = await statusIs('swap-status', 'Swapped on Uniswap v4');
   // The price moves with every swap, so the check is against the quote: the swap takes no less than 99% of it.
   check(Number(/: ([0-9.]+) pqUSD/.exec(swapped)?.[1]) >= quoted * 0.99 - 0.0001, `swapped on Uniswap v4 with a FORS+C signature only: ${swapped}`);
   check((await page.textContent('#facts'))?.includes('6 of 8'), 'the key has 6 signatures left');
-  if (process.env['SHOT']) await page.screenshot({ path: join(process.env['SHOT'], 'devnet-page.jpg'), type: 'jpeg', quality: 80, fullPage: true });
+
+  if (process.env['SHOT']) {
+    await page.click('#tab-home');
+    await page.screenshot({ path: join(process.env['SHOT'], 'devnet-phone.jpg'), type: 'jpeg', quality: 80, fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: join(process.env['SHOT'], 'devnet-desktop.jpg'), type: 'jpeg', quality: 80 });
+    await page.click('#tab-swap');
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: join(process.env['SHOT'], 'devnet-swap.jpg'), type: 'jpeg', quality: 80 });
+  }
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 } finally {
   await browser.close();
