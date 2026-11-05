@@ -81,5 +81,10 @@
     "$comment": "LI.FI has no testnets, so there is no router here yet. Uniswap v4's Universal Router takes its place in docs/mumbai/PLAN.md T8.",
     "router": null,
     "tokens": []
+  },
+  "ens": {
+    "pqKeyRegistry": "0x8b47560d32bcda788ab5233ab2bda55204cacca3",
+    "controller": "0x4d4df91933bb30640908f5cd4a42e2cac546c131",
+    "resolver": "0x9320d93186255e122214bd22270d168d5d8f676f"
   }
 }

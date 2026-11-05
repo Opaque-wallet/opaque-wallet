@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { canonical, keyGen, pkCommitment, utf8 } from '@opaque/pq-wallet';
-import { createPublicClient, createWalletClient, encodeFunctionData, http, keccak256, namehash, parseAbi, toHex, type Abi, type Address, type Hex } from 'viem';
+import { concat, createPublicClient, createWalletClient, decodeFunctionResult, encodeFunctionData, http, keccak256, namehash, parseAbi, stringToBytes, toHex, type Abi, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 
@@ -32,7 +32,11 @@ const DEPLOYMENTS = join(HERE, '..', '..', 'deployments', 'eth-sepolia.json');
 const RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
 const NAME = 'opaque.eth';
 const NODE = namehash(NAME);
-// ENSv2 on Sepolia, as docs.ens.domains lists it (code read on chain; the ENS app's set).
+/** DNS wire format, as the deployed resolver's setters and resolve() take a name: length-prefixed labels, then 0. */
+const DNS_NAME: Hex = concat([...NAME.split('.').flatMap((l) => [toHex(stringToBytes(l).length, { size: 1 }), toHex(stringToBytes(l))]), '0x00']);
+// ENSv2 on Sepolia, as docs.ens.domains lists it (code read on chain; the ENS app's set). Its
+// PermissionedResolver is the verified 0.8.25 build (Blockscout), older than contracts-v2 main:
+// initialize takes grants, setters take the DNS-encoded name, and reads go through resolve().
 const ETH_REGISTRY: Address = '0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4';
 const VERIFIABLE_FACTORY: Address = '0xda70306c98e97ece36f997a21368e53298572991';
 const RESOLVER_IMPL: Address = '0x115eb53f0c60696633855f90b138178fb40b2b2c';
@@ -63,13 +67,14 @@ const ens = (): { pqKeyRegistry: Address; controller: Address; resolver: Address
 
 const REG = parseAbi(['function getTokenId(uint256) view returns (uint256)', 'function ownerOf(uint256) view returns (address)', 'function getResolver(string) view returns (address)', 'function setResolver(uint256 anyId, address resolver)']);
 const RES = parseAbi([
-  'function initialize(address admin, uint256 roleBitmap, bytes[] setters)',
-  'function setAddr(bytes32 node, uint256 coinType, bytes addressBytes)',
-  'function setText(bytes32 node, string key, string value)',
+  'function initialize((address account, uint256 roleBitmap)[] grants, bytes[] calls)',
+  'function setAddress(bytes name, uint256 coinType, bytes addressBytes)',
+  'function setText(bytes name, string key, string value)',
   'function multicall(bytes[] calls) returns (bytes[])',
-  'function addr(bytes32 node, uint256 coinType) view returns (bytes)',
-  'function text(bytes32 node, string key) view returns (string)',
+  'function resolve(bytes name, bytes data) view returns (bytes)',
 ]);
+/** The record calls resolve() answers. */
+const PROFILE = parseAbi(['function addr(bytes32 node, uint256 coinType) view returns (bytes)', 'function text(bytes32 node, string key) view returns (string)']);
 const CTL = parseAbi(['function execute(address target, bytes data, uint256 deadline, bytes signature) returns (bytes)', 'function registry() view returns (address)']);
 const REGISTRY = parseAbi(['function stateOf(address) view returns ((bytes32 pkCommitment, bytes32 nextCommitment, uint64 useCount, uint64 maxUses, uint64 rotationDeadline, uint64 disableAfter))']);
 const FACTORY = parseAbi(['function deployProxy(address implementation, uint256 salt, bytes data) returns (address)']);
@@ -105,7 +110,7 @@ async function deploy(): Promise<void> {
   }
   if (f.ens.resolver === undefined) {
     // The ENS app's way to a resolver of one's own, with the controller its only admin and no records yet.
-    const data = encodeFunctionData({ abi: RES, functionName: 'initialize', args: [f.ens.controller, ALL_ROLES, []] });
+    const data = encodeFunctionData({ abi: RES, functionName: 'initialize', args: [[{ account: f.ens.controller, roleBitmap: ALL_ROLES }], []] });
     const salt = BigInt(keccak256(toHex(`opaque/v1/ens/resolver/${f.ens.controller}`)));
     const { result, request } = await pub.simulateContract({ account: deployer, address: VERIFIABLE_FACTORY, abi: FACTORY, functionName: 'deployProxy', args: [RESOLVER_IMPL, salt, data] });
     await sent(await wallet.writeContract(request), 'PermissionedResolver for the controller');
@@ -141,10 +146,10 @@ async function records(): Promise<void> {
   if (devnetAccount === undefined || !/^0x[0-9a-fA-F]{40}$/.test(devnetAccount)) throw new Error('usage: records <0x devnet account>');
   const { controller, resolver } = ens();
   const calls = [
-    encodeFunctionData({ abi: RES, functionName: 'setAddr', args: [NODE, 60n, controller] }),
-    encodeFunctionData({ abi: RES, functionName: 'setAddr', args: [NODE, DEVNET_COIN, devnetAccount] }),
-    encodeFunctionData({ abi: RES, functionName: 'setText', args: [NODE, 'pq-key', pkCommitment(keyOf(0).publicKey)] }),
-    encodeFunctionData({ abi: RES, functionName: 'setText', args: [NODE, 'url', 'https://opaque.credit'] }),
+    encodeFunctionData({ abi: RES, functionName: 'setAddress', args: [DNS_NAME, 60n, controller] }),
+    encodeFunctionData({ abi: RES, functionName: 'setAddress', args: [DNS_NAME, DEVNET_COIN, devnetAccount] }),
+    encodeFunctionData({ abi: RES, functionName: 'setText', args: [DNS_NAME, 'pq-key', pkCommitment(keyOf(0).publicKey)] }),
+    encodeFunctionData({ abi: RES, functionName: 'setText', args: [DNS_NAME, 'url', 'https://opaque.credit'] }),
   ];
   await execute(resolver, encodeFunctionData({ abi: RES, functionName: 'multicall', args: [calls] }), `${NAME}'s records, in one signature`);
 }
@@ -155,10 +160,14 @@ async function status(): Promise<void> {
   console.log(`${NAME}  owner ${await pub.readContract({ address: ETH_REGISTRY, abi: REG, functionName: 'ownerOf', args: [id] })}  resolver ${await pub.readContract({ address: ETH_REGISTRY, abi: REG, functionName: 'getResolver', args: ['opaque'] })}`);
   console.log(`controller ${e.controller ?? '—'}  its resolver ${e.resolver ?? '—'}`);
   if (e.resolver === undefined) return;
-  const read = (functionName: 'addr' | 'text', args: readonly unknown[]) => pub.readContract({ address: e.resolver, abi: RES, functionName, args } as never).catch(() => '—');
+  const read = async (functionName: 'addr' | 'text', args: readonly unknown[]) => {
+    const data = encodeFunctionData({ abi: PROFILE, functionName, args } as never);
+    const out = await pub.readContract({ address: e.resolver, abi: RES, functionName: 'resolve', args: [DNS_NAME, data] }).catch(() => undefined);
+    return out === undefined ? '—' : decodeFunctionResult({ abi: PROFILE, functionName, data: out } as never);
+  };
   console.log(`addr(ETH) ${await read('addr', [NODE, 60n])}  addr(devnet) ${await read('addr', [NODE, DEVNET_COIN])}  pq-key ${await read('text', [NODE, 'pq-key'])}`);
   // An ECDSA account writing a record directly: refused, whoever it is.
-  await pub.simulateContract({ account: deployer, address: e.resolver, abi: RES, functionName: 'setText', args: [NODE, 'url', 'https://evil.example'] })
+  await pub.simulateContract({ account: deployer, address: e.resolver, abi: RES, functionName: 'setText', args: [DNS_NAME, 'url', 'https://evil.example'] })
     .then(() => console.log('!! an ECDSA write went through'), (err: Error & { shortMessage?: string }) => console.log(`an ECDSA write is refused: ${(err.shortMessage ?? err.message).split('\n')[0]}`));
 }
 
