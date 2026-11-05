@@ -54,6 +54,7 @@ frontend/media/**/*.png
 backend/.stack/
 frontend/public/stack.json
 frontend/public/xrpl-stack.json
+frontend/public/devnet-stack.json
 
 # Vercel CLI link
 .vercel

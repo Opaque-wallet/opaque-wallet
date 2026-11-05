@@ -1,5 +1,5 @@
 {
-  "$comment": "The EIP-8141 alt-mempool devnet (ethrex eip8141-tracer + the Skandha gateway, chain 1337). Not an EVM network of index.ts's shape: no pools, no mesh, no bundler. Our contracts are written here by backend/ethereum/frame-tx.ts; the Uniswap v4 contracts are the devnet's predeploys, whose code was read on chain. Public values only.",
+  "$comment": "The EIP-8141 alt-mempool devnet (ethrex eip8141-tracer + the Skandha gateway, chain 1337). Not an EVM network of index.ts's shape: no bundler, and its accounts are FramePQAccounts. Our contracts are written here by backend/ethereum/frame-tx.ts; `privacy` is Opaque's privacy layer (T11, `frame-tx.ts privacy`), served by backend/ethereum/devnet-stack.ts; the Uniswap v4 contracts are the devnet's predeploys, whose code was read on chain. Public values only.",
   "chainId": 1337,
   "gateway": "https://altmempoolgateway.forshtat.com/rpc",
   "miner": "https://altmempool.forshtat.com",
@@ -16,5 +16,71 @@
     "weth9": "0x1b7d32025F7cA633943BbCC9Ec61a98ef66187b6",
     "create2Deployer": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
     "pqUSD": "0x26453ffc2FdEC380396852947A3b2c1467384D9B"
+  },
+  "privacy": {
+    "pools": [
+      {
+        "denomination": 1000000,
+        "address": "0xb68de8e6984c97835bb2b2b65e821292518257f8",
+        "verifier": "0xb574c6af7bcf24f44a6d22b9ba04f49061aac22f",
+        "deployedAtBlock": 407054,
+        "decoys": 8
+      },
+      {
+        "denomination": 2000000,
+        "address": "0x04c8fbeb9b2d0b72446c3841aa4ddbd20821a621",
+        "verifier": "0xa997857eaeece68e18e928f172df8bb9d8acc3d9",
+        "deployedAtBlock": 407057,
+        "decoys": 8
+      },
+      {
+        "denomination": 5000000,
+        "address": "0x81c1e2c619ba4cd27f2a19c1e406f67c1eb753bc",
+        "verifier": "0xe17de623cdf29d20a505f710e5fd830fece00735",
+        "deployedAtBlock": 407060,
+        "decoys": 8
+      },
+      {
+        "denomination": 10000000,
+        "address": "0x71fa5f3204f29ee8f35b89515f9c584d6e6b81f2",
+        "verifier": "0x243e787a260651aa1bb2cdd7a90050276cc0b48d",
+        "deployedAtBlock": 407067,
+        "decoys": 8
+      },
+      {
+        "denomination": 20000000,
+        "address": "0xb9348e7c5f9f117a5670f0c0efd26b7fc2f6602a",
+        "verifier": "0x09106d05f15e9c344103a7e4c8322329a244a06b",
+        "deployedAtBlock": 407072,
+        "decoys": 8
+      },
+      {
+        "denomination": 50000000,
+        "address": "0x67aa90a753cd6df7178931cbb904d3007bedae67",
+        "verifier": "0xc17fa92fb59c80241aa95f514309760ddbdd0cf4",
+        "deployedAtBlock": 407077,
+        "decoys": 8
+      },
+      {
+        "denomination": 100000000,
+        "address": "0x97f73fd419b06ee64e6d370d3229e55b8cda6143",
+        "verifier": "0xa640f4b4b49eaf40d5360ba67234fba0dc8abb2b",
+        "deployedAtBlock": 407082,
+        "decoys": 8
+      }
+    ],
+    "createDeployer": "0x90b1c7710016638010d1049352165f3ff3b60be1",
+    "token": {
+      "address": "0xd131ae02a41fbc1a77bbd99251c02fb06a250dc4",
+      "symbol": "pqUSDC",
+      "decimals": 6,
+      "deployedAtBlock": 407042
+    },
+    "pqKeyRegistry": {
+      "address": "0xbd9e98b96748f9a8083239d7ece0e9671483038f",
+      "deployedAtBlock": 407050
+    },
+    "attester": "0x8444ebe17f40cd4ea3d6a99c4976a286b531d6f8",
+    "faucet": "0x462437c867120d7b0b009243f6a71e484d7c4751"
   }
 }

@@ -107,6 +107,26 @@ try {
   check(Number(/: ([0-9.]+) ETH/.exec(returned)?.[1]) >= back * 0.99 - 0.0001, `swapped pqUSD back for ETH, approvals and swap in one FORS+C-signed batch: ${returned}`);
   check((await page.textContent('#facts'))?.includes('5 of 8'), 'the key has 5 signatures left');
 
+  // The key's last signature hands the account to the phrase's next key, in the same transaction.
+  await page.click('#tab-send');
+  const sendOnce = async (): Promise<string> => {
+    await page.fill('#recipient', '0x000000000000000000000000000000000000dEaD');
+    await page.fill('#send-amount', '0.0001');
+    await page.click('#send-button');
+    await page.waitForSelector('#sign-dialog[open]');
+    const sheet = (await page.textContent('#sign-rows')) ?? '';
+    await page.click('#sign-confirm');
+    await statusIs('send-status', 'Sent.');
+    return sheet;
+  };
+  for (let left = 5; left > 1; left--) await sendOnce();
+  check((await page.textContent('#facts'))?.includes('1 of 8'), 'four more sends: the key has its last signature left');
+  check((await sendOnce()).includes('last signature'), 'the signature request says this is the key\'s last signature and hands the account over');
+  const facts = (await page.textContent('#facts')) ?? '';
+  check(facts.includes('key 2') && facts.includes('8 of 8'), 'the account answers to key 2 now, with all 8 signatures');
+  await sendOnce();
+  check((await page.textContent('#facts'))?.includes('7 of 8'), 'key 2 signs: same address, same balance, a fresh key');
+
   if (process.env['SHOT']) {
     await page.click('#tab-home');
     await page.screenshot({ path: join(process.env['SHOT'], 'devnet-phone.jpg'), type: 'jpeg', quality: 80, fullPage: true });

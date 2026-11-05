@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-/// @notice A plain ERC-20 for the devnet's Uniswap v4 pool (pqUSD). No owner and
-///         no minting after the constructor: the whole supply goes to `to`.
+/// @notice A plain ERC-20 for the devnet: pqUSD for the Uniswap v4 pool (18
+///         decimals), pqUSDC for the privacy pools (6, as their note sizes
+///         assume). No owner and no minting after the constructor: the whole
+///         supply goes to `to`.
 /// @dev Deployed through the CREATE2 deployer by a FramePQAccount's SENDER
 ///      frame, so the deployer that runs this constructor is not the holder:
 ///      hence `to`.
 contract TestToken {
     string public name;
     string public symbol;
-    uint8 public constant decimals = 18;
+    uint8 public immutable decimals;
     uint256 public totalSupply;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -17,8 +19,9 @@ contract TestToken {
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
-    constructor(string memory name_, string memory symbol_, address to, uint256 supply) {
+    constructor(string memory name_, string memory symbol_, uint8 decimals_, address to, uint256 supply) {
         name = name_;
+        decimals = decimals_;
         symbol = symbol_;
         totalSupply = supply;
         balanceOf[to] = supply;

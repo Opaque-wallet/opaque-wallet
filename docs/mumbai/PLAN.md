@@ -275,23 +275,26 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 
 ### T11. Opaque's privacy on the devnet
 
-Today the devnet page is post-quantum but not private: its sends and swaps come straight from the account. The privacy layer has to come over too. The order is: contracts, then the backend, then the page.
+The devnet page was post-quantum but not private: its sends and swaps come straight from the account. The privacy layer now runs there too, and every signature in it is FORS.
 
-1. **Contracts (devnet):**
-   - deploy `PQKeyRegistry`, `AttestedRingVerifier` and `PrivatePool` for a 6-decimal test dollar (pqUSDC), so the frozen 1–100 note sizes and every TypeScript amount work unchanged;
-   - register an attester with its own FORS keys;
-   - seed each pool's first ring of 8 notes, with deposits the FramePQAccount signs.
-2. **Backend:**
-   - `devnet` in `deployments/index.ts`, with a full deployments file;
-   - a stack (relays, exit, attester) with its own mesh master;
-   - a settler that submits `spend`. Planned: a FramePQAccount, so even the courier signs with FORS rather than ECDSA.
-   - Hosting: locally first, then a Railway service (needs the user's go).
-3. **The page gets a Private tab:**
-   - a deposit into a pool, signed with FORS;
-   - a private send: a ring proof in the browser, sealed, carried through the three-hop mesh, attested, and paid by the pool.
-   - It reuses the Arc wallet's runtime pieces: note storage, ring client, prover worker, sealing, mesh client.
+1. **Contracts (devnet), deployed by `node ethereum/frame-tx.ts privacy`** (resumable; addresses in `deployments/eth-devnet.json` `privacy`):
+   - pqUSDC (`contracts/frame/TestToken.sol`, 6 decimals, so the frozen 1–100 note sizes and every TypeScript amount work unchanged), `PQKeyRegistry`, and an `AttestedRingVerifier` and `PrivatePool` per size (1, 2, 5, 10, 20, 50, 100), all unchanged from Arc;
+   - deployed from the reserve FramePQAccount: the registry and pqUSDC through the CREATE2 proxy, each verifier and pool through `contracts/frame/CreateDeployer.sol`, whose nonce gives the pool's address before it exists (the verifier binds the pool's id, the pool the verifier's address);
+   - the stack's own account (a FramePQAccount) registered as the attester, from a SENDER frame its FORS key signs;
+   - each pool's first ring of 8 seeded with deposits whose secrets nobody keeps;
+   - `contracts/frame/TokenFaucet.sol`: 100 pqUSDC per address an hour, paying its own gas, so the page asks with no key.
+2. **Backend: `backend/ethereum/devnet-stack.ts`** (the XRPL stack's shape):
+   - six relays, the exit, the CRE stand-in, a test credential authority;
+   - the ring from each pool's own `Deposited` events; the page's note reads (spent? known?) answered at the exit, through the mesh;
+   - the attester (`cre/attester-keys.ts`, unchanged) and the settler are one FramePQAccount: its registry key signs each attestation, its frame keys pay for each `spend`, each key's last signature handing over to the next;
+   - hosting: `backend/deploy/devnet.Dockerfile`, a Railway service once the user says go.
+3. **The page's Private tab** (`frontend/src/ethereum/devnet-private.ts`, on the XRPL runtime's model): test pqUSDC from the faucet, a FORS-signed deposit as notes, and a private send: a ZKBoo ring proof in the page's worker, sealed, three relays, attested, and the pool pays.
 
-**Done when:** the browser test makes a private payment on the devnet in which nothing signs with ECDSA, and the explorer shows the pool, not the account, paying the recipient.
+**Done when:** the browser test (`scripts/e2e-devnet-private.ts`) makes a private payment on the devnet in which every signature is FORS, and the chain shows the stack's account, not the payer's, sending the transaction in which the pool pays the recipient.
+
+Found on the way:
+- every transaction tipped 2 gwei per gas until `frame.ts` set the tip (0.1 gwei; 0.001 was dropped): a swap cost 0.0014 ETH, an account's creation 0.015;
+- the mempool sometimes drops a transaction it accepted; `frame.ts` now sends the same bytes again until it is mined, so no key signs twice for one nonce.
 
 ### T10. CROPS, and what the video shows
 

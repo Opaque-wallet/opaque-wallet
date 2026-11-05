@@ -16,5 +16,6 @@ frontend/public/stack.json
 **/.graphclient
 .git
 frontend/public/xrpl-stack.json
+frontend/public/devnet-stack.json
 # A local build; the XRPL image makes its own.
 frontend/dist
