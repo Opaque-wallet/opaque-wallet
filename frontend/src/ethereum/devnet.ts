@@ -120,7 +120,7 @@ async function confirmSign(title: string, rows: readonly (readonly [string, stri
     ['From', short(account)],
     ...rows,
     ['Network fee', `at most ${Number(MAX_FEE) / 1e9} gwei per gas, in devnet ETH`],
-    ['Signed with', `FORS+C, hash-based: no ECDSA`],
+    ['Signed with', 'FORS+C, hash-based'],
     ['Key after this', `${left - 1n} of ${MAX_USES} signatures left`],
   ].map(([label, value]) => {
     const row = document.createElement('div');

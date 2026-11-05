@@ -61,7 +61,7 @@ try {
 
   await page.click('#promo-create-go');
   await statusIs('home-status', 'Created');
-  check(!(await page.isVisible('#promo-create')), 'the factory created the account: no ECDSA key signed anything');
+  check(!(await page.isVisible('#promo-create')), 'the factory created the account: nothing signed');
 
   await page.click('#tab-send');
   await page.fill('#recipient', '0x000000000000000000000000000000000000dEaD');

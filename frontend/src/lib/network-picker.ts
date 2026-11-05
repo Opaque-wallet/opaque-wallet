@@ -28,7 +28,7 @@ const NETWORKS: Network[] = [
   { id: 'xrpl-mainnet', chain: 'XRP Ledger', name: 'XRPL Mainnet', note: 'After the audit' },
 ];
 // The EIP-8141 devnet's page is built with testnet too (devnet.html). Listed first: it is the newest.
-NETWORKS.unshift({ id: 'devnet', chain: 'Ethereum', name: 'Ethereum Devnet (Fully post-quantum)', note: 'EIP-8141: no ECDSA key anywhere', href: `${dirOf(networks.find((n) => n.id === 'testnet')!.sitePath)}devnet.html` });
+NETWORKS.unshift({ id: 'devnet', chain: 'Ethereum', name: 'Ethereum Devnet (Fully post-quantum)', note: 'EIP-8141, hash-based signatures only', href: `${dirOf(networks.find((n) => n.id === 'testnet')!.sitePath)}devnet.html` });
 type SidePanel = { setOptions(options: { path: string }): Promise<void> };
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
 

@@ -28,7 +28,7 @@
   <section class="view" id="view-home" aria-labelledby="tab-home" hidden>
     <div class="hero" id="hero">
       <svg class="hero-ring" viewBox="0 0 40 40" aria-hidden="true"><g fill="currentColor"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg>
-      <div class="hero-top"><span class="hero-label">Total balance</span><span class="shield">No ECDSA anywhere</span></div>
+      <div class="hero-top"><span class="hero-label">Total balance</span><span class="shield">Hash-based signatures only</span></div>
       <h1 class="balance"><span id="balance-main">—</span> <small>ETH</small></h1>
       <p class="sub" id="balance-sub">Drawing your post-quantum key…</p>
       <div class="hero-assets" id="hero-assets"></div>
@@ -67,8 +67,8 @@
       <div class="list-head wide-only"><span>Your account's one key</span></div>
       <dl class="facts" id="facts"></dl>
       <div class="card prose">
-        <p>Your account answers to one hash-based key, FORS+C, drawn from your recovery phrase. No ECDSA key signs anything: not its creation (its factory pays for that), not a transaction, not a bundler, because an EIP-8141 frame transaction has no envelope signature to need one.</p>
-        <p>The key signs up to 8 transactions, counted by the account's nonce, then the account hands over to its next key. A quantum computer can't forge a hash-based signature the way it could an ECDSA one.</p>
+        <p>Your account answers to one hash-based key, FORS+C, drawn from your recovery phrase. Nothing else signs: not its creation (its factory pays for that), not a transaction, not a bundler, because an EIP-8141 frame transaction has no envelope signature to need one.</p>
+        <p>The key signs up to 8 transactions, counted by the account's nonce, then the account hands over to its next key. A quantum computer can't forge a hash-based signature.</p>
       </div>
     </div>
   </section>
@@ -90,7 +90,7 @@
       <aside class="flow-side">
         <p class="eyebrow">How a post-quantum send works</p>
         <ol class="steps">
-          <li><b>One frame transaction</b><small>A VERIFY frame, then the transfer. No envelope signature, so no ECDSA key.</small></li>
+          <li><b>One frame transaction</b><small>A VERIFY frame, then the transfer, with no envelope signature.</small></li>
           <li><b>Signed by FORS+C</b><small>Your hash-based key signs the whole transaction, in about a second, in this page.</small></li>
           <li><b>Checked on chain</b><small>The account's VERIFY frame checks it within the mempool's 100,000-gas limit, then pays for itself.</small></li>
         </ol>
@@ -128,7 +128,7 @@
         <ol class="steps">
           <li><b>Uniswap v4</b><small>The Universal Router swaps on the ETH/pqUSD pool, with a minimum of 99% of the quote.</small></li>
           <li><b>One SENDER frame</b><small>Your account calls the router itself: the frames are the batch, so no contract wallet logic stands in between.</small></li>
-          <li><b>Signed by FORS+C</b><small>The same hash-based key, the same VERIFY frame: nothing in the swap is signed with ECDSA.</small></li>
+          <li><b>Signed by FORS+C</b><small>The same hash-based key and the same VERIFY frame sign the whole swap.</small></li>
         </ol>
       </aside>
     </div>
@@ -161,7 +161,7 @@
     <button id="tab-swap" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5 3.5 8 7 11.5M3.5 8h13M17 12.5l3.5 3.5-3.5 3.5M20.5 16h-13"/></svg></i>Swap</button>
     <button id="tab-receive" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></svg></i>Deposit</button>
     <button id="tab-activity" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></i>Activity</button>
-    <p class="side-note"><span class="shield">Ethereum Devnet (Fully post-quantum)</span>EIP-8141. One hash-based key; no ECDSA anywhere.</p>
+    <p class="side-note"><span class="shield">Ethereum Devnet (Fully post-quantum)</span>EIP-8141. One hash-based key signs everything.</p>
   </nav>
 </main>
 
@@ -169,7 +169,7 @@
   <form method="dialog">
     <div class="dialog-head"><div><p class="eyebrow">Signature request</p><h2 id="sign-title">Confirm</h2></div></div>
     <div id="sign-rows"></div>
-    <p class="fine-print">Nothing is signed until you confirm. Your FORS+C key signs here, in this browser; this account has no ECDSA key to sign with.</p>
+    <p class="fine-print">Nothing is signed until you confirm. Your FORS+C key signs here, in this browser.</p>
     <div class="dialog-actions"><button class="secondary" id="sign-reject" value="reject">Reject</button><button class="primary" id="sign-confirm" value="confirm">Sign with FORS+C</button></div>
   </form>
 </dialog>
