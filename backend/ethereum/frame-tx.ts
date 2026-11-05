@@ -136,7 +136,7 @@ async function send(): Promise<void> {
   const r = await mined(hash);
   const frames = (r.frameReceipts ?? []).map((f, i) => `frame ${i}: ${f.status === '0x1' ? 'ok' : `status ${f.status}`}`);
   console.log(`mined in block ${BigInt(r.blockNumber)}; ${frames.join(', ')}`);
-  console.log(`${EXPLORER} (search ${hash})`);
+  console.log(`${EXPLORER}/tx/${hash}`);
 }
 
 /** Someone without the account's key, here a fresh FORS key, must get nothing past VERIFY. */
