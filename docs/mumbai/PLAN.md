@@ -273,6 +273,26 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 
 **Done when:** one 0x06 transaction on the devnet explorer runs all three, signed only with FORS+C.
 
+### T11. Opaque's privacy on the devnet
+
+Today the devnet page is post-quantum but not private: its sends and swaps come straight from the account. The privacy layer has to come over too. The order is: contracts, then the backend, then the page.
+
+1. **Contracts (devnet):**
+   - deploy `PQKeyRegistry`, `AttestedRingVerifier` and `PrivatePool` for a 6-decimal test dollar (pqUSDC), so the frozen 1–100 note sizes and every TypeScript amount work unchanged;
+   - register an attester with its own FORS keys;
+   - seed each pool's first ring of 8 notes, with deposits the FramePQAccount signs.
+2. **Backend:**
+   - `devnet` in `deployments/index.ts`, with a full deployments file;
+   - a stack (relays, exit, attester) with its own mesh master;
+   - a settler that submits `spend`. Planned: a FramePQAccount, so even the courier signs with FORS rather than ECDSA.
+   - Hosting: locally first, then a Railway service (needs the user's go).
+3. **The page gets a Private tab:**
+   - a deposit into a pool, signed with FORS;
+   - a private send: a ring proof in the browser, sealed, carried through the three-hop mesh, attested, and paid by the pool.
+   - It reuses the Arc wallet's runtime pieces: note storage, ring client, prover worker, sealing, mesh client.
+
+**Done when:** the browser test makes a private payment on the devnet in which nothing signs with ECDSA, and the explorer shows the pool, not the account, paying the recipient.
+
 ### T10. CROPS, and what the video shows
 
 - **T10a, the exit without our attester.** A timelocked public withdrawal through an adapter verifier on the new Sepolia pools.
