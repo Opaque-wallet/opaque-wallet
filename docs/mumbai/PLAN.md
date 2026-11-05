@@ -171,20 +171,15 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 
 ### T7. ENSv2 with post-quantum authority (Sepolia)
 
-- **Read first:**
-  - `IRegistry`, `ETHRegistrar` (`register`, `REGISTRATION_ROLE_BITMAP`) and `PermissionedResolver`, from ENS contracts-v2;
-  - the verified source of the addresses above.
-- **`contracts/src/ethereum/ens/PQRegistry.sol`:**
-  - an `IRegistry` (`getSubregistry`, `getResolver`, `getParent`) whose writes need a FORS+C signature, through the existing `PQKeyRegistry`/`ForsVerifier`;
-  - each signed message binds the name, a nonce and a deadline;
-  - it has no ECDSA owner.
-- **Records:** `addr`, plus a text record carrying the account's PQ key commitment.
-- **Name:**
-  - register a demo `.eth` through `ETHRegistrar`, then point its subregistry at `PQRegistry`;
-  - Tripwire: the ECDSA owner revokes `setResolver`, `ROLE_UPGRADE` and the root roles, together with their admin roles. Otherwise ECDSA can route around the PQ registry.
-- **Wallet:** "Pay alice.eth" resolves the name through `UniversalResolverV2`, then makes a private payment.
+**Live: opaque.eth is held by a FORS+C key.** Design, simpler than the custom registry first planned: ENSv2 hands a name's owner roles to whoever holds its ERC-1155 token, and moves them with it (`PermissionedRegistry._update`). So `contracts/src/ethereum/ens/PQNameController.sol` holds the name and is the only admin of its resolver, and calls out only on a signature from its key in our `PQKeyRegistry` (binding target, calldata, deadline, chain and use count). Anyone may submit; paying authorises nothing. No ECDSA key holds the name, so there is nothing to route around.
 
-**Done when:** a record changes only with a FORS signature (an ECDSA attempt reverts), and the wallet pays a name.
+- Sepolia (deployments/eth-sepolia.json `ens`): PQKeyRegistry `0x8b47560d32bcda788ab5233ab2bda55204cacca3`, PQNameController `0x4d4df91933bb30640908f5cd4a42e2cac546c131`, its PermissionedResolver `0x9320d93186255e122214bd22270d168d5d8f676f` (the ENS app's VerifiableFactory and resolver build; that build is older than contracts-v2 main: name-based setters, `resolve()` reads).
+- opaque.eth: registered by the user, transferred to the controller; its every role has one holder, the controller. FORS-signed: resolver set (`0x621bfed795254d0d0baa3c5e1177e2537637f64f1b8aaeb77f25db2c2d80a3b1`), records in one signature (`0x23aa1a10f6da26c8555066a4ee53ccb9de11f13293b530824a7daed7c5e61791`): addr (ETH: the controller; the devnet, ENSIP-11 coin type 0x80000539: the user's FramePQAccount), text `pq-key`, `url`.
+- Checked: an ECDSA write to the resolver reverts; the old owner's `setResolver` reverts; UniversalResolverV2 resolves the devnet address through the controller's resolver.
+- Commands: `backend/ethereum/ens-sepolia.ts` (deploy, adopt, records, status). Tests: `contracts/test/PQNameController.t.sol`, signatures from packages/pq-wallet.
+- ENS's repo records three Sepolia address sets; we use docs.ens.domains', the ENS app's.
+
+**Left:** the wallet pays a name ("Pay opaque.eth" resolves through UniversalResolverV2, then pays privately on the devnet).
 
 ### T8. Uniswap v4
 
