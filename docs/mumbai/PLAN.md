@@ -16,6 +16,8 @@ Written for ETHGlobal Mumbai, checked on 5 November 2026. Work through the tasks
 |---|---|
 | `contracts/src/opaque/` | Shared EVM contracts (Arc and Ethereum): pools, verifiers, the PQ account, the key registry |
 | `contracts/src/ethereum/{ens,uniswap,frame}/` | New: the Ethereum-only adapters (created by T7–T9) |
+| `contracts/frame/` | The EIP-8141 devnet account, built on its own: `FOUNDRY_PROFILE=frame forge build` (solc 0.8.28) |
+| `backend/ethereum/frame-tx.ts` | Funds, deploys and sends frame transactions on the devnet |
 | `backend/chain/` | Shared EVM backend: pool reads, attestation, wallet RPC |
 | `backend/ethereum/` | New: ENS, v4 and frame-transaction helpers (created by T7–T9) |
 | `backend/mesh`, `backend/cre`, `backend/zk` | The shared core: relays, sealing, ring proofs |
@@ -202,17 +204,41 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 
 ### T9. The EIP-8141 transaction (devnet)
 
-1. **Fund a devnet address** from the gateway faucet.
-2. **Deploy on the devnet:** `PQKeyRegistry`, `ForsVerifier`, the T7 registry and the T8 hook.
-   - FORS verification costs 167k–260k gas, over the public mempool's `MAX_VERIFY_GAS` of 100,000. Only the staked alt mempool (ERC-8421) admits it, which is why the gateway exists.
-3. **The account:**
-   - a VERIFY frame (STATICCALL) checks the FORS+C signature;
-   - SENDER frames then run, under `ATOMIC_BATCH_FLAG` (all or nothing):
-     - (a) set the ENS name and records;
-     - (b) add v4 liquidity or swap;
-     - (c) make an Opaque deposit.
-4. **The type-0x06 encoder:** read the one in `github.com/forshtat/mempool-workshop` before writing our own. Submit to the gateway, not the miner.
-5. **Sepolia:** runs the same three calls as one ERC-4337 UserOp.
+**Steps 1–4 are done (5 November).** A frame transaction signed only with FORS+C runs on the devnet: no ECDSA key in it anywhere, and no bundler or paymaster. The account pays for itself.
+
+**What we found:** the devnet caps validation at `MAX_VERIFY_GAS` = 100,000 for every sender, staked or not. It's a structural rule on the whole validation prefix: VERIFY frames' gas plus signature costs, in the sidecar's `validationPrefix.ts`. Staking doesn't raise it. `ForsVerifier` spends 167k on k=13, a=13, so it could never fit. **`LeanFors`** (`contracts/src/ethereum/frame/`) is the same verifier with its loop in assembly:
+
+| Parameters | `ForsVerifier` | `LeanFors` |
+|---|---|---|
+| k=13, a=13 | 167k | **53.6k** |
+| k=32, a=8 | 260k | 83k |
+
+`test/LeanFors.t.sol` holds it to `ForsVerifier`: the same commitment on both fixtures, the same verdict on 1,024 fuzzed tamperings, and the same reverts.
+
+**What is built:**
+- **`contracts/frame/FramePQAccount.sol`** (`FOUNDRY_PROFILE=frame forge build`; the support library pins solc 0.8.28):
+  - `verify()` is the VERIFY frame. It copies the ARBITRARY signature entry out with SIGDATACOPY, signs `keccak256(abi.encode(DOMAIN, sighash))`, recovers the key with `LeanFors` and approves execution and payment.
+  - The protocol nonce counts the key's uses (8 per key at k=13, a=13), because a VERIFY frame can't write storage.
+  - `rotate(next)` is called from a SENDER frame of the account's own transaction.
+  - It refuses keyed nonces.
+- **`backend/ethereum/frame-tx.ts`:** `fund`, `deploy`, `send`, `attack`. Keys are in `backend/.stack/eth-devnet/` (0600). It encodes with `@forshtat/hegota-support` (profile `ethrex-eip8141-tracer`), installed without touching the backend's viem.
+
+**On chain:**
+- **The account:** `0xF3039b74322b725cF8C799c727d92D317E94A2e2`. Its nonce started at 8: one, plus seven opcode helpers.
+- **Transactions:**
+  - `0x3bc85a308a16edb460e670296f09b7fbda41846baa6979a348c459b7a3e9c88f` (block 404,116, nonce 8);
+  - `0xf1a38d414a25251392d2b95ede11d2fe4fc188aebba6e74323d999bdcdf9c4c6` (block 404,130, nonce 9).
+  - Both are type 0x6, the payer is the account, and VERIFY used 76,430 gas.
+- **The attack:** a transaction signed by another FORS key is refused at admission with `BadSignature()`.
+- **Deploy gas:** contract code costs state gas here (EIP-8037: (120 + bytes) × 1,530), so deploying took more than 6M gas; the script sends 16M.
+
+**Still to do:**
+- **SENDER frames that do the demo,** under `ATOMIC_BATCH_FLAG` (all or nothing):
+  - (a) set the ENS name and records (the T7 registry, deployed on the devnet);
+  - (b) swap or add liquidity on the predeployed v4 (the T8 hook);
+  - (c) an Opaque deposit.
+- **A rotation in the same transaction** as a payment, to show the handover.
+- **Sepolia:** the same three calls as one ERC-4337 UserOp.
 
 **Done when:** one 0x06 transaction on the devnet explorer runs all three, signed only with FORS+C.
 

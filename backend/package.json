@@ -52,6 +52,7 @@
     "rather than something that turns CI red when an RPC has a bad minute."
   ],
   "dependencies": {
+    "@forshtat/hegota-support": "0.0.1",
     "@noble/hashes": "^2.4.0",
     "@noble/post-quantum": "^0.7.1",
     "@opaque/pq-wallet": "file:../packages/pq-wallet",

@@ -23,6 +23,19 @@ fs_permissions = [
   { access = "read", path = "../deployments" },
 ]
 
+# The EIP-8141 devnet contracts (frame/). @forshtat/hegota-support, which
+# reaches the frame opcodes, pins solc 0.8.28, so they build on their own:
+#   FOUNDRY_PROFILE=frame forge build
+# Everything else here stays on 0.8.26; frame/ imports only what compiles on both.
+[profile.frame]
+src = "frame"
+test = "frame"
+script = "frame"
+out = "out-frame"
+solc = "0.8.28"
+remappings = ["@forshtat/hegota-support/=../backend/node_modules/@forshtat/hegota-support/"]
+allow_paths = ["../backend/node_modules"]
+
 # The state machine is the risk in this design, not the crypto. Fuzz it hard.
 [fuzz]
 runs = 1024
