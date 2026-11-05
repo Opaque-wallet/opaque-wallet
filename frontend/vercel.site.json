@@ -6,6 +6,7 @@
     { "source": "/testnet", "destination": "/", "permanent": false },
     { "source": "/testnet/", "destination": "/", "permanent": false },
     { "source": "/xrpl", "destination": "/testnet/xrpl", "permanent": false },
+    { "source": "/devnet", "destination": "/testnet/devnet", "permanent": false },
     { "source": "/testnet/opaque-xrpl-extension.zip", "destination": "/opaque-extension.zip", "permanent": false }
   ],
   "headers": [

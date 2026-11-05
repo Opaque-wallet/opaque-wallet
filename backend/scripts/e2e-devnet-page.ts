@@ -70,11 +70,13 @@ try {
   check((await page.textContent('#facts'))?.includes('7 of 8'), 'the key has 7 signatures left');
 
   await page.waitForFunction(() => (document.getElementById('swap-quote')?.textContent ?? '').startsWith('About'), undefined, { timeout: 60_000 });
-  check(true, `a quote from the pool's own state: ${await page.textContent('#swap-quote')}`);
+  const quoted = Number(/About ([0-9.]+) pqUSD/.exec((await page.textContent('#swap-quote')) ?? '')?.[1]);
+  check(quoted > 0, `a quote from the pool's own state: ${quoted} pqUSD for 0.001 ETH`);
   await page.fill('#swap-amount', '0.001');
   await page.click('#swap');
   const swapped = await statusIs('Swapped on Uniswap v4');
-  check(Number(/: ([0-9.]+) pqUSD/.exec(swapped)?.[1]) > 1.9, `swapped on Uniswap v4 with a FORS+C signature only: ${swapped}`);
+  // The price moves with every swap, so the check is against the quote: the swap takes no less than 99% of it.
+  check(Number(/: ([0-9.]+) pqUSD/.exec(swapped)?.[1]) >= quoted * 0.99 - 0.0001, `swapped on Uniswap v4 with a FORS+C signature only: ${swapped}`);
   check((await page.textContent('#facts'))?.includes('6 of 8'), 'the key has 6 signatures left');
   if (process.env['SHOT']) await page.screenshot({ path: join(process.env['SHOT'], 'devnet-page.jpg'), type: 'jpeg', quality: 80, fullPage: true });
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);

@@ -34,6 +34,7 @@ const MAX_FEE = 2_000_000_000n;
 
 export const ACCOUNT_ABI = parseAbi(['function verify()', 'function rotate(bytes32 next)', 'function key() view returns (bytes32)']);
 export const FACTORY_ABI = parseAbi(['function verify()', 'function create(bytes32 key) returns (address)', 'function accountOf(bytes32 key) view returns (address)']);
+const FAUCET_ABI = parseAbi(['function verify()', 'function drip(address to)']);
 
 export type ForsKey = ReturnType<typeof keyGen>;
 /** The account's key from a 32-byte seed. About a second in a browser: it builds 13 trees of 2^13 leaves. */
@@ -63,12 +64,36 @@ export async function settled(hash: Hex): Promise<FrameReceipt> {
   return r;
 }
 
-/** The devnet faucet pays `to`, once an hour per address. */
+/**
+ * Devnet ETH for `to`: the devnet's own faucet (1 ETH, once an hour per
+ * address), or, when that one is dry, Opaque's (contracts/frame/DevnetFaucet:
+ * 0.05 ETH, once an hour), which pays for its own transaction, so nothing signs.
+ */
 export async function faucet(to: Address): Promise<Hex> {
-  const { txHash } = await call('skandha_explorer_faucet', [to]);
-  const r = await mined(txHash);
-  if (r.status !== '0x1') throw new Error(`the faucet's transfer ${txHash} reverted`);
-  return txHash;
+  let hash: Hex;
+  try {
+    hash = (await call('skandha_explorer_faucet', [to])).txHash;
+  } catch (e) {
+    const ours = (devnet.contracts as { faucet?: Address | null }).faucet;
+    if (!/empty/i.test((e as Error).message) || !ours) throw e;
+    hash = await send(newTx({
+      chainId: devnet.chainId,
+      sender: ours,
+      nonceSeq: await nonceOf(ours),
+      frames: [
+        frame(profile, 'VERIFY', { scope: 'EXECUTION_AND_PAYMENT', target: null, execution: 60_000n, data: encodeFunctionData({ abi: FAUCET_ABI, functionName: 'verify' }) }),
+        // Its record of `to` is a new storage slot, and `to` may be a new account: state gas.
+        frame(profile, 'SENDER', { target: ours, execution: 300_000n, state: 400_000n, data: encodeFunctionData({ abi: FAUCET_ABI, functionName: 'drip', args: [to] }) }),
+      ],
+      signatures: [],
+      fees: { maxFeePerGas: MAX_FEE },
+    }));
+    await settled(hash);
+    return hash;
+  }
+  const r = await mined(hash);
+  if (r.status !== '0x1') throw new Error(`the faucet's transfer ${hash} reverted`);
+  return hash;
 }
 
 const factoryAddress = (): Address => {

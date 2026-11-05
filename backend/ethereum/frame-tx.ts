@@ -5,6 +5,7 @@
 //   (cd ../contracts && FOUNDRY_PROFILE=frame forge build)
 //   node --use-system-ca ethereum/frame-tx.ts fund      the faucet pays the deployer (once an hour)
 //   node --use-system-ca ethereum/frame-tx.ts factory   deploys the account factory (infrastructure, once)
+//   node --use-system-ca ethereum/frame-tx.ts devnet-faucet [eth]   deploys Opaque's devnet faucet, funded (once)
 //   node --use-system-ca ethereum/frame-tx.ts create    a new FORS key, its address funded, its account created:
 //                                                       the factory pays, and no ECDSA key signs anything
 //   node --use-system-ca ethereum/frame-tx.ts send [to] [eth]   VERIFY (FORS+C) + one transfer (default: 1 gwei to the deployer)
@@ -86,6 +87,26 @@ async function factory(): Promise<void> {
   console.log(`FramePQAccountFactory ${address}, ${await eth(address)}, deployed in ${hash}; written to deployments/eth-devnet.json`);
 }
 
+async function devnetFaucet(): Promise<void> {
+  const { abi, bytecode } = JSON.parse(readFileSync(artifactOf('DevnetFaucet'), 'utf8')) as { abi: Abi; bytecode: { object: Hex } };
+  const d = deployer();
+  const nonce = await nonceOf(d.address);
+  const raw = await d.signTransaction({
+    // Its code and HegotaSupport's helpers cost state gas (EIP-8037), as the factory's do.
+    chainId: devnet.chainId, nonce: Number(nonce), gas: 16_000_000n, gasPrice: 2_000_000n, type: 'legacy',
+    value: parseEther(process.argv[3] ?? '0.4'),
+    data: encodeDeployData({ abi, bytecode: bytecode.object }),
+  });
+  const hash: Hex = await call('eth_sendRawTransaction', [raw]);
+  const r = await mined(hash);
+  if (r.status !== '0x1') throw new Error(`deployment ${hash} reverted`);
+  const address = getContractAddress({ from: d.address, nonce });
+  const file = JSON.parse(readFileSync(DEPLOYMENTS, 'utf8'));
+  file.contracts.faucet = address;
+  writeFileSync(DEPLOYMENTS, `${JSON.stringify(file, null, 2)}\n`);
+  console.log(`DevnetFaucet ${address}, ${await eth(address)}, deployed in ${hash}; written to deployments/eth-devnet.json`);
+}
+
 async function create(): Promise<void> {
   const seed = `fors-${Date.now()}.seed`;
   const key = forsKey(hexToBytes(secret(seed, () => toHex(randomBytes(32)))));
@@ -152,7 +173,7 @@ async function swap(): Promise<void> {
   console.log(`swapped ${formatEther(amount)} ETH for ${formatEther(got)} pqUSD (quoted ${formatEther(expected)}): ${hash}\n${txUrl(hash)}`);
 }
 
-const commands: Record<string, () => Promise<void>> = { fund, factory, create, send, attack, pool, swap };
+const commands: Record<string, () => Promise<void>> = { fund, factory, 'devnet-faucet': devnetFaucet, create, send, attack, pool, swap };
 const run = commands[process.argv[2] ?? ''];
 if (run === undefined) throw new Error(`usage: node ethereum/frame-tx.ts ${Object.keys(commands).join(' | ')}`);
 await run();

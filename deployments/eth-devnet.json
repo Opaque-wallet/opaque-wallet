@@ -5,7 +5,8 @@
   "miner": "https://altmempool.forshtat.com",
   "explorer": "https://altmempoolexplorer.forshtat.com",
   "contracts": {
-    "factory": "0x5516c44Eb7cBCCC15b9E1dFf522b7F75452880ae"
+    "factory": "0x5516c44Eb7cBCCC15b9E1dFf522b7F75452880ae",
+    "faucet": "0xcCC072Ac9332cD243e2e560bE03Db66888e1C75D"
   },
   "uniswap": {
     "poolManager": "0x6bF9Aa9c04fd001385742d61f6818C3236429848",
