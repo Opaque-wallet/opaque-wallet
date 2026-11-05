@@ -1,16 +1,16 @@
 // The wallet's page for the EIP-8141 devnet: "Ethereum Devnet (Fully post-quantum)", in the same
-// shell as the XRPL and Arc wallets. The account answers to one FORS+C key
-// drawn from the recovery phrase, and no step needs an ECDSA key: its factory
-// creates it and pays for that, and every transaction after, a send or a
-// Uniswap v4 swap, is signed by the FORS key alone (backend/ethereum/frame.ts,
-// uniswap.ts, contracts/frame/).
-//
-// It talks straight to the devnet's gateway and miner. This devnet has no relay
-// mesh yet, so the page shows the transaction, not Opaque's network privacy.
+// shell as the XRPL and Arc wallets, and private by default as Arc's is: the
+// balance is private pqUSDC notes, and Send pays from them through Opaque's
+// pools (devnet-private.ts, backend/ethereum/devnet-stack.ts). The account
+// answers to one FORS+C key drawn from the recovery phrase: its factory creates
+// it and pays for that, and every transaction after (a deposit, a public ETH
+// send, a Uniswap v4 swap) is signed by the FORS key alone (backend/ethereum/
+// frame.ts, uniswap.ts, contracts/frame/).
 
 import { accountOf, balanceOf, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyFor, keyOf, MAX_FEE, MAX_USES, nonceOf, parseEther, pqUSDCFaucet, sendCalls, settled, txUrl, type Call, type ForsKey } from '../../../backend/ethereum/frame.ts';
 import { quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswap.ts';
 import { unlockGate } from '../lib/lock.ts';
+import { scoped } from '../lib/storage-name.ts';
 import { hasPrivacy, pqUSDC, startDevnetPrivacy, type DevnetPrivacy, type PrivateSend } from './devnet-private.ts';
 import { networkPicker } from '../lib/network-picker.ts';
 import { accountLabel, activeAccount, stream } from '../lib/wallet-keys.ts';
@@ -22,6 +22,8 @@ const paint = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() 
 const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
 /** 4 decimals, or 6 below 0.01, where 4 would round a swap's minimum to its quote. */
 const amount = (wei: bigint): string => { const n = Number(formatEther(wei)); return n.toFixed(n > 0 && n < 0.01 ? 6 : 4); };
+/** pqUSDC's 6 decimals, as whole units with cents. */
+const usdc = (units: bigint | number): string => (Number(units) / 1e6).toFixed(2);
 /** Leaves room for the transaction's own gas when sending everything. */
 const GAS_RESERVE = parseEther('0.0005');
 
@@ -41,9 +43,16 @@ let usd = 0n;
 let ethIn = true;
 /** Signatures this key has left. */
 let left = MAX_USES;
+/** pqUSDC at the account's address, in 6-decimal units, waiting to be deposited. */
+let usdcPublic = 0n;
+/** Private pqUSDC: units in spendable notes, and how many notes; null until the stack answers. */
+let privateUnits: number | null = null;
+let noteCount = 0;
+/** What Send sends: private pqUSDC notes (the default, as on Arc) or public ETH. */
+let sendPrivate = true;
 
 // ── views, as the XRPL page has them ──────────────────────────────────────
-const VIEWS = ['home', 'send', 'swap', 'private', 'receive', 'activity'] as const;
+const VIEWS = ['home', 'send', 'swap', 'ring', 'receive', 'activity'] as const;
 type View = (typeof VIEWS)[number];
 function showView(name: View): void {
   for (const v of VIEWS) {
@@ -52,7 +61,8 @@ function showView(name: View): void {
   }
   window.scrollTo(0, 0);
   if (name === 'swap') void quoteSwap().catch(() => undefined);
-  if (name === 'private') void refreshPrivate();
+  if (name === 'ring') void refreshRing();
+  if (name === 'home' || name === 'activity' || name === 'send') void refreshPrivate();
 }
 const HOME_TABS = [['hometab-assets', 'home-assets'], ['hometab-pq', 'home-pq']] as const;
 function showHomeTab(tab: string): void {
@@ -99,17 +109,37 @@ async function signed(calls: readonly Call[], atomic = false): Promise<`0x${stri
 
 async function refresh(): Promise<void> {
   let nonce: bigint;
-  [created, eth, nonce, usd] = await Promise.all([hasCode(account), balanceOf(account), nonceOf(account), tokenBalance(account)]);
+  [created, eth, nonce, usd, usdcPublic] = await Promise.all([
+    hasCode(account), balanceOf(account), nonceOf(account), tokenBalance(account),
+    hasPrivacy() ? tokenBalance(account, pqUSDC()) : Promise.resolve(0n),
+  ]);
   if (created) await syncKey();
   left = created ? MAX_USES - (nonce - first) : MAX_USES;
-  el('balance-main').textContent = amount(eth);
-  el('balance-sub').textContent = created ? `${left} of ${MAX_USES} signatures left on key ${keyIndex + 1}` : 'Not created yet: its address already works';
+  render();
+}
+
+/** Paints every figure from what is known: the chain's reads (refresh) and the notes' (refreshPrivate). */
+function render(): void {
+  const priv = privateUnits === null ? '—' : usdc(privateUnits);
+  el('balance-main').textContent = priv;
+  el('balance-sub').textContent = !created ? 'Not created yet: its address already works'
+    : `${noteCount} private ${noteCount === 1 ? 'note' : 'notes'} · ${amount(eth)} ETH for gas · ${left} of ${MAX_USES} signatures left on key ${keyIndex + 1}`;
   el('account-short').textContent = short(account);
-  el('hero-assets').replaceChildren(chip('tok-eth', 'E', `${amount(eth)} ETH`, eth > 0n), chip('tok-usdc', 'U', `${amount(usd)} pqUSD`, usd > 0n));
+  el('hero-assets').replaceChildren(
+    chip('tok-usdc', 'U', `${priv} pqUSDC private`, (privateUnits ?? 0) > 0),
+    ...(usdcPublic > 0n ? [chip('tok-usdc', 'U', `${usdc(usdcPublic)} pqUSDC to deposit`, false)] : []),
+    chip('tok-eth', 'E', `${amount(eth)} ETH`, eth > 0n),
+    ...(usd > 0n ? [chip('tok-usdc', 'U', `${amount(usd)} pqUSD`, false)] : []),
+  );
   el('assets').replaceChildren(
-    assetRow('tok-eth', 'E', 'ETH', 'Gas and value, on the devnet', amount(eth)),
+    assetRow('tok-usdc', 'U', 'pqUSDC, private', `${noteCount} notes in Opaque's pools: Send pays from these`, priv),
+    assetRow('tok-usdc', 'U', 'pqUSDC, at your address', 'Public until you deposit it on Home', usdc(usdcPublic)),
+    assetRow('tok-eth', 'E', 'ETH', 'Gas for deposits, swaps and public sends', amount(eth)),
     assetRow('tok-usdc', 'U', 'pqUSD', 'Post-Quantum Test Dollar, from Uniswap v4', amount(usd)),
   );
+  el('deposit-copy').textContent = usdcPublic > 0n
+    ? `${usdc(usdcPublic)} pqUSDC is at your address, public. Deposit it to make it private notes.`
+    : 'pqUSDC at your address becomes private notes.';
   facts([
     ['Account', account],
     ['Status', created ? 'Created' : 'Not created yet: its address is fixed by its key'],
@@ -121,19 +151,33 @@ async function refresh(): Promise<void> {
   el('address-x').textContent = account;
   el('address-state').textContent = created ? 'Created' : 'Not created yet';
   el('address-create').hidden = created;
-  el('send-have').textContent = `${amount(eth)} ETH`;
+  el('send-have').textContent = sendPrivate ? `${priv} pqUSDC` : `${amount(eth)} ETH`;
   const [pay, get] = ethIn ? [`${amount(eth)} ETH`, `${amount(usd)} pqUSD`] : [`${amount(usd)} pqUSD`, `${amount(eth)} ETH`];
   el('swap-have').textContent = pay;
   el('swap-have-to').textContent = get;
 }
 
+/** This account's transactions from this page, kept in this browser so a reload still shows them. */
+interface Logged { readonly hash: `0x${string}`; readonly what: string; readonly at: number }
+const activityKey = (): string => scoped(`opaque:eth-devnet:${account.toLowerCase()}:activity:v1`);
+function activity(): Logged[] {
+  try { return JSON.parse(localStorage.getItem(activityKey()) ?? '[]') as Logged[]; } catch { return []; }
+}
+function showActivity(): void {
+  const all = activity();
+  el('sent-list').replaceChildren(...(all.length === 0 ? [Object.assign(document.createElement('p'), { className: 'empty', textContent: 'Nothing yet.' })] : all.map((l) => {
+    const row = Object.assign(document.createElement('a'), { className: 'asset', href: txUrl(l.hash), target: '_blank', rel: 'noopener' });
+    row.innerHTML = '<i class="tok tok-eth">E</i><span><b></b><small></small></span><span class="asset-value"><small>Explorer ↗</small></span>';
+    row.querySelector('span b')!.textContent = l.what;
+    row.querySelector('span small')!.textContent = `${short(l.hash)} · ${new Date(l.at).toLocaleString()}`;
+    return row;
+  })));
+}
 function logged(hash: `0x${string}`, what: string): void {
-  const row = Object.assign(document.createElement('a'), { className: 'asset', href: txUrl(hash), target: '_blank', rel: 'noopener' });
-  row.innerHTML = '<i class="tok tok-eth">E</i><span><b></b><small></small></span><span class="asset-value"><small>Explorer ↗</small></span>';
-  row.querySelector('span b')!.textContent = what;
-  row.querySelector('span small')!.textContent = short(hash);
-  el('sent-list').querySelector('.empty')?.remove();
-  el('sent-list').prepend(row);
+  // The newest 200: enough history for a devnet account, and a bound on what this browser keeps.
+  try { localStorage.setItem(activityKey(), JSON.stringify([{ hash, what, at: Date.now() }, ...activity()].slice(0, 200))); } catch { /* shown below all the same */ }
+  showActivity();
+  if (activity()[0]?.hash !== hash) el('sent-list').prepend(Object.assign(document.createElement('p'), { className: 'empty', textContent: `${what}: ${short(hash)}` }));
 }
 
 /**
@@ -198,7 +242,7 @@ const create = (statusId: string) => () => void step(statusId, 'Creating your ac
 });
 const needAccount = (statusId: string): boolean => {
   if (created) return true;
-  el(statusId).textContent = 'Create your account first: on Home, or in Deposit.';
+  el(statusId).textContent = 'Create your account first: on Home, or in Receive.';
   return false;
 };
 
@@ -223,12 +267,12 @@ networkPicker(el<HTMLButtonElement>('network-switch'), 'devnet');
 for (const v of VIEWS) el(`tab-${v}`).addEventListener('click', () => showView(v));
 for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => showView('home'));
 for (const [t] of HOME_TABS) el(t).addEventListener('click', () => showHomeTab(t));
-el('action-receive').addEventListener('click', () => showView('receive'));
 el('action-send').addEventListener('click', () => showView('send'));
-el('action-swap').addEventListener('click', () => showView('swap'));
+el('action-receive').addEventListener('click', () => showView('receive'));
+el('action-deposit').addEventListener('click', () => { el('deposit-card').scrollIntoView({ behavior: 'smooth', block: 'center' }); el('deposit-amount').focus(); });
+el('action-privacy').addEventListener('click', () => showView('ring'));
 el('action-activity').addEventListener('click', () => showView('activity'));
-el('action-key').addEventListener('click', () => { showHomeTab('hometab-pq'); el('home-pq').scrollIntoView({ behavior: 'smooth' }); });
-el('action-explorer').addEventListener('click', () => window.open(devnet.explorer, '_blank', 'noopener'));
+el('action-swap').addEventListener('click', () => showView('swap'));
 el('account-button').addEventListener('click', () => showView('receive'));
 el('address-copy').addEventListener('click', () => copy(account, 'Address'));
 el('refresh').addEventListener('click', () => void refresh().catch(() => undefined));
@@ -238,21 +282,41 @@ el('promo-create-go').addEventListener('click', create('home-status'));
 el('address-create').addEventListener('click', create('address-status'));
 el('to-wallet').addEventListener('click', () => { location.href = 'xrpl.html'; });
 
+/** Private pqUSDC (the default) or public ETH: the form, its words and its steps follow. */
+function setSendMode(priv: boolean): void {
+  sendPrivate = priv;
+  el('send-mode-private').setAttribute('aria-selected', String(priv));
+  el('send-mode-public').setAttribute('aria-selected', String(!priv));
+  el('send-title').textContent = priv ? 'Send privately' : 'Send ETH';
+  el('send-token').innerHTML = priv ? '<i class="tok tok-usdc">U</i><b>pqUSDC</b>' : '<i class="tok tok-eth">E</i><b>ETH</b>';
+  el('send-unit').textContent = priv ? 'pqUSDC' : 'ETH';
+  el<HTMLInputElement>('send-amount').value = priv ? '3' : '0.001';
+  el('send-button').textContent = priv ? 'Send privately' : 'Sign with FORS+C and send';
+  el('send-to-note').textContent = priv ? 'The pool pays them: nothing on chain names you.' : 'Public: the chain shows it came from your account.';
+  el('send-how').textContent = priv ? 'How a private send works' : 'How a post-quantum send works';
+  el('send-steps-private').hidden = !priv;
+  el('send-steps-public').hidden = priv;
+  el('send-status').textContent = '';
+  render();
+}
+el('send-mode-private').addEventListener('click', () => setSendMode(true));
+el('send-mode-public').addEventListener('click', () => setSendMode(false));
 el('send-max').addEventListener('click', () => {
-  el<HTMLInputElement>('send-amount').value = eth > GAS_RESERVE ? formatEther(eth - GAS_RESERVE) : '0';
+  el<HTMLInputElement>('send-amount').value = sendPrivate ? String(Math.floor((privateUnits ?? 0) / 1e6)) : eth > GAS_RESERVE ? formatEther(eth - GAS_RESERVE) : '0';
 });
 el('send-form').addEventListener('submit', (e) => {
   e.preventDefault();
   // A new send starts with no word from the last one.
   el('send-status').textContent = '';
-  if (!needAccount('send-status')) return;
   const to = el<HTMLInputElement>('recipient').value.trim();
   const text = el<HTMLInputElement>('send-amount').value.trim();
   if (!isAddress(to)) { el('send-status').textContent = 'Enter a 0x address to send to.'; return; }
+  if (sendPrivate) { sendPrivately(to, text); return; }
+  if (!needAccount('send-status')) return;
   let value: bigint;
   try { value = parseEther(text); } catch { el('send-status').textContent = 'Enter an amount in ETH, like 0.001.'; return; }
   void (async () => {
-    if (!(await confirmSign('Confirm send', [['Send', `${text} ETH`], ['To', to]]))) { el('send-status').textContent = 'Rejected. Nothing was signed.'; return; }
+    if (!(await confirmSign('Confirm send', [['Send', `${text} ETH`], ['To', to], ['Public', 'an ETH transfer from your account']]))) { el('send-status').textContent = 'Rejected. Nothing was signed.'; return; }
     await step('send-status', 'Signing with your post-quantum key…', async () => {
       // A transfer to an address with no account yet creates one: state gas (EIP-8037).
       const hash = await signed([{ to, value, gas: 50_000n, state: 200_000n }]);
@@ -318,7 +382,6 @@ let openAccount: Parameters<typeof startDevnetPrivacy>[0];
 let privacy: Promise<DevnetPrivacy> | undefined;
 /** Started the first time the Private view needs it: it reads the stack's config and checks its relays. */
 const privacyNow = (): Promise<DevnetPrivacy> => (privacy ??= startDevnetPrivacy(openAccount).catch((error: unknown) => { privacy = undefined; throw error; }));
-const usdc = (units: bigint | number): string => (Number(units) / 1e6).toFixed(2);
 const settledOf = (s: PrivateSend) => s.notes.filter((n) => n.state === 'SETTLED').length;
 
 function privateRow(s: PrivateSend): HTMLElement {
@@ -333,75 +396,75 @@ function privateRow(s: PrivateSend): HTMLElement {
   return row;
 }
 
+/** The notes, from the stack through the mesh: the private balance, and the private payments in Activity. */
 async function refreshPrivate(): Promise<void> {
-  if (!hasPrivacy()) { el('private-send-status').textContent = 'The devnet has no privacy pools yet.'; return; }
-  el('usdc-public').textContent = `${usdc(await tokenBalance(account, pqUSDC()))} pqUSDC`;
+  if (!hasPrivacy() || account === undefined) return;
   try {
     const p = await privacyNow();
     const notes = await p.notes();
-    el('usdc-private').textContent = `${usdc(notes.filter((n) => n.state === 'AVAILABLE').reduce((sum, n) => sum + n.scope.denomination, 0))} pqUSDC`;
-    // A deposit the stack has not indexed yet is looked for again while this view is open.
-    if (notes.some((n) => n.state === 'DEPOSIT_PENDING') && !el('view-private').hidden) setTimeout(() => void refreshPrivate(), 5_000);
+    const spendable = notes.filter((n) => n.state === 'AVAILABLE');
+    privateUnits = spendable.reduce((sum, n) => sum + n.scope.denomination, 0);
+    noteCount = spendable.length;
+    render();
+    // A deposit the stack has not indexed yet is looked for again while Home is open.
+    if (notes.some((n) => n.state === 'DEPOSIT_PENDING') && !el('view-home').hidden) setTimeout(() => void refreshPrivate(), 5_000);
     const sends = await p.pollActivity();
     el('private-list').replaceChildren(...(sends.length === 0 ? [Object.assign(document.createElement('p'), { className: 'empty', textContent: 'No private payments yet.' })] : sends.map(privateRow)));
   } catch (error) {
-    el('usdc-private').textContent = '—';
-    el('private-send-status').textContent = `Opaque's devnet stack isn't reachable: ${(error as Error).message}`;
+    el('home-status').textContent = `Opaque's devnet stack isn't reachable: ${(error as Error).message}`;
   }
 }
 
-el('usdc-faucet').addEventListener('click', () => void step('private-deposit-status', 'Asking the pqUSDC faucet…', async () => {
+const getUsdc = (statusId: string) => () => void step(statusId, 'Asking the pqUSDC faucet…', async () => {
   logged(await pqUSDCFaucet(account), 'Test pqUSDC received');
-  await refreshPrivate();
-  return 'Got 100 test pqUSDC.';
-}));
+  return 'Got 100 test pqUSDC at your address. Deposit it to make it private.';
+});
+el('usdc-faucet').addEventListener('click', getUsdc('deposit-status'));
+el('address-usdc').addEventListener('click', getUsdc('address-status'));
 
-el('private-deposit-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  el('private-deposit-status').textContent = '';
-  if (!needAccount('private-deposit-status')) return;
-  const amount = Number(el<HTMLInputElement>('private-deposit-amount').value.trim());
-  if (!Number.isInteger(amount) || amount <= 0) { el('private-deposit-status').textContent = 'Deposit a whole number of pqUSDC, like 10.'; return; }
+el('deposit').addEventListener('click', () => {
+  el('deposit-status').textContent = '';
+  if (!needAccount('deposit-status')) return;
+  const whole = Number(el<HTMLInputElement>('deposit-amount').value.trim());
+  if (!Number.isInteger(whole) || whole <= 0) { el('deposit-status').textContent = 'Deposit a whole number of pqUSDC, like 10.'; return; }
   void (async () => {
     const have = await tokenBalance(account, pqUSDC());
-    if (BigInt(amount) * 1_000_000n > have) { el('private-deposit-status').textContent = `You have ${usdc(have)} public pqUSDC: get some from the faucet first.`; return; }
+    if (BigInt(whole) * 1_000_000n > have) { el('deposit-status').textContent = `You have ${usdc(have)} pqUSDC at your address: tap "Get 100 test pqUSDC" first.`; return; }
     if (!(await confirmSign('Confirm private deposit', [
-      ['Deposit', `${amount} pqUSDC`],
+      ['Deposit', `${whole} pqUSDC`],
       ['Into', "Opaque's pools, as notes of 1 to 100"],
       ['Public', 'that this account deposited: payments from the notes are not'],
-    ]))) { el('private-deposit-status').textContent = 'Rejected. Nothing was signed.'; return; }
-    await step('private-deposit-status', 'Signing the deposit with your post-quantum key…', async () => {
+    ]))) { el('deposit-status').textContent = 'Rejected. Nothing was signed.'; return; }
+    await step('deposit-status', 'Signing the deposit with your post-quantum key…', async () => {
       const p = await privacyNow();
-      const { notes, calls } = await p.depositPlan(amount);
+      const { notes, calls } = await p.depositPlan(whole);
       const hash = await signed(calls, true);
-      el('private-deposit-status').textContent = 'Depositing through the alt mempool…';
+      el('deposit-status').textContent = 'Depositing through the alt mempool…';
       await settled(hash);
       await p.deposited(notes, hash);
-      logged(hash, `Deposited ${amount} pqUSDC into the pools`);
+      logged(hash, `Deposited ${whole} pqUSDC into the pools`);
       await refreshPrivate();
       return `Deposited: ${notes.length} notes (${notes.map((n) => n.scope.denomination / 1e6).join(' + ')} pqUSDC), ready to spend privately.`;
     });
   })();
 });
 
-el('private-send-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  el('private-send-status').textContent = '';
-  const to = el<HTMLInputElement>('private-recipient').value.trim();
-  const amount = Number(el<HTMLInputElement>('private-send-amount').value.trim());
-  if (!isAddress(to)) { el('private-send-status').textContent = 'Enter a 0x address to pay.'; return; }
-  if (!Number.isInteger(amount) || amount <= 0) { el('private-send-status').textContent = 'Send a whole number of pqUSDC, like 3.'; return; }
+/** Send's private path: the notes pay, the account signs nothing, the pool pays the recipient. */
+function sendPrivately(to: string, text: string): void {
+  const whole = Number(text);
+  if (!Number.isInteger(whole) || whole <= 0) { el('send-status').textContent = 'Send a whole number of pqUSDC, like 3.'; return; }
+  if (privateUnits !== null && whole * 1e6 > privateUnits) { el('send-status').textContent = `You have ${usdc(privateUnits)} private pqUSDC: deposit some on Home first.`; return; }
   void (async () => {
     if (!(await confirmSign('Confirm private payment', [
-      ['Pay', `${amount} pqUSDC`],
+      ['Pay', `${whole} pqUSDC`],
       ['To', to],
       ['Paid by', "Opaque's pool: nothing on chain names your account"],
       ['Each note', 'a ZKBoo ring proof built here, sealed, carried by three relays'],
-    ], false))) { el('private-send-status').textContent = 'Not sent.'; return; }
-    await step('private-send-status', 'Proving in this browser…', async () => {
+    ], false))) { el('send-status').textContent = 'Not sent.'; return; }
+    await step('send-status', 'Proving in this browser…', async () => {
       const p = await privacyNow();
-      const say = (line: string) => { el('private-send-status').textContent = line; };
-      const sent = await p.send(amount, to.toLowerCase() as never, say);
+      const say = (line: string) => { el('send-status').textContent = line; };
+      const sent = await p.send(whole, to.toLowerCase() as never, say);
       // The stack attests and the pool pays: watched here until every note is settled or failed.
       for (let i = 0; i < 80; i++) {
         const s = (await p.pollActivity()).find((x) => x.id === sent.id)!;
@@ -414,10 +477,61 @@ el('private-send-form').addEventListener('submit', (e) => {
       const failed = s.notes.find((n) => n.state === 'FAILED');
       if (failed !== undefined) throw new Error(failed.error ?? 'a note was not paid');
       if (settledOf(s) < s.notes.length) return `Sent privately; ${settledOf(s)} of ${s.notes.length} notes paid so far. Activity shows the rest as they land.`;
-      return `Paid privately: ${amount} pqUSDC, by the pool. Nothing on chain names your account.`;
+      return `Paid privately: ${whole} pqUSDC, by the pool. Nothing on chain names your account.`;
     });
   })();
-});
+}
+
+// ── Privacy: the ring, the pools, a relay path (as Arc's page draws them) ─
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const RING_SIZE = 8;
+function renderRingSvg(): void {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 190 190');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `Ring of ${RING_SIZE} identical members`);
+  const orbit = document.createElementNS(SVG_NS, 'circle');
+  orbit.setAttribute('cx', '95'); orbit.setAttribute('cy', '95'); orbit.setAttribute('r', '68');
+  orbit.setAttribute('class', 'ring-orbit');
+  svg.append(orbit);
+  // Identical members: marking the user's own would leak it to anyone watching the screen.
+  for (let i = 0; i < RING_SIZE; i++) {
+    const angle = (i / RING_SIZE) * Math.PI * 2 - Math.PI / 2;
+    const node = document.createElementNS(SVG_NS, 'circle');
+    node.setAttribute('cx', (95 + Math.cos(angle) * 68).toFixed(1));
+    node.setAttribute('cy', (95 + Math.sin(angle) * 68).toFixed(1));
+    node.setAttribute('r', '8');
+    node.setAttribute('class', 'ring-node');
+    svg.append(node);
+  }
+  const label = document.createElementNS(SVG_NS, 'text');
+  label.setAttribute('x', '95'); label.setAttribute('y', '101'); label.setAttribute('class', 'ring-q');
+  label.textContent = 'one signed';
+  svg.append(label);
+  el('ring-wrap').replaceChildren(svg);
+}
+async function refreshRing(): Promise<void> {
+  if (el('ring-wrap').childElementCount === 0) renderRingSvg();
+  if (!hasPrivacy()) { el('pool-size').textContent = 'No pools on the devnet yet'; return; }
+  el('pool-size').textContent = 'Loading…';
+  try {
+    const p = await privacyNow();
+    const [sizes, conditions, path] = await Promise.all([p.poolSizes(), p.readPrivacy(), p.samplePath()]);
+    const total = [...sizes.values()].reduce((a, b) => a + b, 0);
+    el('pool-size').replaceChildren(`${total.toLocaleString('en-US')} `, Object.assign(document.createElement('small'), {
+      textContent: [...sizes].map(([size, n]) => `${n} at ${size} pqUSDC`).join(' · '),
+    }));
+    el('freshness-now').textContent = String(Math.round(Number(conditions.privacyScore) / 100));
+    // A sample path, drawn fresh: each payment draws its own.
+    el('hops').replaceChildren(...path.flatMap((hop, i) => [
+      ...(i > 0 ? [Object.assign(document.createElement('span'), { className: 'hop-arrow', textContent: '→' })] : []),
+      Object.assign(document.createElement('span'), { className: 'hop', textContent: hop }),
+    ]));
+  } catch (error) {
+    el('freshness-now').textContent = '—';
+    el('pool-size').textContent = `unreachable: ${(error as Error).message}`;
+  }
+}
 
 // The phrase's account open in the wallet holds this account too; no phrase, no account.
 const accepted = termsAccepted();
@@ -440,5 +554,7 @@ if (open === null || open === 'browser') {
   // The address is fixed by the first key, whichever key the account answers to now.
   key = keyAt(0);
   account = await accountOf(keyOf(key));
+  showActivity();
   await refresh();
+  void refreshPrivate();
 }

@@ -53,17 +53,20 @@ try {
   if (!funded.startsWith('Funded')) {
     // Both faucets dry: our own account funds the address, with a FORS-signed transfer.
     const address = (await page.textContent('#address-x'))!.trim();
-    execFileSync('node', ['--use-system-ca', 'ethereum/frame-tx.ts', 'send', address, '0.05'], { stdio: 'inherit' });
+    execFileSync('node', ['--use-system-ca', 'ethereum/frame-tx.ts', 'send', address, '0.01'], { stdio: 'inherit' });
     await page.reload();
     await ready();
   }
-  check(Number(await page.textContent('#balance-main')) > 0, `the address was funded before the account exists (${funded})`);
+  check(Number(/([0-9.]+) ETH/.exec((await page.textContent('#hero-assets')) ?? '')?.[1]) > 0, `the address was funded before the account exists (${funded})`);
 
   await page.click('#promo-create-go');
   await statusIs('home-status', 'Created');
   check(!(await page.isVisible('#promo-create')), 'the factory created the account: nothing signed');
 
   await page.click('#tab-send');
+  check(await page.getAttribute('#send-mode-private', 'aria-selected') === 'true', 'Send is private by default, as on Arc');
+  // ETH is the public choice beside it.
+  await page.click('#send-mode-public');
   await page.fill('#recipient', '0x000000000000000000000000000000000000dEaD');
   await page.fill('#send-amount', '0.001');
   await page.click('#send-button');
@@ -78,6 +81,9 @@ try {
   const link = await page.getAttribute('#sent-list a', 'href');
   check(link?.includes('/tx/0x'), `sent with a FORS+C signature only: ${link}`);
   check((await page.textContent('#facts'))?.includes('7 of 8'), 'the key has 7 signatures left');
+  await page.reload();
+  await ready();
+  check(await page.getAttribute('#sent-list a', 'href') === link, 'Activity still lists the send after a reload');
 
   await page.click('#tab-swap');
   await page.fill('#swap-amount', '0.001');
@@ -109,6 +115,7 @@ try {
 
   // The key's last signature hands the account to the phrase's next key, in the same transaction.
   await page.click('#tab-send');
+  await page.click('#send-mode-public');
   const sendOnce = async (): Promise<string> => {
     await page.fill('#recipient', '0x000000000000000000000000000000000000dEaD');
     await page.fill('#send-amount', '0.0001');

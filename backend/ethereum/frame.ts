@@ -51,8 +51,9 @@ export const forsKey = (seed: Uint8Array): ForsKey => keyGen(seed, PARAMS);
 export const keyOf = (key: ForsKey): Hex => pkCommitment(key.publicKey) as Hex;
 
 /**
- * One JSON-RPC call to the gateway, tried up to 3 times when the network, not
- * the node, fails: a flaky connection should not end a step. Resending a signed
+ * One JSON-RPC call to the gateway, tried up to 5 times, about 15 s, when the
+ * network, not the node, fails: the devnet's gateway drops out for seconds at
+ * a time, and a flaky connection should not end a step. Resending a signed
  * transaction is safe, since the node then answers "already known".
  */
 export async function call(method: string, params: unknown[] = []): Promise<any> {
@@ -60,7 +61,7 @@ export async function call(method: string, params: unknown[] = []): Promise<any>
     try {
       return await rpc(devnet.gateway, method, params);
     } catch (e) {
-      if ((e as { code?: string }).code !== 'RPC_UNREACHABLE' || attempt === 3) throw e;
+      if ((e as { code?: string }).code !== 'RPC_UNREACHABLE' || attempt === 5) throw e;
       await new Promise((ok) => setTimeout(ok, 1500 * attempt));
     }
   }
@@ -154,7 +155,7 @@ async function drip(faucet: Address, to: Address): Promise<Hex> {
 
 /**
  * Devnet ETH for `to`: the devnet's own faucet (1 ETH, once an hour per
- * address), or, when that one is dry, Opaque's (0.05 ETH).
+ * address), or, when that one is dry, Opaque's (0.01 ETH).
  */
 export async function faucet(to: Address): Promise<Hex> {
   let hash: Hex;

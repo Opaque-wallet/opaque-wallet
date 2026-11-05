@@ -17,7 +17,7 @@
 //   deposits     attributable, as every deposit is: the account's own
 //                FORS-signed transaction, an approve and a deposit per note.
 
-import type { Address, CredentialHandle, Hex, IdempotencyKey, IntentRef, IntentStatus, MeshQuery, NoteSummary, PaymentRequest, PoolScope, PrivacyScore, RingSnapshot, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
+import type { Address, CredentialHandle, Hex, IdempotencyKey, IntentRef, IntentStatus, MeshQuery, NoteSummary, PaymentRequest, PoolScope, PrivacyConditions, PrivacyScore, RingSnapshot, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
 import { asChainId, fromHex } from '@opaque/protocol-types/codecs.js';
 import { createNoteSecret } from '@opaque/zk';
 import { devnet, encodeFunctionData, parseAbi, type Call } from '../../../backend/ethereum/frame.ts';
@@ -94,6 +94,12 @@ export interface DevnetPrivacy {
   activity(): readonly PrivateSend[];
   /** Asks the stack how each note of each payment is doing. */
   pollActivity(): Promise<readonly PrivateSend[]>;
+  /** Deposits in each pool, by note size in whole pqUSDC: the rings a note can hide in. */
+  poolSizes(): Promise<ReadonlyMap<number, number>>;
+  /** The smallest pool's privacy conditions, its score among them. */
+  readPrivacy(): Promise<PrivacyConditions>;
+  /** A route drawn as a payment draws one: three relays, by id. */
+  samplePath(): Promise<readonly string[]>;
 }
 
 export async function startDevnetPrivacy(account: AccountKeys, cfg?: DevnetStackConfig): Promise<DevnetPrivacy> {
@@ -260,6 +266,12 @@ export async function startDevnetPrivacy(account: AccountKeys, cfg?: DevnetStack
       return sent;
     },
     activity: () => load<PrivateSend[]>(K.activity, []),
+    async poolSizes() {
+      const counts = await Promise.all(privacy.pools.map(async (p) => [p.denomination / UNIT, (await ring(scopeOf(p))).candidates.length] as const));
+      return new Map(counts);
+    },
+    readPrivacy: async () => (await query<PrivacyConditions>({ kind: 'PRIVACY_CONDITIONS', scope: scopeOf(privacy.pools[0]!) })).value,
+    samplePath: async () => (await bootstrap.pathFor()).map((n) => n.id as string),
     async pollActivity() {
       // Laid onto storage at the end: a send under way writes its notes meanwhile.
       const changes = new Map<string, Partial<PrivateSend['notes'][number]>>();

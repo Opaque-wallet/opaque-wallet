@@ -288,7 +288,7 @@ The devnet page was post-quantum but not private: its sends and swaps come strai
    - the ring from each pool's own `Deposited` events; the page's note reads (spent? known?) answered at the exit, through the mesh;
    - the attester (`cre/attester-keys.ts`, unchanged) and the settler are one FramePQAccount: its registry key signs each attestation, its frame keys pay for each `spend`, each key's last signature handing over to the next;
    - hosting: `backend/deploy/devnet.Dockerfile`, a Railway service once the user says go.
-3. **The page's Private tab** (`frontend/src/ethereum/devnet-private.ts`, on the XRPL runtime's model): test pqUSDC from the faucet, a FORS-signed deposit as notes, and a private send: a ZKBoo ring proof in the page's worker, sealed, three relays, attested, and the pool pays.
+3. **The page is private by default, as Arc's is** (`frontend/src/ethereum/devnet-private.ts`, on the XRPL runtime's model): Home's balance is private pqUSDC notes, with a deposit card (test pqUSDC from a keyless faucet, then a FORS-signed deposit as notes); Send pays privately (a ZKBoo ring proof in the page's worker, sealed, three relays, attested, and the pool pays), with public ETH as the other choice; Privacy shows Arc's ring, the pools' deposits and a relay path; Activity keeps both kinds, in the browser.
 
 **Done when:** the browser test (`scripts/e2e-devnet-private.ts`) makes a private payment on the devnet in which every signature is FORS, and the chain shows the stack's account, not the payer's, sending the transaction in which the pool pays the recipient.
 

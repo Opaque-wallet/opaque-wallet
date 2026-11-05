@@ -5,7 +5,7 @@
 //   (cd ../contracts && FOUNDRY_PROFILE=frame forge build)
 //   node --use-system-ca ethereum/frame-tx.ts fund      the faucet pays the deployer (once an hour)
 //   node --use-system-ca ethereum/frame-tx.ts factory   deploys the account factory (infrastructure, once)
-//   node --use-system-ca ethereum/frame-tx.ts devnet-faucet [eth]   deploys Opaque's devnet faucet, funded (once)
+//   node --use-system-ca ethereum/frame-tx.ts devnet-faucet [eth] [drip]   deploys Opaque's devnet faucet, funded (default 0.4, drips 0.01)
 //   node --use-system-ca ethereum/frame-tx.ts create    a new FORS key, its address funded, its account created:
 //                                                       the factory pays, and no ECDSA key signs anything
 //   node --use-system-ca ethereum/frame-tx.ts send [to] [eth]   VERIFY (FORS+C) + one transfer (default: 1 gwei to the deployer)
@@ -131,7 +131,7 @@ async function devnetFaucet(): Promise<void> {
     // Its code and HegotaSupport's helpers cost state gas (EIP-8037), as the factory's do.
     chainId: devnet.chainId, nonce: Number(nonce), gas: 16_000_000n, gasPrice: 2_000_000n, type: 'legacy',
     value: parseEther(process.argv[3] ?? '0.4'),
-    data: encodeDeployData({ abi, bytecode: bytecode.object }),
+    data: encodeDeployData({ abi, bytecode: bytecode.object, args: [parseEther(process.argv[4] ?? '0.01')] }),
   });
   const hash: Hex = await call('eth_sendRawTransaction', [raw]);
   const r = await mined(hash);

@@ -55,28 +55,29 @@ try {
   await statusIs('home-status', 'Created');
   check(true, `an account, created by its factory: ${account}`);
 
-  await page.click('#tab-private');
+  check((await page.textContent('.hero-label')) === 'Private balance', 'Home shows the private balance first, as Arc does');
   await page.click('#usdc-faucet');
-  await statusIs('private-deposit-status', 'Got 100 test pqUSDC');
+  await statusIs('deposit-status', 'Got 100 test pqUSDC');
   check(true, 'the pqUSDC faucet paid for its own transaction');
 
-  await page.fill('#private-deposit-amount', '10');
-  await page.click('#private-deposit');
+  await page.fill('#deposit-amount', '10');
+  await page.click('#deposit');
   await page.waitForSelector('#sign-dialog[open]');
   await page.click('#sign-confirm');
-  const deposited = await statusIs('private-deposit-status', 'Deposited');
+  const deposited = await statusIs('deposit-status', 'Deposited');
   check(true, `deposited with a FORS+C signature: ${deposited}`);
-  await page.waitForFunction(() => (document.getElementById('usdc-private')?.textContent ?? '').startsWith('10.00'), undefined, { timeout: 120_000 });
+  await page.waitForFunction(() => (document.getElementById('balance-main')?.textContent ?? '').startsWith('10.00'), undefined, { timeout: 120_000 });
   check(true, 'the notes are in their rings: 10.00 pqUSDC private');
 
   const recipient = `0x${randomBytes(20).toString('hex')}` as `0x${string}`;
-  await page.fill('#private-recipient', recipient);
-  await page.fill('#private-send-amount', '3');
-  await page.click('#private-send');
+  await page.click('#tab-send');
+  await page.fill('#recipient', recipient);
+  await page.fill('#send-amount', '3');
+  await page.click('#send-button');
   await page.waitForSelector('#sign-dialog[open]');
   check((await page.textContent('#sign-confirm')) === 'Send privately', 'the review says the account signs nothing: the proofs authorise the payment');
   await page.click('#sign-confirm');
-  const paid = await statusIs('private-send-status', 'Paid privately', 420_000);
+  const paid = await statusIs('send-status', 'Paid privately', 420_000);
   check(true, paid);
 
   check(await tokenBalance(recipient, privacy.token.address) === 3_000_000n, `the recipient ${recipient} holds exactly 3 pqUSDC`);
@@ -86,7 +87,10 @@ try {
   const tx = await call('eth_getTransactionByHash', [hash]);
   const sender = String(tx.sender ?? tx.from).toLowerCase();
   check(sender === privacy.attester.toLowerCase() && sender !== account, `the pool paid in a transaction the stack's account sent, not the payer's: ${link}`);
-  check((await page.textContent('#usdc-private'))?.startsWith('7.00'), '7.00 pqUSDC left private');
+  check((await page.textContent('#balance-main'))?.startsWith('7.00'), '7.00 pqUSDC left private');
+  await page.click('#tab-ring');
+  await page.waitForFunction(() => document.querySelectorAll('#hops .hop').length === 3, undefined, { timeout: 60_000 });
+  check(true, `Privacy shows the ring, ${await page.textContent('#pool-size')} deposits, and a three-relay path`);
   if (process.env['SHOT']) await page.screenshot({ path: join(process.env['SHOT'], 'devnet-private.jpg'), type: 'jpeg', quality: 80, fullPage: true });
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 } finally {
