@@ -83,6 +83,9 @@
     "tokens": []
   },
   "ens": {
+    "$comment": "ENSv2 on Sepolia: ENS's own contracts as docs.ens.domains lists them (the ENS app's set; code read on chain), and ours. opaque.eth is held by PQNameController, which acts only on a FORS+C signature (docs/mumbai/PLAN.md T7).",
+    "ethRegistry": "0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4",
+    "universalResolverV2": "0x24e1d8e068620b647ca097f961a61055f4f42d72",
     "pqKeyRegistry": "0x8b47560d32bcda788ab5233ab2bda55204cacca3",
     "controller": "0x4d4df91933bb30640908f5cd4a42e2cac546c131",
     "resolver": "0x9320d93186255e122214bd22270d168d5d8f676f"

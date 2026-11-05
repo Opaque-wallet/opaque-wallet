@@ -12,6 +12,7 @@ import { quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswa
 import { unlockGate } from '../lib/lock.ts';
 import { scoped } from '../lib/storage-name.ts';
 import { hasPrivacy, pqUSDC, startDevnetPrivacy, type DevnetPrivacy, type PrivateSend } from './devnet-private.ts';
+import { isName, resolveName } from './ens-name.ts';
 import { networkPicker } from '../lib/network-picker.ts';
 import { accountLabel, activeAccount, stream } from '../lib/wallet-keys.ts';
 import { copy, termsAccepted } from '../lib/wallet-ui.ts';
@@ -299,16 +300,46 @@ function setSendMode(priv: boolean): void {
 /** Continue waits for an address and an amount, as MetaMask's does. */
 function checkSend(): void {
   const n = Number(el<HTMLInputElement>('send-amount').value.trim());
-  el<HTMLButtonElement>('send-button').disabled = !isAddress(el<HTMLInputElement>('recipient').value.trim()) || !(n > 0);
+  el<HTMLButtonElement>('send-button').disabled = recipient() === undefined || !(n > 0);
+}
+/** An ENS name typed in To, and what ENSv2 on Sepolia answered for it (ens-name.ts). */
+let named: { name: string; address: `0x${string}`; pq: boolean } | undefined;
+let lookups = 0;
+/** Where Send pays: the address typed, or the resolved address of the name typed. */
+function recipient(): { address: `0x${string}`; label: string } | undefined {
+  const typed = el<HTMLInputElement>('recipient').value.trim();
+  if (isAddress(typed)) return { address: typed as `0x${string}`, label: typed };
+  if (named !== undefined && named.name === typed.toLowerCase()) return { address: named.address, label: `${typed} (${named.address})` };
+  return undefined;
+}
+async function lookUp(): Promise<void> {
+  const typed = el<HTMLInputElement>('recipient').value.trim();
+  const asked = ++lookups;
+  el('recipient-name').className = 'mm-resolved';
+  el('recipient-name').textContent = isName(typed) ? `Looking up ${typed} on ENS…` : '';
+  if (!isName(typed)) return;
+  try {
+    const found = await resolveName(typed);
+    if (asked !== lookups) return;
+    named = { name: typed.toLowerCase(), ...found };
+    el('recipient-name').textContent = `${typed} → ${short(found.address)} on the devnet${found.pq ? ' · held by a FORS+C key on ENSv2' : ''}`;
+    if (found.pq) el('recipient-name').className = 'mm-resolved pq';
+  } catch (error) {
+    if (asked === lookups) el('recipient-name').textContent = (error as Error).message;
+  }
+  checkSend();
 }
 el('send-asset').addEventListener('click', () => el<HTMLDialogElement>('asset-dialog').showModal());
 el('asset-usdc').addEventListener('click', () => { el<HTMLDialogElement>('asset-dialog').close(); setSendMode(true); });
 el('asset-eth').addEventListener('click', () => { el<HTMLDialogElement>('asset-dialog').close(); setSendMode(false); });
 el('asset-dialog').addEventListener('click', (e) => { if (e.target === el('asset-dialog')) el<HTMLDialogElement>('asset-dialog').close(); });
 for (const id of ['recipient', 'send-amount']) el(id).addEventListener('input', checkSend);
+let lookupTimer: ReturnType<typeof setTimeout> | undefined;
+el('recipient').addEventListener('input', () => { clearTimeout(lookupTimer); lookupTimer = setTimeout(() => void lookUp(), 350); });
 el('recipient-paste').addEventListener('click', () => void navigator.clipboard.readText().then((text) => {
   el<HTMLInputElement>('recipient').value = text.trim();
   checkSend();
+  void lookUp();
 }, () => { el('send-status').textContent = 'This browser keeps the clipboard to itself: paste into the field instead.'; }));
 el('send-max').addEventListener('click', () => {
   el<HTMLInputElement>('send-amount').value = sendPrivate ? String(Math.floor((privateUnits ?? 0) / 1e6)) : eth > GAS_RESERVE ? formatEther(eth - GAS_RESERVE) : '0';
@@ -318,15 +349,16 @@ el('send-form').addEventListener('submit', (e) => {
   e.preventDefault();
   // A new send starts with no word from the last one.
   el('send-status').textContent = '';
-  const to = el<HTMLInputElement>('recipient').value.trim();
+  const target = recipient();
   const text = el<HTMLInputElement>('send-amount').value.trim();
-  if (!isAddress(to)) { el('send-status').textContent = 'Enter a 0x address to send to.'; return; }
-  if (sendPrivate) { sendPrivately(to, text); return; }
+  if (target === undefined) { el('send-status').textContent = 'Enter a 0x address, or an ENS name that resolves.'; return; }
+  const { address: to, label } = target;
+  if (sendPrivate) { sendPrivately(to, text, label); return; }
   if (!needAccount('send-status')) return;
   let value: bigint;
   try { value = parseEther(text); } catch { el('send-status').textContent = 'Enter an amount in ETH, like 0.001.'; return; }
   void (async () => {
-    if (!(await confirmSign('Confirm send', [['Send', `${text} ETH`], ['To', to], ['Public', 'an ETH transfer from your account']]))) { el('send-status').textContent = 'Rejected. Nothing was signed.'; return; }
+    if (!(await confirmSign('Confirm send', [['Send', `${text} ETH`], ['To', label], ['Public', 'an ETH transfer from your account']]))) { el('send-status').textContent = 'Rejected. Nothing was signed.'; return; }
     await step('send-status', 'Signing with your post-quantum key…', async () => {
       // A transfer to an address with no account yet creates one: state gas (EIP-8037).
       const hash = await signed([{ to, value, gas: 50_000n, state: 200_000n }]);
@@ -460,14 +492,14 @@ el('deposit').addEventListener('click', () => {
 });
 
 /** Send's private path: the notes pay, the account signs nothing, the pool pays the recipient. */
-function sendPrivately(to: string, text: string): void {
+function sendPrivately(to: string, text: string, label = to): void {
   const whole = Number(text);
   if (!Number.isInteger(whole) || whole <= 0) { el('send-status').textContent = 'Send a whole number of pqUSDC, like 3.'; return; }
   if (privateUnits !== null && whole * 1e6 > privateUnits) { el('send-status').textContent = `You have ${usdc(privateUnits)} private pqUSDC: deposit some on Home first.`; return; }
   void (async () => {
     if (!(await confirmSign('Confirm private payment', [
       ['Pay', `${whole} pqUSDC`],
-      ['To', to],
+      ['To', label],
       ['Paid by', "Opaque's pool: nothing on chain names your account"],
       ['Each note', 'a ZKBoo ring proof built here, sealed, carried by three relays'],
     ], false))) { el('send-status').textContent = 'Not sent.'; return; }

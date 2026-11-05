@@ -683,4 +683,7 @@ dialog.terms:not([open]) { display: none; }
 .mm-meta b { color: var(--text); font-weight: 500; }
 .mm-meta .link { padding: 0 0 0 8px; color: var(--orange); font-size: 13px; }
 .mm-continue { margin-top: 22px; }
+.mm-resolved { color: var(--muted); font-size: 13px; }
+.mm-resolved:empty { display: none; }
+.mm-resolved.pq { color: var(--soft); }
 .mm-continue:disabled { opacity: 0.45; cursor: default; }

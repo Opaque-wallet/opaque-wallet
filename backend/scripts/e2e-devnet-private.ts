@@ -10,7 +10,6 @@
 //   node --use-system-ca scripts/e2e-devnet-private.ts           SITE=http://localhost:5173 by default; SHOT=/dir saves a screenshot
 //   SITE=https://www.opaque.credit node --use-system-ca scripts/e2e-devnet-private.ts    the hosted page and service
 
-import { randomBytes } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +17,7 @@ import { join } from 'node:path';
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { call, devnet, mined } from '../ethereum/frame.ts';
 import { tokenBalance } from '../ethereum/uniswap.ts';
+import { resolveName } from '../../frontend/src/ethereum/ens-name.ts';
 import { createWallet } from './wallet-page.ts';
 
 const SITE = process.env['SITE'] ?? 'http://localhost:5173';
@@ -69,9 +69,13 @@ try {
   await page.waitForFunction(() => (document.getElementById('balance-main')?.textContent ?? '').startsWith('10.00'), undefined, { timeout: 120_000 });
   check(true, 'the notes are in their rings: 10.00 pqUSDC private');
 
-  const recipient = `0x${randomBytes(20).toString('hex')}` as `0x${string}`;
+  // Paid by name: opaque.eth, held by a FORS+C key on ENSv2 (Sepolia), resolves to a devnet account.
   await page.click('#tab-send');
-  await page.fill('#recipient', recipient);
+  await page.fill('#recipient', 'opaque.eth');
+  await page.waitForFunction(() => (document.getElementById('recipient-name')?.textContent ?? '').includes('held by a FORS+C key'), undefined, { timeout: 60_000 });
+  const recipient = (await resolveName('opaque.eth')).address;
+  check(true, `opaque.eth resolves through ENSv2 to ${recipient}, and a FORS+C key holds the name`);
+  const before = await tokenBalance(recipient, privacy.token.address);
   await page.fill('#send-amount', '3');
   await page.click('#send-button');
   await page.waitForSelector('#sign-dialog[open]');
@@ -80,7 +84,7 @@ try {
   const paid = await statusIs('send-status', 'Paid privately', 420_000);
   check(true, paid);
 
-  check(await tokenBalance(recipient, privacy.token.address) === 3_000_000n, `the recipient ${recipient} holds exactly 3 pqUSDC`);
+  check(await tokenBalance(recipient, privacy.token.address) - before === 3_000_000n, `opaque.eth's account ${recipient} received exactly 3 pqUSDC`);
   const link = await page.getAttribute('#private-list a', 'href');
   const hash = /0x[0-9a-f]{64}/i.exec(link ?? '')?.[0] as `0x${string}`;
   await mined(hash);

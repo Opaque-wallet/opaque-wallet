@@ -92,7 +92,8 @@
         <small id="send-asset-mode">Private · change</small>
       </button>
       <label class="mm-label" for="recipient">To</label>
-      <div class="mm-field"><input id="recipient" class="mono" type="text" placeholder="Enter or paste a 0x address" autocomplete="off" spellcheck="false"><button class="mm-adorn" id="recipient-paste" type="button" title="Paste" aria-label="Paste an address"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="4.5" width="10" height="4" rx="1.5"/><path d="M8.5 6.5H6.5A1.5 1.5 0 0 0 5 8v11a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8a1.5 1.5 0 0 0-1.5-1.5h-2"/></svg></button></div>
+      <div class="mm-field"><input id="recipient" class="mono" type="text" placeholder="A 0x address or an ENS name" autocomplete="off" spellcheck="false"><button class="mm-adorn" id="recipient-paste" type="button" title="Paste" aria-label="Paste an address"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="4.5" width="10" height="4" rx="1.5"/><path d="M8.5 6.5H6.5A1.5 1.5 0 0 0 5 8v11a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8a1.5 1.5 0 0 0-1.5-1.5h-2"/></svg></button></div>
+      <small class="mm-resolved" id="recipient-name" aria-live="polite"></small>
       <label class="mm-label" for="send-amount">Amount</label>
       <div class="mm-field"><input id="send-amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><span class="mm-unit" id="send-unit">pqUSDC</span></div>
       <div class="mm-meta"><span id="send-note">Paid by Opaque's pool: nothing on chain names you</span><span><b id="send-have">—</b> available<button class="link" id="send-max" type="button">Max</button></span></div>

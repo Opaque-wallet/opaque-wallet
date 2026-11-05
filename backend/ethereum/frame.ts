@@ -19,7 +19,7 @@ import devnet from '../../deployments/eth-devnet.json' with { type: 'json' };
 
 export { devnet };
 // For the wallet's page, which has no viem of its own.
-export { encodeFunctionData, formatEther, isAddress, parseAbi, parseEther } from 'viem';
+export { decodeFunctionResult, encodeFunctionData, formatEther, isAddress, labelhash, namehash, parseAbi, parseEther } from 'viem';
 export const profile = getProfile('ethrex-eip8141-tracer');
 /** FramePQAccount's parameter set: 8 uses at 128 bits, and inside MAX_VERIFY_GAS (contracts/test/LeanFors.t.sol). */
 export const PARAMS = { k: 13, a: 13 } as const;
