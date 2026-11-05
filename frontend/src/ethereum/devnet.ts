@@ -8,7 +8,7 @@
 // It talks straight to the devnet's gateway and miner. This devnet has no relay
 // mesh yet, so the page shows the transaction, not Opaque's network privacy.
 
-import { accountOf, balanceOf, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyOf, MAX_USES, nonceOf, parseEther, sendCalls, settled, txUrl, type ForsKey } from '../../../backend/ethereum/frame.ts';
+import { accountOf, balanceOf, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyOf, MAX_FEE, MAX_USES, nonceOf, parseEther, sendCalls, settled, txUrl, type ForsKey } from '../../../backend/ethereum/frame.ts';
 import { quote, swapCall, tokenBalance } from '../../../backend/ethereum/uniswap.ts';
 import { unlockGate } from '../lib/lock.ts';
 import { networkPicker } from '../lib/network-picker.ts';
@@ -27,6 +27,8 @@ let key: ForsKey;
 let account: `0x${string}`;
 let created = false;
 let eth = 0n;
+/** Signatures this key has left. */
+let left = MAX_USES;
 
 // ── views, as the XRPL page has them ──────────────────────────────────────
 const VIEWS = ['home', 'send', 'swap', 'receive', 'activity'] as const;
@@ -75,7 +77,7 @@ async function refresh(): Promise<void> {
   const [made, wei, nonce, usd] = await Promise.all([hasCode(account), balanceOf(account), nonceOf(account), tokenBalance(account)]);
   created = made;
   eth = wei;
-  const left = created ? MAX_USES - (nonce - FIRST_NONCE) : MAX_USES;
+  left = created ? MAX_USES - (nonce - FIRST_NONCE) : MAX_USES;
   el('balance-main').textContent = amount(eth);
   el('balance-sub').textContent = created ? `${left} of ${MAX_USES} signatures left on this key` : 'Not created yet: its address already works';
   el('account-short').textContent = short(account);
@@ -107,6 +109,29 @@ function logged(hash: `0x${string}`, what: string): void {
   row.querySelector('span small')!.textContent = short(hash);
   el('sent-list').querySelector('.empty')?.remove();
   el('sent-list').prepend(row);
+}
+
+/** The review before the key signs, as MetaMask asks before a transaction. */
+async function confirmSign(title: string, rows: readonly (readonly [string, string])[]): Promise<boolean> {
+  const dialog = el<HTMLDialogElement>('sign-dialog');
+  el('sign-title').textContent = title;
+  el('sign-rows').replaceChildren(...[
+    ['Network', `Ethereum Devnet (chain ${devnet.chainId})`],
+    ['From', short(account)],
+    ...rows,
+    ['Network fee', `at most ${Number(MAX_FEE) / 1e9} gwei per gas, in devnet ETH`],
+    ['Signed with', `FORS+C, hash-based: no ECDSA`],
+    ['Key after this', `${left - 1n} of ${MAX_USES} signatures left`],
+  ].map(([label, value]) => {
+    const row = document.createElement('div');
+    row.className = 'detail';
+    row.append(Object.assign(document.createElement('span'), { textContent: label }), Object.assign(document.createElement('strong'), { textContent: value }));
+    return row;
+  }));
+  dialog.returnValue = '';
+  dialog.showModal();
+  await new Promise((resolve) => dialog.addEventListener('close', resolve, { once: true }));
+  return dialog.returnValue === 'confirm';
 }
 
 /** One step at a time: buttons wait, the status says what is happening, figures refresh before it reports. */
@@ -185,14 +210,17 @@ el('send-form').addEventListener('submit', (e) => {
   if (!isAddress(to)) { el('send-status').textContent = 'Enter a 0x address to send to.'; return; }
   let value: bigint;
   try { value = parseEther(text); } catch { el('send-status').textContent = 'Enter an amount in ETH, like 0.001.'; return; }
-  void step('send-status', 'Signing with your post-quantum key…', async () => {
-    // A transfer to an address with no account yet creates one: state gas (EIP-8037).
-    const hash = await sendCalls(account, key, [{ to, value, gas: 50_000n, state: 200_000n }]);
-    el('send-status').textContent = 'Sent through the alt mempool. Waiting for a block…';
-    await settled(hash);
-    logged(hash, `Sent ${text} ETH to ${short(to)}`);
-    return `Sent. The only signature in it is FORS+C (${short(hash)}).`;
-  });
+  void (async () => {
+    if (!(await confirmSign('Confirm send', [['Send', `${text} ETH`], ['To', to]]))) { el('send-status').textContent = 'Rejected. Nothing was signed.'; return; }
+    await step('send-status', 'Signing with your post-quantum key…', async () => {
+      // A transfer to an address with no account yet creates one: state gas (EIP-8037).
+      const hash = await sendCalls(account, key, [{ to, value, gas: 50_000n, state: 200_000n }]);
+      el('send-status').textContent = 'Sent through the alt mempool. Waiting for a block…';
+      await settled(hash);
+      logged(hash, `Sent ${text} ETH to ${short(to)}`);
+      return `Sent. The only signature in it is FORS+C (${short(hash)}).`;
+    });
+  })();
 });
 
 el('swap-amount').addEventListener('input', () => void quoteSwap().catch(() => undefined));
@@ -200,17 +228,32 @@ el('swap-go').addEventListener('click', () => {
   if (!needAccount('swap-status')) return;
   let wei: bigint;
   try { wei = parseEther(el<HTMLInputElement>('swap-amount').value.trim()); } catch { el('swap-status').textContent = 'Enter an amount in ETH, like 0.001.'; return; }
-  void step('swap-status', 'Signing the swap with your post-quantum key…', async () => {
-    const before = await tokenBalance(account);
-    const { call } = await swapCall(wei);
-    const hash = await sendCalls(account, key, [call]);
-    el('swap-status').textContent = 'Swapping on Uniswap v4, through the alt mempool…';
-    await settled(hash);
-    const got = (await tokenBalance(account)) - before;
-    logged(hash, `Swapped ${formatEther(wei)} ETH for ${amount(got)} pqUSD`);
-    void quoteSwap().catch(() => undefined);
-    return `Swapped on Uniswap v4: ${amount(got)} pqUSD. The only signature in it is FORS+C.`;
-  });
+  void (async () => {
+    el('swap-status').textContent = 'Getting a quote…';
+    let call: Awaited<ReturnType<typeof swapCall>>['call'];
+    try {
+      const swap = await swapCall(wei);
+      call = swap.call;
+      el('swap-status').textContent = '';
+      if (!(await confirmSign('Confirm swap', [
+        ['You pay', `${formatEther(wei)} ETH`],
+        ['You get', `about ${amount(swap.expected)} pqUSD`],
+        ['You get at least', `${amount((swap.expected * 99n) / 100n)} pqUSD`],
+        ['Interacting with', 'Uniswap v4 Universal Router'],
+        ['Contract', short(call.to)],
+      ]))) { el('swap-status').textContent = 'Rejected. Nothing was signed.'; return; }
+    } catch (error) { el('swap-status').textContent = `Didn't go through: ${(error as Error).message}`; return; }
+    await step('swap-status', 'Signing the swap with your post-quantum key…', async () => {
+      const before = await tokenBalance(account);
+      const hash = await sendCalls(account, key, [call]);
+      el('swap-status').textContent = 'Swapping on Uniswap v4, through the alt mempool…';
+      await settled(hash);
+      const got = (await tokenBalance(account)) - before;
+      logged(hash, `Swapped ${formatEther(wei)} ETH for ${amount(got)} pqUSD`);
+      void quoteSwap().catch(() => undefined);
+      return `Swapped on Uniswap v4: ${amount(got)} pqUSD. The only signature in it is FORS+C.`;
+    });
+  })();
 });
 
 // The phrase's account open in the wallet holds this account too; no phrase, no account.

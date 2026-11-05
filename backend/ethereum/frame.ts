@@ -30,7 +30,7 @@ export const FIRST_NONCE = 8n;
 const VERIFY_GAS = 99_000n;
 const DOMAIN = keccak256(stringToHex('opaque/v1/eip8141/sighash'));
 // The devnet's base fee is 7 wei; this clears it by a wide margin.
-const MAX_FEE = 2_000_000_000n;
+export const MAX_FEE = 2_000_000_000n;
 
 export const ACCOUNT_ABI = parseAbi(['function verify()', 'function rotate(bytes32 next)', 'function key() view returns (bytes32)']);
 export const FACTORY_ABI = parseAbi(['function verify()', 'function create(bytes32 key) returns (address)', 'function accountOf(bytes32 key) view returns (address)']);

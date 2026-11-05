@@ -164,6 +164,15 @@
     <p class="side-note"><span class="shield">Ethereum Devnet (Fully post-quantum)</span>EIP-8141. One hash-based key; no ECDSA anywhere.</p>
   </nav>
 </main>
+
+<dialog id="sign-dialog">
+  <form method="dialog">
+    <div class="dialog-head"><div><p class="eyebrow">Signature request</p><h2 id="sign-title">Confirm</h2></div></div>
+    <div id="sign-rows"></div>
+    <p class="fine-print">Nothing is signed until you confirm. Your FORS+C key signs here, in this browser; this account has no ECDSA key to sign with.</p>
+    <div class="dialog-actions"><button class="secondary" id="sign-reject" value="reject">Reject</button><button class="primary" id="sign-confirm" value="confirm">Sign with FORS+C</button></div>
+  </form>
+</dialog>
 <script type="module" src="/src/ethereum/devnet.ts"></script>
 </body>
 </html>

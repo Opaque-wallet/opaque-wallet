@@ -67,6 +67,13 @@ try {
   await page.fill('#recipient', '0x000000000000000000000000000000000000dEaD');
   await page.fill('#send-amount', '0.001');
   await page.click('#send-button');
+  await page.waitForSelector('#sign-dialog[open]');
+  check((await page.textContent('#sign-rows'))?.includes('0x000000000000000000000000000000000000dEaD'), 'a signature request, as MetaMask shows, names the recipient before anything is signed');
+  await page.click('#sign-reject');
+  await statusIs('send-status', 'Rejected');
+  check((await page.textContent('#facts'))?.includes('8 of 8'), 'rejected: the key signed nothing');
+  await page.click('#send-button');
+  await page.click('#sign-confirm');
   await statusIs('send-status', 'Sent.');
   const link = await page.getAttribute('#sent-list a', 'href');
   check(link?.includes('/tx/0x'), `sent with a FORS+C signature only: ${link}`);
@@ -78,6 +85,9 @@ try {
   const quoted = Number(await page.textContent('#swap-out'));
   check(quoted > 0, `a quote from the pool's own state: ${quoted} pqUSD for 0.001 ETH (${await page.textContent('#swap-rate')})`);
   await page.click('#swap-go');
+  await page.waitForSelector('#sign-dialog[open]');
+  check((await page.textContent('#sign-rows'))?.includes('Universal Router'), 'the swap\'s signature request names Uniswap v4\'s router');
+  await page.click('#sign-confirm');
   const swapped = await statusIs('swap-status', 'Swapped on Uniswap v4');
   // The price moves with every swap, so the check is against the quote: the swap takes no less than 99% of it.
   check(Number(/: ([0-9.]+) pqUSD/.exec(swapped)?.[1]) >= quoted * 0.99 - 0.0001, `swapped on Uniswap v4 with a FORS+C signature only: ${swapped}`);
