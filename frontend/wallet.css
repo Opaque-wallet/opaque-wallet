@@ -662,3 +662,25 @@ dialog.terms:not([open]) { display: none; }
 .swap-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--orange); transition: width 1s linear; }
 .swap-progress p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
+
+/* Send, laid out as MetaMask lays it out: the asset, To, Amount, then Continue
+   to a review. One column, no explainer: the review says what will happen. */
+.mm-send { display: grid; gap: 10px; width: 100%; max-width: 560px; margin: 0 auto; }
+.mm-asset { display: grid; justify-items: center; gap: 6px; margin: 0 auto 10px; padding: 10px 22px; border: 0; border-radius: 16px; background: none; color: var(--text); transition: background-color 0.2s; }
+.mm-asset:hover { background: var(--raised); }
+.mm-asset .tok { width: 56px; height: 56px; font-size: 20px; }
+.mm-asset b { font-size: 18px; font-weight: 600; }
+.mm-asset small { color: var(--muted); font-size: 12.5px; }
+.mm-label { margin-top: 8px; font-size: 14px; font-weight: 600; }
+.mm-field { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 0 8px 0 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); transition: border-color 0.2s; }
+.mm-field:focus-within { border-color: rgba(255, 122, 24, 0.55); }
+.mm-field input { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font-size: 16px; outline: none; }
+.mm-unit { flex: none; padding-right: 8px; color: var(--soft); font-weight: 600; }
+.mm-adorn { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 10px; background: none; color: var(--soft); }
+.mm-adorn:hover { background: var(--raised); }
+.mm-adorn svg { width: 20px; height: 20px; }
+.mm-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; color: var(--muted); font-size: 13px; }
+.mm-meta b { color: var(--text); font-weight: 500; }
+.mm-meta .link { padding: 0 0 0 8px; color: var(--orange); font-size: 13px; }
+.mm-continue { margin-top: 22px; }
+.mm-continue:disabled { opacity: 0.45; cursor: default; }

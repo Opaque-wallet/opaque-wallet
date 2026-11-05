@@ -6,7 +6,7 @@
   "explorer": "https://altmempoolexplorer.forshtat.com",
   "contracts": {
     "factory": "0x5516c44Eb7cBCCC15b9E1dFf522b7F75452880ae",
-    "faucet": "0x36DBf60d7f2d0B5CD78Be709F93d611b4Fa4Dab8"
+    "faucet": "0x4F4b98A8f60Daaeee8D6a0D82a612003f3eaEec2"
   },
   "uniswap": {
     "poolManager": "0x6bF9Aa9c04fd001385742d61f6818C3236429848",

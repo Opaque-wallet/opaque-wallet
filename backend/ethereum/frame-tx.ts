@@ -5,7 +5,8 @@
 //   (cd ../contracts && FOUNDRY_PROFILE=frame forge build)
 //   node --use-system-ca ethereum/frame-tx.ts fund      the faucet pays the deployer (once an hour)
 //   node --use-system-ca ethereum/frame-tx.ts factory   deploys the account factory (infrastructure, once)
-//   node --use-system-ca ethereum/frame-tx.ts devnet-faucet [eth] [drip]   deploys Opaque's devnet faucet, funded (default 0.4, drips 0.01)
+//   node --use-system-ca ethereum/frame-tx.ts devnet-faucet [eth] [drip]   a new Opaque devnet faucet from this account, funded
+//                                                       (default 0.01, drips 0.001), topped up by the old one first
 //   node --use-system-ca ethereum/frame-tx.ts create    a new FORS key, its address funded, its account created:
 //                                                       the factory pays, and no ECDSA key signs anything
 //   node --use-system-ca ethereum/frame-tx.ts send [to] [eth]   VERIFY (FORS+C) + one transfer (default: 1 gwei to the deployer)
@@ -123,20 +124,22 @@ async function factory(): Promise<void> {
   console.log(`FramePQAccountFactory ${address}, ${await eth(address)}, deployed in ${hash}; written to deployments/eth-devnet.json`);
 }
 
+/**
+ * Opaque's devnet faucet, deployed by the script's account through the CREATE2
+ * proxy: `drip` ETH an address an hour, funded with `eth`. What the faucet in
+ * force can still give goes to the new one's address first.
+ */
 async function devnetFaucet(): Promise<void> {
   const { abi, bytecode } = JSON.parse(readFileSync(artifactOf('DevnetFaucet'), 'utf8')) as { abi: Abi; bytecode: { object: Hex } };
-  const d = deployer();
-  const nonce = await nonceOf(d.address);
-  const raw = await d.signTransaction({
-    // Its code and HegotaSupport's helpers cost state gas (EIP-8037), as the factory's do.
-    chainId: devnet.chainId, nonce: Number(nonce), gas: 16_000_000n, gasPrice: 2_000_000n, type: 'legacy',
-    value: parseEther(process.argv[3] ?? '0.4'),
-    data: encodeDeployData({ abi, bytecode: bytecode.object, args: [parseEther(process.argv[4] ?? '0.01')] }),
-  });
-  const hash: Hex = await call('eth_sendRawTransaction', [raw]);
-  const r = await mined(hash);
-  if (r.status !== '0x1') throw new Error(`deployment ${hash} reverted`);
-  const address = getContractAddress({ from: d.address, nonce });
+  const salt = keccak256(stringToHex('opaque/v1/devnet/faucet'));
+  const initCode = encodeDeployData({ abi, bytecode: bytecode.object, args: [parseEther(process.argv[4] ?? '0.001')] });
+  const create2Deployer = (devnet.uniswap as { create2Deployer: Address }).create2Deployer;
+  const address = getContractAddress({ opcode: 'CREATE2', from: create2Deployer, salt, bytecode: initCode });
+  // The devnet's faucet if it has refilled, else ours: one drip, the new faucet's first funds.
+  await faucet(address).then((h) => console.log(`the faucet in force dripped into ${address}: ${txUrl(h)}`), (e: Error) => console.log(`no drip from the faucet in force (${e.message.slice(0, 80)})`));
+  // Its code and HegotaSupport's helpers cost state gas (EIP-8037); the proxy passes the value to the constructor.
+  const hash = await signed([{ to: create2Deployer, data: concat([salt, initCode]), value: parseEther(process.argv[3] ?? '0.01'), gas: 3_000_000n, state: 12_000_000n }]);
+  await settled(hash);
   const file = JSON.parse(readFileSync(DEPLOYMENTS, 'utf8'));
   file.contracts.faucet = address;
   writeFileSync(DEPLOYMENTS, `${JSON.stringify(file, null, 2)}\n`);

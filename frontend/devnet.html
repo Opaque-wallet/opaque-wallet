@@ -83,38 +83,22 @@
     </div>
   </section>
 
-  <section class="view flow-view" id="view-send" aria-labelledby="tab-send" hidden>
-    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1 id="send-title">Send privately</h1><span></span></div>
-    <div class="flow">
-      <form class="form flow-main" id="send-form">
-        <div class="tabs" role="tablist" aria-label="What to send">
-          <button role="tab" id="send-mode-private" aria-selected="true" type="button">pqUSDC, privately</button>
-          <button role="tab" id="send-mode-public" aria-selected="false" type="button">ETH, publicly</button>
-        </div>
-        <div class="amount">
-          <div class="amount-head"><span class="tok-label" id="send-token"><i class="tok tok-usdc">U</i><b>pqUSDC</b></span><button class="link" id="send-max" type="button">Balance <b id="send-have">—</b></button></div>
-          <strong><input id="send-amount" class="wide" type="text" autocomplete="off" inputmode="decimal" maxlength="9" value="3" aria-label="Amount to send"><small id="send-unit">pqUSDC</small></strong>
-        </div>
-        <div class="to-card one">
-          <label class="field" for="recipient"><span>To</span><input id="recipient" class="mono" type="text" placeholder="0x…" autocomplete="off" spellcheck="false"><small id="send-to-note">The pool pays them: nothing on chain names you.</small></label>
-        </div>
-        <button class="primary" id="send-button" type="submit">Send privately</button>
-        <p class="status" id="send-status" role="status"></p>
-      </form>
-      <aside class="flow-side">
-        <p class="eyebrow" id="send-how">How a private send works</p>
-        <ol class="steps" id="send-steps-private">
-          <li><b>A ring of eight</b><small>Each note proves, with a ZKBoo proof built in this page, that it is one of 8 identical deposits, never which.</small></li>
-          <li><b>Sealed, through three relays</b><small>The spend is sealed for the settler and travels through three relays. None of them sees both you and the payment.</small></li>
-          <li><b>The pool pays</b><small>The attester checks the proof and signs with its FORS key; the pool pays the recipient. Your address never shows on chain.</small></li>
-        </ol>
-        <ol class="steps" id="send-steps-public" hidden>
-          <li><b>One frame transaction</b><small>A VERIFY frame, then the transfer, with no envelope signature.</small></li>
-          <li><b>Signed by FORS+C</b><small>Your hash-based key signs the whole transaction, in about a second, in this page.</small></li>
-          <li><b>Public</b><small>The chain shows it came from your account, as any ETH transfer does.</small></li>
-        </ol>
-      </aside>
-    </div>
+  <section class="view" id="view-send" aria-labelledby="tab-send" hidden>
+    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Send</h1><span></span></div>
+    <form class="mm-send" id="send-form" novalidate>
+      <button class="mm-asset" id="send-asset" type="button" aria-haspopup="dialog" aria-label="Choose what to send">
+        <i class="tok tok-usdc" id="send-asset-tok">U</i>
+        <b id="send-asset-name">pqUSDC</b>
+        <small id="send-asset-mode">Private · change</small>
+      </button>
+      <label class="mm-label" for="recipient">To</label>
+      <div class="mm-field"><input id="recipient" class="mono" type="text" placeholder="Enter or paste a 0x address" autocomplete="off" spellcheck="false"><button class="mm-adorn" id="recipient-paste" type="button" title="Paste" aria-label="Paste an address"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="4.5" width="10" height="4" rx="1.5"/><path d="M8.5 6.5H6.5A1.5 1.5 0 0 0 5 8v11a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8a1.5 1.5 0 0 0-1.5-1.5h-2"/></svg></button></div>
+      <label class="mm-label" for="send-amount">Amount</label>
+      <div class="mm-field"><input id="send-amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><span class="mm-unit" id="send-unit">pqUSDC</span></div>
+      <div class="mm-meta"><span id="send-note">Paid by Opaque's pool: nothing on chain names you</span><span><b id="send-have">—</b> available<button class="link" id="send-max" type="button">Max</button></span></div>
+      <p class="status" id="send-status" role="status"></p>
+      <button class="primary mm-continue" id="send-button" type="submit" disabled>Continue</button>
+    </form>
   </section>
 
   <section class="view flow-view" id="view-swap" aria-labelledby="tab-swap" hidden>
@@ -125,7 +109,7 @@
           <div class="swap">
             <div class="swap-side">
               <div class="swap-head"><span>You pay</span><span>Balance <b id="swap-have">—</b></span></div>
-              <div class="swap-line"><input id="swap-amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0" maxlength="9" value="0.001" aria-label="Amount to pay"><span class="tok-label" id="swap-from-label"><i class="tok tok-eth">E</i><b>ETH</b></span></div>
+              <div class="swap-line"><input id="swap-amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0" maxlength="9" value="0.0001" aria-label="Amount to pay"><span class="tok-label" id="swap-from-label"><i class="tok tok-eth">E</i><b>ETH</b></span></div>
             </div>
             <button class="icon-btn swap-flip" id="swap-flip" type="button" aria-label="Swap the two assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4v15M4.5 15.5 8 19l3.5-3.5M16 20V5M12.5 8.5 16 5l3.5 3.5"/></svg></button>
             <div class="swap-side">
@@ -197,6 +181,11 @@
   </nav>
 </main>
 
+<dialog id="asset-dialog" class="networks">
+  <form method="dialog" class="dialog-head"><h2>Send</h2><button value="close" aria-label="Close">×</button></form>
+  <button class="net-row" id="asset-usdc" type="button"><i class="tok tok-usdc">U</i><span><b>pqUSDC</b><small>Private: the pool pays, nothing on chain names you</small></span></button>
+  <button class="net-row" id="asset-eth" type="button"><i class="tok tok-eth">E</i><span><b>ETH</b><small>Public: a transfer from your account, signed with FORS+C</small></span></button>
+</dialog>
 <dialog id="sign-dialog">
   <form method="dialog">
     <div class="dialog-head"><div><p class="eyebrow">Signature request</p><h2 id="sign-title">Confirm</h2></div></div>

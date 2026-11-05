@@ -282,27 +282,37 @@ el('promo-create-go').addEventListener('click', create('home-status'));
 el('address-create').addEventListener('click', create('address-status'));
 el('to-wallet').addEventListener('click', () => { location.href = 'xrpl.html'; });
 
-/** Private pqUSDC (the default) or public ETH: the form, its words and its steps follow. */
+/** Private pqUSDC (the default) or public ETH: the asset at the top says which, and the form follows. */
 function setSendMode(priv: boolean): void {
   sendPrivate = priv;
-  el('send-mode-private').setAttribute('aria-selected', String(priv));
-  el('send-mode-public').setAttribute('aria-selected', String(!priv));
-  el('send-title').textContent = priv ? 'Send privately' : 'Send ETH';
-  el('send-token').innerHTML = priv ? '<i class="tok tok-usdc">U</i><b>pqUSDC</b>' : '<i class="tok tok-eth">E</i><b>ETH</b>';
+  el('send-asset-tok').className = `tok ${priv ? 'tok-usdc' : 'tok-eth'}`;
+  el('send-asset-tok').textContent = priv ? 'U' : 'E';
+  el('send-asset-name').textContent = priv ? 'pqUSDC' : 'ETH';
+  el('send-asset-mode').textContent = priv ? 'Private · change' : 'Public · change';
   el('send-unit').textContent = priv ? 'pqUSDC' : 'ETH';
-  el<HTMLInputElement>('send-amount').value = priv ? '3' : '0.001';
-  el('send-button').textContent = priv ? 'Send privately' : 'Sign with FORS+C and send';
-  el('send-to-note').textContent = priv ? 'The pool pays them: nothing on chain names you.' : 'Public: the chain shows it came from your account.';
-  el('send-how').textContent = priv ? 'How a private send works' : 'How a post-quantum send works';
-  el('send-steps-private').hidden = !priv;
-  el('send-steps-public').hidden = priv;
+  el('send-note').textContent = priv ? "Paid by Opaque's pool: nothing on chain names you" : 'From your account, signed with FORS+C';
+  el<HTMLInputElement>('send-amount').value = '';
   el('send-status').textContent = '';
   render();
+  checkSend();
 }
-el('send-mode-private').addEventListener('click', () => setSendMode(true));
-el('send-mode-public').addEventListener('click', () => setSendMode(false));
+/** Continue waits for an address and an amount, as MetaMask's does. */
+function checkSend(): void {
+  const n = Number(el<HTMLInputElement>('send-amount').value.trim());
+  el<HTMLButtonElement>('send-button').disabled = !isAddress(el<HTMLInputElement>('recipient').value.trim()) || !(n > 0);
+}
+el('send-asset').addEventListener('click', () => el<HTMLDialogElement>('asset-dialog').showModal());
+el('asset-usdc').addEventListener('click', () => { el<HTMLDialogElement>('asset-dialog').close(); setSendMode(true); });
+el('asset-eth').addEventListener('click', () => { el<HTMLDialogElement>('asset-dialog').close(); setSendMode(false); });
+el('asset-dialog').addEventListener('click', (e) => { if (e.target === el('asset-dialog')) el<HTMLDialogElement>('asset-dialog').close(); });
+for (const id of ['recipient', 'send-amount']) el(id).addEventListener('input', checkSend);
+el('recipient-paste').addEventListener('click', () => void navigator.clipboard.readText().then((text) => {
+  el<HTMLInputElement>('recipient').value = text.trim();
+  checkSend();
+}, () => { el('send-status').textContent = 'This browser keeps the clipboard to itself: paste into the field instead.'; }));
 el('send-max').addEventListener('click', () => {
   el<HTMLInputElement>('send-amount').value = sendPrivate ? String(Math.floor((privateUnits ?? 0) / 1e6)) : eth > GAS_RESERVE ? formatEther(eth - GAS_RESERVE) : '0';
+  checkSend();
 });
 el('send-form').addEventListener('submit', (e) => {
   e.preventDefault();

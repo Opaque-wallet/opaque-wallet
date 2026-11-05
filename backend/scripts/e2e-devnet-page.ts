@@ -64,11 +64,12 @@ try {
   check(!(await page.isVisible('#promo-create')), 'the factory created the account: nothing signed');
 
   await page.click('#tab-send');
-  check(await page.getAttribute('#send-mode-private', 'aria-selected') === 'true', 'Send is private by default, as on Arc');
-  // ETH is the public choice beside it.
-  await page.click('#send-mode-public');
+  check((await page.textContent('#send-asset-name')) === 'pqUSDC', 'Send is private by default, as on Arc');
+  // ETH is the public choice, picked as MetaMask picks an asset.
+  await page.click('#send-asset');
+  await page.click('#asset-eth');
   await page.fill('#recipient', '0x000000000000000000000000000000000000dEaD');
-  await page.fill('#send-amount', '0.001');
+  await page.fill('#send-amount', '0.00001');
   await page.click('#send-button');
   await page.waitForSelector('#sign-dialog[open]');
   check((await page.textContent('#sign-rows'))?.includes('0x000000000000000000000000000000000000dEaD'), 'a signature request, as MetaMask shows, names the recipient before anything is signed');
@@ -86,10 +87,10 @@ try {
   check(await page.getAttribute('#sent-list a', 'href') === link, 'Activity still lists the send after a reload');
 
   await page.click('#tab-swap');
-  await page.fill('#swap-amount', '0.001');
+  await page.fill('#swap-amount', '0.0001');
   await page.waitForFunction(() => Number(document.getElementById('swap-out')?.textContent) > 0, undefined, { timeout: 60_000 });
   const quoted = Number(await page.textContent('#swap-out'));
-  check(quoted > 0, `a quote from the pool's own state: ${quoted} pqUSD for 0.001 ETH (${await page.textContent('#swap-rate')})`);
+  check(quoted > 0, `a quote from the pool's own state: ${quoted} pqUSD for 0.0001 ETH (${await page.textContent('#swap-rate')})`);
   await page.click('#swap-go');
   await page.waitForSelector('#sign-dialog[open]');
   check((await page.textContent('#sign-rows'))?.includes('Universal Router'), 'the swap\'s signature request names Uniswap v4\'s router');
@@ -101,13 +102,13 @@ try {
 
   // And back: pqUSD for ETH, its two approvals and the swap in one atomic batch.
   await page.click('#swap-flip');
-  await page.fill('#swap-amount', '1');
+  await page.fill('#swap-amount', '0.05');
   await page.waitForFunction(() => { const n = Number(document.getElementById('swap-out')?.textContent); return n > 0 && n < 0.01; }, undefined, { timeout: 60_000 });
   const back = Number(await page.textContent('#swap-out'));
-  check((await page.textContent('#swap-from-label'))?.includes('pqUSD'), `flipped: 1 pqUSD quotes ${back} ETH`);
+  check((await page.textContent('#swap-from-label'))?.includes('pqUSD'), `flipped: 0.05 pqUSD quotes ${back} ETH`);
   await page.click('#swap-go');
   await page.waitForSelector('#sign-dialog[open]');
-  check((await page.textContent('#sign-rows'))?.includes('exactly 1 pqUSD'), 'the signature request shows the approval is for exactly the amount');
+  check((await page.textContent('#sign-rows'))?.includes('exactly 0.05 pqUSD'), 'the signature request shows the approval is for exactly the amount');
   await page.click('#sign-confirm');
   const returned = await statusIs('swap-status', 'Swapped on Uniswap v4');
   check(Number(/: ([0-9.]+) ETH/.exec(returned)?.[1]) >= back * 0.99 - 0.0001, `swapped pqUSD back for ETH, approvals and swap in one FORS+C-signed batch: ${returned}`);
@@ -115,10 +116,11 @@ try {
 
   // The key's last signature hands the account to the phrase's next key, in the same transaction.
   await page.click('#tab-send');
-  await page.click('#send-mode-public');
+  await page.click('#send-asset');
+  await page.click('#asset-eth');
   const sendOnce = async (): Promise<string> => {
     await page.fill('#recipient', '0x000000000000000000000000000000000000dEaD');
-    await page.fill('#send-amount', '0.0001');
+    await page.fill('#send-amount', '0.00001');
     await page.click('#send-button');
     await page.waitForSelector('#sign-dialog[open]');
     const sheet = (await page.textContent('#sign-rows')) ?? '';

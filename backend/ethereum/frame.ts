@@ -29,8 +29,11 @@ export const FIRST_NONCE = 8n;
 /** MAX_VERIFY_GAS is 100,000 for VERIFY frames and signature costs together; an ARBITRARY entry costs 100. */
 const VERIFY_GAS = 99_000n;
 const DOMAIN = keccak256(stringToHex('opaque/v1/eip8141/sighash'));
-// The devnet's base fee is 7 wei; this clears it by a wide margin.
-export const MAX_FEE = 2_000_000_000n;
+// The devnet's base fee is 7 wei; this clears it by a wide margin. Not more: the
+// mempool wants gas limit × this in the payer's balance before it takes a
+// transaction, so at 2 gwei a deposit (~2.5M gas) needed 0.005 ETH up front, five
+// faucet drips, and a contract's deploy (16M) 0.03.
+export const MAX_FEE = 200_000_000n;
 /**
  * The tip: 0.1 gwei. Left unset, it would equal MAX_FEE, and every transaction
  * would pay 2 gwei a gas: a swap's ~1.8M gas (a FORS+C signature is ~4 KB of
@@ -51,17 +54,21 @@ export const forsKey = (seed: Uint8Array): ForsKey => keyGen(seed, PARAMS);
 export const keyOf = (key: ForsKey): Hex => pkCommitment(key.publicKey) as Hex;
 
 /**
- * One JSON-RPC call to the gateway, tried up to 5 times, about 15 s, when the
- * network, not the node, fails: the devnet's gateway drops out for seconds at
- * a time, and a flaky connection should not end a step. Resending a signed
- * transaction is safe, since the node then answers "already known".
+ * One JSON-RPC call to the gateway, or, when it is down or unreachable, to the
+ * miner, which serves the same chain: on 6 November the gateway answered 502
+ * for minutes while the miner answered. Both down, it is tried again, five
+ * times over about 15 s, since a flaky connection should not end a step.
+ * Resending a signed transaction is safe: the node then answers "already known".
  */
 export async function call(method: string, params: unknown[] = []): Promise<any> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await rpc(devnet.gateway, method, params);
     } catch (e) {
-      if ((e as { code?: string }).code !== 'RPC_UNREACHABLE' || attempt === 5) throw e;
+      const code = (e as { code?: string }).code;
+      if (code !== 'RPC_UNREACHABLE' && code !== 'RPC_BAD_RESPONSE') throw e;
+      try { return await rpc(`${devnet.miner}/rpc`, method, params); } catch { /* both down: wait and try again */ }
+      if (attempt === 5) throw e;
       await new Promise((ok) => setTimeout(ok, 1500 * attempt));
     }
   }
@@ -155,7 +162,7 @@ async function drip(faucet: Address, to: Address): Promise<Hex> {
 
 /**
  * Devnet ETH for `to`: the devnet's own faucet (1 ETH, once an hour per
- * address), or, when that one is dry, Opaque's (0.01 ETH).
+ * address), or, when that one is dry, Opaque's (0.001 ETH).
  */
 export async function faucet(to: Address): Promise<Hex> {
   let hash: Hex;
