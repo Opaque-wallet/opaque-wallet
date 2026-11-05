@@ -1,10 +1,21 @@
-## Opaque on the XRP Ledger
+## Opaque: private, post-quantum payments
 
-Private XRP and RLUSD on the XRP Ledger. Hash-based ring proofs, one-time-tag receiving, single-use keys against quantum attacks, and a fresh account for every XRPL dapp. Built on Batch and Credentials, no smart contracts needed.
+Private payments on Ethereum, Arc and the XRP Ledger. Money moves through shared pools of fixed-size notes:
+- a hash-based ring proof shows you own one note of eight without saying which;
+- a three-hop relay mesh hides who sent the payment;
+- every app gets a fresh account of its own.
 
-Live on XRPL **testnet**. To run the wallet, start `cd backend && npm run xrpl:stack`, then `cd frontend && npm run dev`, and open `/xrpl.html`. How it works, the testnet results, and what's left: [docs/xrpl.md](docs/xrpl.md).
+Keys are post-quantum: hash-based (FORS+C) on Ethereum and Arc, single-use on the XRP Ledger.
 
-The rest of this README is Opaque on Arc, which this repo builds on.
+| Chain | Status | Start here |
+|---|---|---|
+| Arc | Live on mainnet (not yet audited) and testnet | The rest of this README |
+| XRP Ledger | Live on testnet: XRP, RLUSD and USDC, built on Batch and Credentials | [docs/xrpl.md](docs/xrpl.md) |
+| Ethereum | In progress: Sepolia, and an EIP-8141 devnet | [docs/mumbai/PLAN.md](docs/mumbai/PLAN.md) |
+
+To run the whole site locally: `cd frontend && npm run preview:site`, then open http://localhost:5174. To run the XRPL wallet against a local stack: start `cd backend && npm run xrpl:stack`, then `cd frontend && npm run dev`, and open `/xrpl.html`.
+
+The rest of this README is Opaque on Arc, which the other chains build on.
 
 ---
 
