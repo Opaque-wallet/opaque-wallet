@@ -28,7 +28,7 @@ const NETWORKS: Network[] = [
   { id: 'xrpl-mainnet', chain: 'XRP Ledger', name: 'XRPL Mainnet', note: 'After the audit' },
 ];
 // The EIP-8141 devnet's page is built with testnet too (devnet.html). Listed first: it is the newest.
-NETWORKS.unshift({ id: 'devnet', chain: 'Ethereum', name: 'Fully post-quantum', note: 'EIP-8141 devnet: no ECDSA key anywhere', href: `${dirOf(networks.find((n) => n.id === 'testnet')!.sitePath)}devnet.html` });
+NETWORKS.unshift({ id: 'devnet', chain: 'Ethereum', name: 'Ethereum Devnet (Fully post-quantum)', note: 'EIP-8141: no ECDSA key anywhere', href: `${dirOf(networks.find((n) => n.id === 'testnet')!.sitePath)}devnet.html` });
 type SidePanel = { setOptions(options: { path: string }): Promise<void> };
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
 
@@ -38,7 +38,8 @@ export function networkPicker(button: HTMLButtonElement, current: WalletPage): v
 
   const here = NETWORKS.find((n) => n.id === current)!;
   button.innerHTML = '<i class="net-dot" aria-hidden="true"></i><span></span>';
-  button.querySelector('span')!.textContent = here.name;
+  // The header has room for the name only, not its bracketed note.
+  button.querySelector('span')!.textContent = here.name.split(' (')[0]!;
   button.setAttribute('aria-haspopup', 'dialog');
 
   const sheet = document.createElement('dialog');
@@ -55,7 +56,10 @@ export function networkPicker(button: HTMLButtonElement, current: WalletPage): v
       else { row.type = 'button'; row.disabled = n.href === undefined; }
       if (n.id === current) row.setAttribute('aria-current', 'true');
       row.innerHTML = `<i class="tok tok-${{ Arc: 'arc', Ethereum: 'eth' }[chain] ?? 'xrp'}">${chain[0]}</i><span><b></b><small></small></span>`;
-      row.querySelector('b')!.textContent = n.name;
+      // A bracketed note after the name stays on one line, in a lighter weight.
+      const [title, tag] = n.name.split(' (');
+      row.querySelector('b')!.textContent = `${title}${tag === undefined ? '' : ' '}`;
+      if (tag !== undefined) row.querySelector('b')!.append(Object.assign(document.createElement('span'), { className: 'net-tag', textContent: `(${tag}` }));
       row.querySelector('small')!.textContent = n.note;
       if (n.flag !== undefined) row.append(Object.assign(document.createElement('em'), { className: 'net-flag', textContent: n.flag }));
       if (n.href === undefined) row.append(Object.assign(document.createElement('em'), { className: 'net-flag soon', textContent: 'Soon' }));

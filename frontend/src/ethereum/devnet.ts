@@ -1,4 +1,4 @@
-// The wallet's page for the EIP-8141 devnet: "Fully post-quantum", in the same
+// The wallet's page for the EIP-8141 devnet: "Ethereum Devnet (Fully post-quantum)", in the same
 // shell as the XRPL and Arc wallets. The account answers to one FORS+C key
 // drawn from the recovery phrase, and no step needs an ECDSA key: its factory
 // creates it and pays for that, and every transaction after, a send or a

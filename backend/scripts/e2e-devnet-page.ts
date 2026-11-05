@@ -1,4 +1,4 @@
-// The wallet's "Fully post-quantum" page (frontend/devnet.html) against the
+// The wallet's "Ethereum Devnet (Fully post-quantum)" page (frontend/devnet.html) against the
 // live EIP-8141 devnet, in a real browser: a wallet made the way a person makes
 // one, then the account's whole life on the page. The faucet funds its
 // address, the factory creates it, and it sends ETH signed by FORS+C alone.
@@ -45,7 +45,7 @@ try {
 
   await page.goto(`${SITE}/testnet/devnet`);
   await ready();
-  check((await page.textContent('#network-switch'))?.includes('Fully post-quantum'), 'the network picker says Fully post-quantum');
+  check((await page.textContent('#network-switch'))?.includes('Ethereum Devnet'), 'the network picker says Ethereum Devnet');
   check(await page.isVisible('#promo-create'), 'the account is not created yet, and its address is already known');
 
   await page.click('#promo-fund-go');

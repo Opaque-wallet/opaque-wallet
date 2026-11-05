@@ -238,7 +238,7 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - **Proof:** `node ethereum/frame-tx.ts create` made `0xAeD8621f6Dd36539D004E545e8E7Dda7d06aabCe` in `0xf8de0e0b32adcd19566a2e3e053480e42923fededa0984325a2f528af968a7be`, a frame transaction with no signature at all. Its first FORS-signed transfer is `0x1cde7c5b683f24eca6c2d99911d390f8353a5461f0dfd5a76da4e50b909903f7`.
 - **Shared code:** the transaction logic is `backend/ethereum/frame.ts`, which runs in the browser too.
 
-**In the wallet: "Fully post-quantum"** (the Ethereum group of the network picker, `frontend/devnet.html`, at `/testnet/devnet`):
+**In the wallet: "Ethereum Devnet (Fully post-quantum)"** (the Ethereum group of the network picker, `frontend/devnet.html`, at `/testnet/devnet`):
 - It uses the wallet's recovery phrase; the key is `stream(account key, "eip8141/1337/fors/0")`.
 - It shows the account's address before the account exists, then: Get devnet ETH (the faucet), Create account (the factory pays), and Send (signed by FORS+C alone).
 - It shows the signatures left out of 8, and links each transaction to the explorer.
