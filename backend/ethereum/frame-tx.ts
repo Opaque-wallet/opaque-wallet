@@ -1,48 +1,36 @@
-// An EIP-8141 frame transaction whose only signature is FORS+C, on the
-// alt-mempool devnet (chain 1337). The account is contracts/frame/FramePQAccount.sol.
+// FramePQAccount on the EIP-8141 alt-mempool devnet (chain 1337), from the
+// command line. The transactions themselves are ethereum/frame.ts, which the
+// wallet's devnet page uses too.
 //
 //   (cd ../contracts && FOUNDRY_PROFILE=frame forge build)
-//   node --use-system-ca ethereum/frame-tx.ts fund     the faucet pays the deployer (once an hour)
-//   node --use-system-ca ethereum/frame-tx.ts deploy   deploys the account, funded at creation
-//   node --use-system-ca ethereum/frame-tx.ts send     VERIFY (FORS+C) + one transfer, through the alt mempool
-//   node --use-system-ca ethereum/frame-tx.ts attack   the same, signed by another FORS key: must be refused
+//   node --use-system-ca ethereum/frame-tx.ts fund      the faucet pays the deployer (once an hour)
+//   node --use-system-ca ethereum/frame-tx.ts factory   deploys the account factory (infrastructure, once)
+//   node --use-system-ca ethereum/frame-tx.ts create    a new FORS key, its address funded, its account created:
+//                                                       the factory pays, and no ECDSA key signs anything
+//   node --use-system-ca ethereum/frame-tx.ts send      VERIFY (FORS+C) + one transfer
+//   node --use-system-ca ethereum/frame-tx.ts attack    the same, signed by another FORS key: must be refused
 //
 // Keys live in .stack/eth-devnet/ (0600) and are never printed: the deployer's
-// secp256k1 key, which only pays for the deployment, and the FORS seed, the
-// account's one key. Devnet ETH has no value.
+// secp256k1 key, which only deploys the factory, and each account's FORS seed.
+// A seed belongs to one account: its few-time budget would not survive two.
+// Devnet ETH has no value.
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getProfile } from '@forshtat/hegota-support/profiles';
-import { rpc, toWire } from '@forshtat/hegota-support/rpc';
-import { frame, newTx, sigHash, type FrameTx } from '@forshtat/hegota-support/tx';
-import { encodeSignature, keyGen, pkCommitment, sign } from '@opaque/pq-wallet';
-import type { Bytes32 } from '@opaque/protocol-types';
-import { encodeAbiParameters, encodeDeployData, encodeFunctionData, formatEther, getContractAddress, hexToBytes, keccak256, parseEther, stringToHex, toHex, type Abi, type Address, type Hex } from 'viem';
+import { toWire } from '@forshtat/hegota-support/rpc';
+import { encodeDeployData, formatEther, getContractAddress, hexToBytes, parseEther, toHex, type Abi, type Address, type Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
-const GATEWAY = 'https://altmempoolgateway.forshtat.com/rpc';
-const EXPLORER = 'https://altmempoolexplorer.forshtat.com';
-const CHAIN_ID = 1337;
-const profile = getProfile('ethrex-eip8141-tracer');
-/** FramePQAccount's parameter set: 8 uses at 128 bits, and inside MAX_VERIFY_GAS. */
-const PARAMS = { k: 13, a: 13 } as const;
-const MAX_USES = 8n;
-/** HegotaSupport deploys one helper per opcode this devnet has, so the account's nonce starts at 1 + 7. */
-const FIRST_NONCE = 8n;
-/** MAX_VERIFY_GAS is 100,000 for VERIFY frames and signature costs together; an ARBITRARY entry costs 100. */
-const VERIFY_GAS = 99_000n;
-const DOMAIN = keccak256(stringToHex('opaque/v1/eip8141/sighash'));
-// The devnet's base fee is 7 wei; these clear it by a wide margin.
-const LEGACY_GAS_PRICE = 2_000_000n;
-const MAX_FEE = 2_000_000_000n;
+import { accountOf, accountTx, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, forsKey, keyOf, mined, nonceOf, sendCalls, settled, txUrl } from './frame.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIR = join(HERE, '..', '.stack', 'eth-devnet');
-const ARTIFACT = join(HERE, '..', '..', 'contracts', 'out-frame', 'FramePQAccount.sol', 'FramePQAccount.json');
+const STATE = join(DIR, 'state.json');
+const DEPLOYMENTS = join(HERE, '..', '..', 'deployments', 'eth-devnet.json');
+const ARTIFACT = join(HERE, '..', '..', 'contracts', 'out-frame', 'FramePQAccountFactory.sol', 'FramePQAccountFactory.json');
 
 /** A secret file, made on first use with `make`, read thereafter. Never printed. */
 function secret(name: string, make: () => Hex): Hex {
@@ -53,97 +41,74 @@ function secret(name: string, make: () => Hex): Hex {
   }
   return readFileSync(file, 'utf8').trim() as Hex;
 }
-const STATE = join(DIR, 'state.json');
-const state = (): { account?: Address } => (existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {});
+const state = (): { account?: Address; seed?: string } => (existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {});
+const deployer = () => privateKeyToAccount(secret('deployer.key', generatePrivateKey));
+const eth = async (a: Address) => `${formatEther(await balanceOf(a))} ETH`;
 
-const deployer = privateKeyToAccount(secret('deployer.key', generatePrivateKey));
-const forsKey = () => keyGen(hexToBytes(secret('fors.seed', () => toHex(randomBytes(32)))), PARAMS);
-const artifact = (): { abi: Abi; bytecode: { object: Hex } } => {
-  if (!existsSync(ARTIFACT)) throw new Error('build the account first: cd contracts && FOUNDRY_PROFILE=frame forge build');
-  return JSON.parse(readFileSync(ARTIFACT, 'utf8'));
-};
-
-async function mined(hash: Hex): Promise<{ status: Hex; blockNumber: Hex; frameReceipts?: { status: Hex }[] }> {
-  for (let i = 0; i < 60; i++) {
-    const r = await rpc(GATEWAY, 'eth_getTransactionReceipt', [hash]);
-    if (r) return r;
-    await new Promise((ok) => setTimeout(ok, 2000));
-  }
-  throw new Error(`${hash} was not mined in 2 minutes`);
+/** The account this script acts as, and its key. */
+function current(): { account: Address; key: ReturnType<typeof forsKey> } {
+  const { account, seed } = state();
+  if (account === undefined || seed === undefined) throw new Error('create an account first');
+  return { account, key: forsKey(hexToBytes(secret(seed, () => { throw new Error(`${seed} is missing`); }))) };
 }
-const balance = async (a: Address) => formatEther(BigInt(await rpc(GATEWAY, 'eth_getBalance', [a, 'latest'])));
-const nonceOf = async (a: Address, tag = 'latest') => BigInt(await rpc(GATEWAY, 'eth_getTransactionCount', [a, tag]));
 
 async function fund(): Promise<void> {
-  const { txHash } = await rpc(GATEWAY, 'skandha_explorer_faucet', [deployer.address]);
-  const r = await mined(txHash);
-  if (r.status !== '0x1') throw new Error(`the faucet's transfer ${txHash} reverted`);
-  console.log(`deployer ${deployer.address}: ${await balance(deployer.address)} ETH`);
+  const d = deployer();
+  await faucet(d.address);
+  console.log(`deployer ${d.address}: ${await eth(d.address)}`);
 }
 
-async function deploy(): Promise<void> {
-  const { abi, bytecode } = artifact();
-  const key = pkCommitment(forsKey().publicKey);
-  const nonce = await nonceOf(deployer.address, 'pending');
-  // Code costs state gas here (EIP-8037: (120 + bytes) x 1,530): about 5.7M for the account and 3M for
-  // HegotaSupport's seven helpers, so 6M runs out. 16M stays under the 2^24 per-transaction cap.
-  const raw = await deployer.signTransaction({
-    chainId: CHAIN_ID, nonce: Number(nonce), gas: 16_000_000n, gasPrice: LEGACY_GAS_PRICE, type: 'legacy',
-    // Funded through its creation: a later plain transfer would also work (receive()), but this is one transaction.
-    value: parseEther('0.05'),
-    data: encodeDeployData({ abi, bytecode: bytecode.object, args: [key, FIRST_NONCE] }),
+async function factory(): Promise<void> {
+  if (!existsSync(ARTIFACT)) throw new Error('build first: cd contracts && FOUNDRY_PROFILE=frame forge build');
+  const { abi, bytecode } = JSON.parse(readFileSync(ARTIFACT, 'utf8')) as { abi: Abi; bytecode: { object: Hex } };
+  const d = deployer();
+  const nonce = await nonceOf(d.address);
+  const raw = await d.signTransaction({
+    // Code costs state gas here (EIP-8037: (120 + bytes) x 1,530): about 10M for the factory, which carries
+    // the account's creation code, and 3M for HegotaSupport's helpers. 16M stays under the 2^24 cap.
+    chainId: devnet.chainId, nonce: Number(nonce), gas: 16_000_000n, gasPrice: 2_000_000n, type: 'legacy',
+    // What it pays creating accounts with.
+    value: parseEther('0.5'),
+    data: encodeDeployData({ abi, bytecode: bytecode.object }),
   });
-  const hash: Hex = await rpc(GATEWAY, 'eth_sendRawTransaction', [raw]);
+  const hash: Hex = await call('eth_sendRawTransaction', [raw]);
   const r = await mined(hash);
   if (r.status !== '0x1') throw new Error(`deployment ${hash} reverted`);
-  const account = getContractAddress({ from: deployer.address, nonce });
-  // The key's uses are counted from FIRST_NONCE; a different start would shift them all.
-  const start = await nonceOf(account);
-  if (start !== FIRST_NONCE) throw new Error(`the account starts at nonce ${start}, not ${FIRST_NONCE}: fix FIRST_NONCE and redeploy`);
-  writeFileSync(STATE, `${JSON.stringify({ account }, null, 2)}\n`, { mode: 0o600 });
-  console.log(`FramePQAccount ${account} (key ${key}), ${await balance(account)} ETH, deployed in ${hash}`);
+  const address = getContractAddress({ from: d.address, nonce });
+  const file = JSON.parse(readFileSync(DEPLOYMENTS, 'utf8'));
+  file.contracts.factory = address;
+  writeFileSync(DEPLOYMENTS, `${JSON.stringify(file, null, 2)}\n`);
+  console.log(`FramePQAccountFactory ${address}, ${await eth(address)}, deployed in ${hash}; written to deployments/eth-devnet.json`);
 }
 
-/** The account's next transaction, VERIFY and one transfer, signed by `key`. */
-async function signedTx(key: ReturnType<typeof keyGen>): Promise<{ tx: FrameTx; nonce: bigint; bytes: number }> {
-  const { account } = state();
-  if (account === undefined) throw new Error('deploy the account first');
-  const { abi } = artifact();
+async function create(): Promise<void> {
+  const seed = `fors-${Date.now()}.seed`;
+  const key = forsKey(hexToBytes(secret(seed, () => toHex(randomBytes(32)))));
+  const account = await accountOf(keyOf(key));
+  console.log(`key ${keyOf(key)}\naccount ${account} (known before it exists)`);
+  await faucet(account);
+  console.log(`funded by the faucet: ${await eth(account)}`);
+  const hash = await createAccount(keyOf(key));
+  await settled(hash);
   const nonce = await nonceOf(account);
-  if (nonce - FIRST_NONCE >= MAX_USES) throw new Error(`the key has signed ${MAX_USES} times: rotate it`);
-
-  let tx: FrameTx = newTx({
-    chainId: CHAIN_ID,
-    sender: account,
-    nonceSeq: nonce,
-    frames: [
-      frame(profile, 'VERIFY', { scope: 'EXECUTION_AND_PAYMENT', target: null, execution: VERIFY_GAS, data: encodeFunctionData({ abi, functionName: 'verify' }) }),
-      frame(profile, 'SENDER', { target: deployer.address, execution: 50_000n, value: 1_000_000_000n }),
-    ],
-    // ARBITRARY, empty msg: the protocol elides these bytes from the signature hash, so FORS can sign it.
-    signatures: [{ scheme: profile.sigSchemes['ARBITRARY']!, signer: '0x', msg: '0x', signature: '0x' }],
-    fees: { maxFeePerGas: MAX_FEE },
-  });
-  const digest = keccak256(encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [DOMAIN, sigHash(profile, tx)]));
-  const signature = encodeSignature(key.publicKey, sign(key.secretKey, digest as Bytes32)) as Hex;
-  return { tx: { ...tx, signatures: [{ ...tx.signatures[0]!, signature }] }, nonce, bytes: (signature.length - 2) / 2 };
+  if (nonce !== FIRST_NONCE) throw new Error(`the account starts at nonce ${nonce}, not ${FIRST_NONCE}`);
+  writeFileSync(STATE, `${JSON.stringify({ account, seed }, null, 2)}\n`, { mode: 0o600 });
+  console.log(`created in ${hash}, paid for by the factory\n${txUrl(hash)}`);
 }
 
 async function send(): Promise<void> {
-  const { tx, nonce, bytes } = await signedTx(forsKey());
-  const hash: Hex = await rpc(GATEWAY, 'eth_sendFrameTransaction', [toWire(tx)]);
-  console.log(`sent ${hash} (nonce ${nonce}, FORS+C signature ${bytes} bytes)`);
-  const r = await mined(hash);
-  const frames = (r.frameReceipts ?? []).map((f, i) => `frame ${i}: ${f.status === '0x1' ? 'ok' : `status ${f.status}`}`);
-  console.log(`mined in block ${BigInt(r.blockNumber)}; ${frames.join(', ')}`);
-  console.log(`${EXPLORER}/tx/${hash}`);
+  const { account, key } = current();
+  const hash = await sendCalls(account, key, [{ to: deployer().address, value: 1_000_000_000n, gas: 50_000n }]);
+  const r = await settled(hash);
+  console.log(`sent ${hash}, mined in block ${BigInt(r.blockNumber)}, every frame ok\n${txUrl(hash)}`);
 }
 
 /** Someone without the account's key, here a fresh FORS key, must get nothing past VERIFY. */
 async function attack(): Promise<void> {
-  const { tx } = await signedTx(keyGen(randomBytes(32), PARAMS));
+  const { account } = current();
+  const tx = await accountTx(account, forsKey(randomBytes(32)), [{ to: deployer().address, value: 1n, gas: 50_000n }]);
   try {
-    const hash: Hex = await rpc(GATEWAY, 'eth_sendFrameTransaction', [toWire(tx)]);
+    const hash: Hex = await call('eth_sendFrameTransaction', [toWire(tx)]);
     throw new Error(`the mempool took a transaction signed by another key: ${hash}`);
   } catch (e) {
     if ((e as Error).message.startsWith('the mempool took')) throw e;
@@ -151,7 +116,7 @@ async function attack(): Promise<void> {
   }
 }
 
-const commands: Record<string, () => Promise<void>> = { fund, deploy, send, attack };
+const commands: Record<string, () => Promise<void>> = { fund, factory, create, send, attack };
 const run = commands[process.argv[2] ?? ''];
-if (run === undefined) throw new Error('usage: node ethereum/frame-tx.ts fund | deploy | send | attack');
+if (run === undefined) throw new Error(`usage: node ethereum/frame-tx.ts ${Object.keys(commands).join(' | ')}`);
 await run();

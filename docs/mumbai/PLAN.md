@@ -232,6 +232,12 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - **The attack:** a transaction signed by another FORS key is refused at admission with `BadSignature()`.
 - **Deploy gas:** contract code costs state gas here (EIP-8037: (120 + bytes) × 1,530), so deploying took more than 6M gas; the script sends 16M.
 
+**Creating an account needs no ECDSA either:**
+- **`FramePQAccountFactory`** (`contracts/frame/`, at `0x5516c44Eb7cBCCC15b9E1dFf522b7F75452880ae`) is the sender of the creating transaction and pays for it. Its VERIFY approves only a transaction that is exactly one `create(key)` frame to itself.
+- **The address is CREATE2** with the key as salt, so a wallet knows it before the account exists, and the faucet funds it first.
+- **Proof:** `node ethereum/frame-tx.ts create` made `0xAeD8621f6Dd36539D004E545e8E7Dda7d06aabCe` in `0xf8de0e0b32adcd19566a2e3e053480e42923fededa0984325a2f528af968a7be`, a frame transaction with no signature at all. Its first FORS-signed transfer is `0x1cde7c5b683f24eca6c2d99911d390f8353a5461f0dfd5a76da4e50b909903f7`.
+- **Shared code:** the transaction logic is `backend/ethereum/frame.ts`, which runs in the browser too.
+
 **Still to do:**
 - **SENDER frames that do the demo,** under `ATOMIC_BATCH_FLAG` (all or nothing):
   - (a) set the ENS name and records (the T7 registry, deployed on the devnet);

@@ -1,0 +1,17 @@
+{
+  "$comment": "The EIP-8141 alt-mempool devnet (ethrex eip8141-tracer + the Skandha gateway, chain 1337). Not an EVM network of index.ts's shape: no pools, no mesh, no bundler. Our contracts are written here by backend/ethereum/frame-tx.ts; the Uniswap v4 contracts are the devnet's predeploys, whose code was read on chain. Public values only.",
+  "chainId": 1337,
+  "gateway": "https://altmempoolgateway.forshtat.com/rpc",
+  "miner": "https://altmempool.forshtat.com",
+  "explorer": "https://altmempoolexplorer.forshtat.com",
+  "contracts": {
+    "factory": "0x5516c44Eb7cBCCC15b9E1dFf522b7F75452880ae"
+  },
+  "uniswap": {
+    "poolManager": "0x6bF9Aa9c04fd001385742d61f6818C3236429848",
+    "positionManager": "0x5bF24B2CD6f4cc0057F4BeD53264d591620Af57B",
+    "universalRouter": "0x5e2250a42608a5cc9f62e23ab24824ee25b5e2be",
+    "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    "weth9": "0x1b7d32025F7cA633943BbCC9Ec61a98ef66187b6"
+  }
+}
