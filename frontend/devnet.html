@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>opaque — fully post-quantum</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="app-icon-192.png">
+  <meta name="theme-color" content="#0b090c">
+  <link rel="stylesheet" href="wallet.css">
+</head>
+<body>
+<main class="app approve">
+  <header class="bar">
+    <span class="brand-mark"><span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><g fill="#070608"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg></span><img src="media/logo.png" alt="opaque" width="942" height="200"></span>
+    <div class="bar-right"><button class="net" id="network-switch" type="button" aria-label="Network">Network</button></div>
+  </header>
+
+  <section class="view" id="none" hidden>
+    <p class="eyebrow">Fully post-quantum</p>
+    <h2 id="none-title">No wallet yet</h2>
+    <p class="status" id="none-status">Create a wallet or import your recovery phrase in Opaque first. The same phrase holds this account.</p>
+    <div class="dialog-actions"><button class="primary" id="to-wallet" type="button">Open Opaque</button></div>
+  </section>
+
+  <section class="view" id="home" hidden>
+    <div class="hero">
+      <svg class="hero-ring" viewBox="0 0 40 40" aria-hidden="true"><g fill="currentColor"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg>
+      <div class="hero-top"><span class="hero-label">Fully post-quantum</span><span class="shield">No ECDSA anywhere</span></div>
+      <h1 class="balance"><span id="balance">—</span> <small>ETH</small></h1>
+    </div>
+
+    <dl class="facts" id="facts"></dl>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+
+    <div class="dialog-actions">
+      <button class="secondary" id="faucet" type="button">Get devnet ETH</button>
+      <button class="primary" id="create" type="button" hidden>Create account</button>
+    </div>
+
+    <form id="send-form" hidden>
+      <div class="list-head"><span>Send ETH</span></div>
+      <label class="field" for="send-to"><span>To</span><input id="send-to" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
+      <label class="field" for="send-amount"><span>Amount (ETH)</span><input id="send-amount" type="text" inputmode="decimal" value="0.001"></label>
+      <div class="dialog-actions"><button class="primary" id="send" type="submit">Sign with FORS+C and send</button></div>
+    </form>
+
+    <div class="list-head"><span>This session</span></div>
+    <ul class="facts" id="activity"></ul>
+  </section>
+
+  <p class="fine-print">Ethereum's EIP-8141 devnet (chain 1337), test ETH only. Your account answers to one hash-based key, FORS+C, drawn from your recovery phrase. Its factory creates it, and pays for that, so no step needs an ECDSA key: not its creation, not a transaction, not a bundler. This page talks straight to the devnet's gateway; there is no relay mesh on this devnet.</p>
+</main>
+<script type="module" src="/src/ethereum/devnet.ts"></script>
+</body>
+</html>

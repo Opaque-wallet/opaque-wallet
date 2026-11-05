@@ -16,7 +16,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: { app: 'app.html', xrpl: 'xrpl.html', connect: 'xrpl-connect.html' },
+      input: { app: 'app.html', xrpl: 'xrpl.html', connect: 'xrpl-connect.html', devnet: 'devnet.html' },
     },
   },
   server: {

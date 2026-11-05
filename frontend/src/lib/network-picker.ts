@@ -9,16 +9,15 @@
 import { deployment, networks, type NetworkId } from '../../../deployments/index.ts';
 
 /** An EVM network id, or 'xrpl': the XRPL wallet page (testnet/xrpl.html). */
-export type WalletPage = NetworkId | 'xrpl';
+export type WalletPage = NetworkId | 'xrpl' | 'devnet';
 
 /** The directory of the build at `sitePath`, relative to this page; '' for this build. */
 const dirOf = (sitePath: string): string =>
   sitePath === deployment.network.sitePath ? '' : `${'../'.repeat(deployment.network.sitePath.split('/').filter(Boolean).length)}${sitePath}`;
 
 interface Network { readonly id: string; readonly chain: string; readonly name: string; readonly note: string; readonly href?: string; readonly flag?: string }
-const NETWORKS: readonly Network[] = [
+const NETWORKS: Network[] = [
   { id: 'sepolia', chain: 'Ethereum', name: 'Sepolia', note: 'Private test USDC, no value' },
-  { id: 'devnet-8141', chain: 'Ethereum', name: 'EIP-8141 devnet', note: 'Frame transactions, no value' },
   ...networks.map((n) => ({
     id: n.id as string, chain: 'Arc', name: n.displayName, href: `${dirOf(n.sitePath)}app.html`,
     note: n.id === 'mainnet' ? 'Private USDC, real funds' : 'Private test USDC, no value',
@@ -28,6 +27,8 @@ const NETWORKS: readonly Network[] = [
   { id: 'xrpl', chain: 'XRP Ledger', name: 'XRPL Testnet', note: 'Private XRP, RLUSD and USDC', href: `${dirOf(networks.find((n) => n.id === 'testnet')!.sitePath)}xrpl.html` },
   { id: 'xrpl-mainnet', chain: 'XRP Ledger', name: 'XRPL Mainnet', note: 'After the audit' },
 ];
+// The EIP-8141 devnet's page is built with testnet too (devnet.html). Listed first: it is the newest.
+NETWORKS.unshift({ id: 'devnet', chain: 'Ethereum', name: 'Fully post-quantum', note: 'EIP-8141 devnet: no ECDSA key anywhere', href: `${dirOf(networks.find((n) => n.id === 'testnet')!.sitePath)}devnet.html` });
 type SidePanel = { setOptions(options: { path: string }): Promise<void> };
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
 
