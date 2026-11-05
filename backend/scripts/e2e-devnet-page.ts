@@ -7,6 +7,7 @@
 //   node --use-system-ca scripts/e2e-devnet-page.ts            SITE=http://localhost:5174 by default
 //   SHOT=/some/dir node --use-system-ca scripts/e2e-devnet-page.ts   also saves a screenshot there
 
+import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -35,7 +36,8 @@ async function statusIs(prefix: string, timeout = 240_000): Promise<string> {
 
 try {
   await page.goto(`${SITE}/testnet/xrpl`);
-  await createWallet(page);
+  // The phrase is saved when onboarding ends; this page needs nothing else from the XRPL wallet, not even its server.
+  await createWallet(page, 90_000, () => true);
   check(true, 'a wallet, made on the XRPL page with a recovery phrase');
 
   await page.goto(`${SITE}/testnet/devnet`);
@@ -45,8 +47,15 @@ try {
   check(await page.isVisible('#create'), 'the account is not created yet, and its address is already known');
 
   await page.click('#faucet');
-  await statusIs('Funded');
-  check(Number(await page.textContent('#balance')) > 0, 'the faucet funded the address before the account exists');
+  const funded = await statusIs('Funded').catch((e: Error) => e.message);
+  if (/faucet is empty/i.test(funded)) {
+    // The devnet's shared faucet runs dry; our own account funds the address instead, with a FORS-signed transfer.
+    const address = await page.getAttribute('#facts', 'data-account');
+    execFileSync('node', ['--use-system-ca', 'ethereum/frame-tx.ts', 'send', address, '0.05'], { stdio: 'inherit' });
+    await page.reload();
+    await statusIs('Account 1, on the EIP-8141 devnet', 120_000);
+  } else if (!funded.startsWith('Funded')) throw new Error(funded);
+  check(Number(await page.textContent('#balance')) > 0, 'the address was funded before the account exists (by the faucet, or by our own account when the faucet is dry)');
 
   await page.click('#create');
   await statusIs('Created');
@@ -59,6 +68,14 @@ try {
   const link = await page.getAttribute('#activity a', 'href');
   check(link?.includes('/tx/0x'), `sent with a FORS+C signature only: ${link}`);
   check((await page.textContent('#facts'))?.includes('7 of 8'), 'the key has 7 signatures left');
+
+  await page.waitForFunction(() => (document.getElementById('swap-quote')?.textContent ?? '').startsWith('About'), undefined, { timeout: 60_000 });
+  check(true, `a quote from the pool's own state: ${await page.textContent('#swap-quote')}`);
+  await page.fill('#swap-amount', '0.001');
+  await page.click('#swap');
+  const swapped = await statusIs('Swapped on Uniswap v4');
+  check(Number(/: ([0-9.]+) pqUSD/.exec(swapped)?.[1]) > 1.9, `swapped on Uniswap v4 with a FORS+C signature only: ${swapped}`);
+  check((await page.textContent('#facts'))?.includes('6 of 8'), 'the key has 6 signatures left');
   if (process.env['SHOT']) await page.screenshot({ path: join(process.env['SHOT'], 'devnet-page.jpg'), type: 'jpeg', quality: 80, fullPage: true });
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 } finally {

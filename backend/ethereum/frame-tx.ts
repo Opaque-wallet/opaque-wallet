@@ -7,7 +7,7 @@
 //   node --use-system-ca ethereum/frame-tx.ts factory   deploys the account factory (infrastructure, once)
 //   node --use-system-ca ethereum/frame-tx.ts create    a new FORS key, its address funded, its account created:
 //                                                       the factory pays, and no ECDSA key signs anything
-//   node --use-system-ca ethereum/frame-tx.ts send      VERIFY (FORS+C) + one transfer
+//   node --use-system-ca ethereum/frame-tx.ts send [to] [eth]   VERIFY (FORS+C) + one transfer (default: 1 gwei to the deployer)
 //   node --use-system-ca ethereum/frame-tx.ts attack    the same, signed by another FORS key: must be refused
 //   node --use-system-ca ethereum/frame-tx.ts pool      one atomic FORS-signed transaction: deploy pqUSD, approve,
 //                                                       create the ETH/pqUSD v4 pool, add liquidity (once)
@@ -103,7 +103,10 @@ async function create(): Promise<void> {
 
 async function send(): Promise<void> {
   const { account, key } = current();
-  const hash = await sendCalls(account, key, [{ to: deployer().address, value: 1_000_000_000n, gas: 50_000n }]);
+  const to = (process.argv[3] ?? deployer().address) as Address;
+  const value = process.argv[4] === undefined ? 1_000_000_000n : parseEther(process.argv[4]);
+  // A transfer to an address with no account yet creates one: state gas (EIP-8037).
+  const hash = await sendCalls(account, key, [{ to, value, gas: 50_000n, state: 200_000n }]);
   const r = await settled(hash);
   console.log(`sent ${hash}, mined in block ${BigInt(r.blockNumber)}, every frame ok\n${txUrl(hash)}`);
 }

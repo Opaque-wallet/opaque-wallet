@@ -84,7 +84,23 @@ export async function accountOf(key: Hex): Promise<Address> {
   return decodeFunctionResult({ abi: FACTORY_ABI, functionName: 'accountOf', data: out });
 }
 
-const send = (tx: FrameTx): Promise<Hex> => call('eth_sendFrameTransaction', [toWire(tx)]);
+/**
+ * Into the alt mempool. The gateway is its front door and relays to the miner
+ * over p2p; when that relay dropped (6 November) a transaction sat in the
+ * gateway unmined while the miner, given it directly, mined it at once. So it
+ * goes to both: whichever hears first, the other answers "already known".
+ */
+async function send(tx: FrameTx): Promise<Hex> {
+  const wire = toWire(tx);
+  const [gateway, miner] = await Promise.allSettled([
+    call('eth_sendFrameTransaction', [wire]),
+    rpc(`${devnet.miner}/rpc`, 'eth_sendFrameTransaction', [wire]),
+  ]);
+  if (gateway.status === 'fulfilled') return gateway.value;
+  if (miner.status === 'fulfilled') return miner.value;
+  // The gateway runs the admission rules, so its reason is the one worth showing.
+  throw gateway.reason;
+}
 
 /** Creates the account for `key`, in a transaction the factory pays for. Nothing signs it. */
 export async function createAccount(key: Hex): Promise<Hex> {

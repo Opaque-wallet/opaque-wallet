@@ -8,6 +8,7 @@
 // the page shows the transaction, not Opaque's network privacy.
 
 import { accountOf, balanceOf, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyOf, MAX_USES, nonceOf, parseEther, sendCalls, settled, txUrl, type ForsKey } from '../../../backend/ethereum/frame.ts';
+import { quote, swapCall, tokenBalance } from '../../../backend/ethereum/uniswap.ts';
 import { unlockGate } from '../lib/lock.ts';
 import { networkPicker } from '../lib/network-picker.ts';
 import { accountLabel, activeAccount, stream } from '../lib/wallet-keys.ts';
@@ -17,6 +18,7 @@ const el = <T extends HTMLElement = HTMLElement>(id: string): T => document.getE
 /** Lets the status paint before a step that holds the page (signing takes about a second). */
 const paint = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => setTimeout(ok, 0)));
 const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const amount = (wei: bigint): string => Number(formatEther(wei)).toFixed(4);
 const status = (text: string): void => { el('status').textContent = text; };
 const buttons = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>('#home button')];
 
@@ -37,18 +39,30 @@ function facts(rows: readonly (readonly [string, string, (() => void)?])[]): voi
 }
 
 async function refresh(): Promise<void> {
-  const [created, wei, nonce] = await Promise.all([hasCode(account), balanceOf(account), nonceOf(account)]);
+  const [created, wei, nonce, usd] = await Promise.all([hasCode(account), balanceOf(account), nonceOf(account), tokenBalance(account)]);
   const used = created ? nonce - FIRST_NONCE : 0n;
-  el('balance').textContent = Number(formatEther(wei)).toFixed(4);
+  el('balance').textContent = amount(wei);
+  el('facts').dataset['account'] = account;
   facts([
     ['Account', short(account), () => copy(account, 'Address')],
     ['Status', created ? 'Created' : 'Not created yet: its address is fixed by its key, so it can be funded first'],
     ['Key', `FORS+C, k=13 a=13: ${short(keyOf(key))}`],
     ['Signatures left', `${MAX_USES - used} of ${MAX_USES}, then the account hands over to its next key`],
+    ['pqUSD', amount(usd)],
   ]);
   el('create').hidden = created;
   el('send-form').hidden = !created;
+  el('swap-form').hidden = !created;
+  if (created) void quoteSwap();
 }
+
+/** What the amount in the swap box buys now, from the pool's own state. */
+async function quoteSwap(): Promise<void> {
+  let wei: bigint;
+  try { wei = parseEther(el<HTMLInputElement>('swap-amount').value.trim()); } catch { el('swap-quote').textContent = 'Enter an amount in ETH, like 0.001.'; return; }
+  el('swap-quote').textContent = wei > 0n ? `About ${amount(await quote(wei))} pqUSD now; the swap takes no less than 99% of that.` : '';
+}
+el('swap-amount').addEventListener('input', () => void quoteSwap().catch(() => undefined));
 
 function logged(hash: `0x${string}`, what: string): void {
   const a = Object.assign(document.createElement('a'), { href: txUrl(hash), target: '_blank', rel: 'noopener', textContent: short(hash) });
@@ -100,6 +114,22 @@ el('send-form').addEventListener('submit', (e) => {
     await settled(hash);
     logged(hash, `Sent ${amount} ETH to ${short(to)}`);
     return `Sent. The only signature in it is FORS+C (${short(hash)}).`;
+  });
+});
+
+el('swap-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  let wei: bigint;
+  try { wei = parseEther(el<HTMLInputElement>('swap-amount').value.trim()); } catch { status('Enter an amount in ETH, like 0.001.'); return; }
+  void step('Signing the swap with your post-quantum key…', async () => {
+    const before = await tokenBalance(account);
+    const { call } = await swapCall(wei);
+    const hash = await sendCalls(account, key, [call]);
+    status('Swapping on Uniswap v4, through the alt mempool…');
+    await settled(hash);
+    const got = (await tokenBalance(account)) - before;
+    logged(hash, `Swapped ${formatEther(wei)} ETH for ${amount(got)} pqUSD`);
+    return `Swapped on Uniswap v4: ${amount(got)} pqUSD. The only signature in it is FORS+C.`;
   });
 });
 

@@ -45,11 +45,18 @@
       <div class="dialog-actions"><button class="primary" id="send" type="submit">Sign with FORS+C and send</button></div>
     </form>
 
+    <form id="swap-form" hidden>
+      <div class="list-head"><span>Swap ETH for pqUSD on Uniswap v4</span></div>
+      <label class="field" for="swap-amount"><span>Pay (ETH)</span><input id="swap-amount" type="text" inputmode="decimal" value="0.001"></label>
+      <p class="status" id="swap-quote"></p>
+      <div class="dialog-actions"><button class="primary" id="swap" type="submit">Sign with FORS+C and swap</button></div>
+    </form>
+
     <div class="list-head"><span>This session</span></div>
     <ul class="facts" id="activity"></ul>
   </section>
 
-  <p class="fine-print">Ethereum's EIP-8141 devnet (chain 1337), test ETH only. Your account answers to one hash-based key, FORS+C, drawn from your recovery phrase. Its factory creates it, and pays for that, so no step needs an ECDSA key: not its creation, not a transaction, not a bundler. This page talks straight to the devnet's gateway; there is no relay mesh on this devnet.</p>
+  <p class="fine-print">Ethereum's EIP-8141 devnet (chain 1337), test ETH only. Your account answers to one hash-based key, FORS+C, drawn from your recovery phrase. Its factory creates it, and pays for that, so no step needs an ECDSA key: not its creation, not a transaction, not a bundler. This page talks straight to the devnet's gateway and miner; there is no relay mesh on this devnet.</p>
 </main>
 <script type="module" src="/src/ethereum/devnet.ts"></script>
 </body>

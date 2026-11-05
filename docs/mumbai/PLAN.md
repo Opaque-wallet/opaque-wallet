@@ -259,8 +259,11 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
   - The devnet runs the newer v4-periphery: `ExactInputSingleParams` carries `minHopPriceX36`, and an impossible value trips its price check.
   - ethrex refuses `eth_call` from a contract address and takes no state overrides. So the quote comes from storage, not a simulation.
 
+- **The wallet page swaps too:** "Swap ETH for pqUSD on Uniswap v4", with a live quote from the pool's state. The browser test runs it after the send; 0.001 ETH bought 1.9357 pqUSD, and 6 signatures were left.
+- **The alt-mempool relay can drop.** On 6 November the gateway held a transaction as "New" while the miner never saw it; given to the miner directly, it was mined at once. `frame.ts` now sends every transaction to both.
+- **The devnet's faucet ran dry on 6 November.** The browser test then funds the page's account from our own account, with a FORS-signed transfer.
+
 **Still to do:**
-- **The wallet page's Swap button** (the same `swapCall`).
 - **SENDER frames that do the demo,** under `ATOMIC_BATCH_FLAG` (all or nothing):
   - (a) set the ENS name and records (the T7 registry, deployed on the devnet);
   - (b) swap or add liquidity on the predeployed v4 (the T8 hook);
