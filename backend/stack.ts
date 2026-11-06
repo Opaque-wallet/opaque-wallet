@@ -582,7 +582,9 @@ for (const p of ringPools) {
   // A banner, not a gate: Arc rate-limits a boot's burst of reads, and a
   // refused scan here crash-looped the service.
   const deposits = await ringSource.getRingSnapshot(scopeOf(p)).then((s) => `${s.candidates.length} deposits`, () => 'deposits unread: RPC busy');
-  log(`  pool       ${p.address}  (${p.proofMode}, ${p.denomination / 1e6} USDC, ${deposits})`);
+  // A WETH pool's size is in wei; a USDC pool's in its 6 decimals.
+  const size = (p as { token?: string }).token !== undefined ? `${p.denomination / 1e18} ETH` : `${p.denomination / 1e6} USDC`;
+  log(`  pool       ${p.address}  (${p.proofMode}, ${size}, ${deposits})`);
 }
 log(`  relays     ${mesh.signed.directory.entries.map((e) => e.endpoint.replace('/v1/relay', '')).join('  ')}`);
 log(`  exit       http://127.0.0.1:${PORTS.exit}   egress :${PORTS.egress}   credentials :${PORTS.credentials}`);
