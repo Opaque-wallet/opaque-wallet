@@ -15,10 +15,10 @@ import { ETHEREUM_COIN, resolveName } from '../ethereum/ens/ens-name.ts';
 
 const KEY = 'opaque-demo';
 const PASSWORD = 'opaque demo password';
-type Phase = 'wallet' | 'funds' | 'payment' | 'swap' | 'name' | 'named' | 'paid' | 'devnet' | 'leave' | 'withdraw' | 'qday' | 'done';
-interface State { phase: Phase; label: string; started: number; exitHost: string; faucet?: boolean; block?: string; note?: string }
+type Phase = 'aims' | 'wallet' | 'funds' | 'payment' | 'swap' | 'name' | 'named' | 'paid' | 'devnet' | 'leave' | 'withdraw' | 'qday' | 'done';
+interface State { phase: Phase; label: string; started: number; exitHost?: string; faucet?: boolean; block?: string; note?: string }
 const PAGE_OF: Record<Phase, string> = {
-  wallet: '/sepolia/app', funds: '/sepolia/app', payment: '/sepolia/app', swap: '/sepolia/app', name: '/sepolia/app', named: '/sepolia/app', paid: '/sepolia/app',
+  aims: '/sepolia/app', wallet: '/sepolia/app', funds: '/sepolia/app', payment: '/sepolia/app', swap: '/sepolia/app', name: '/sepolia/app', named: '/sepolia/app', paid: '/sepolia/app',
   devnet: '/testnet/devnet', leave: '/sepolia/app', withdraw: '/sepolia/app', qday: '/sepolia/q-day', done: '/sepolia/q-day',
 };
 const here = (path: string) => location.pathname.replace(/\.html$/, '').endsWith(path);
@@ -178,6 +178,14 @@ async function pay(to: string, amount: string, wait: string): Promise<void> {
 
 // ── the steps ─────────────────────────────────────────────────────────────────────────────
 const STEPS: Record<Exclude<Phase, 'done'>, () => Promise<void>> = {
+  // From the front page (site/tour.js): the wallet held still while the aims are said.
+  async aims() {
+    await until('the wallet page', () => shown('#terms-continue') || shown('#ob-create') || ready(), 120_000);
+    await say('The demo', 'A wallet · a private payment · Uniswap v4 · an ENS name · the EIP-8141 devnet · leaving without Opaque · Q-Day');
+    await sleep(12_000);
+    next('wallet');
+  },
+
   async wallet() {
     await say('A wallet', '12 words; its FORS+C keys are drawn from them');
     await until('the wallet or its onboarding', () => shown('#terms-continue') || shown('#ob-create') || ready(), 120_000);
@@ -334,7 +342,7 @@ const STEPS: Record<Exclude<Phase, 'done'>, () => Promise<void>> = {
 
   async leave() {
     // Opaque's servers refused from the page's first request: boot.ts, on the next load.
-    if (state!.block === undefined) { state!.block = state!.exitHost; await reloadInto('leave'); }
+    if (state!.block === undefined) { state!.block = state!.exitHost!; await reloadInto('leave'); }
     await say('Without Opaque', 'Every Opaque server down: the wallet offers the way out');
     await until('the way out', () => shown('#exit-card'), 180_000);
     await sleep(3_000);
@@ -420,6 +428,8 @@ function stop(): void {
 async function run(): Promise<void> {
   addEventListener('keydown', (e) => { if (e.key === 'Escape') stop(); });
   overlay();
+  // Set on the Sepolia pages, where the deployment is Sepolia's: a run from the front page arrives without it.
+  if (state !== null && state.exitHost === undefined && here('/sepolia/app')) { state.exitHost = new URL(deployment.services.meshExitUrl ?? location.origin).host; save(); }
   try {
     while (state !== null && state.phase !== 'done') {
       const page = PAGE_OF[state.phase];
