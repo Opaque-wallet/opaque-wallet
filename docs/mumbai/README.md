@@ -73,6 +73,8 @@ Every note can leave its pool with all of Opaque's servers switched off.
 | **Keep MetaMask** | The Q-Day vault: MetaMask puts money in, and only a FORS+C signature takes it out. |
 | **ENSv2 names a quantum computer can't take** | opaque.eth is owned by `PQNameController`, which acts only on a FORS+C signature. `name.opaque.eth` can be claimed only by post-quantum accounts, in the same signature that turns on stealth payments, and it labels the account in the wallet. |
 
+![Any protocol, quantum-safe. Before: one ECDSA key holds a protocol's owner, ProxyAdmin, beacon and roles. After one button: PQAdmin holds them and acts only on a FORS+C signature that PQKeyRegistry checks once; the ECDSA key alone is refused](../../diagrams/any-protocol.svg)
+
 ### In Opaque's own post-quantum accounts
 
 | | |

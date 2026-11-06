@@ -101,6 +101,8 @@ What breaks on the day elliptic-curve discrete logs become computable, and what 
 | **Keep MetaMask** | **The Q-Day vault.** Your ECDSA key puts money in, and only your FORS+C key takes it out. | [Sepolia](https://www.opaque.credit/sepolia/vault) |
 | **Hold an ENS name with a post-quantum key** | **`PQNameController`.** Transfer an ENSv2 name to it, and every role moves with the token: from then on only a FORS+C signature changes its records. opaque.eth is held this way. | Sepolia |
 
+![Any protocol, quantum-safe. Before: one ECDSA key holds a protocol's owner, ProxyAdmin, beacon and roles. After one button: PQAdmin holds them and acts only on a FORS+C signature that PQKeyRegistry checks once; the ECDSA key alone is refused](diagrams/any-protocol.svg)
+
 ### In Opaque's own post-quantum accounts
 
 | You want to… | Opaque does it with… | Live on |

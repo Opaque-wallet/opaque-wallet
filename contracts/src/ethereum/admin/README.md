@@ -1,5 +1,7 @@
 # Quantum-safe admin: any protocol, one button
 
+![Any protocol, quantum-safe. Before: one ECDSA key holds a protocol's owner, ProxyAdmin, beacon and roles. After one button: PQAdmin holds them and acts only on a FORS+C signature that PQKeyRegistry checks once; the ECDSA key alone is refused](../../../../diagrams/any-protocol.svg)
+
 ## Index
 
 | File | What |

@@ -1,5 +1,5 @@
-// diagrams/{uniswap,ens,ethereum-foundation}.{excalidraw,svg,png}: one diagram per ETHGlobal Mumbai
-// partner, drawn by Excalidraw itself (esm.sh, in Chromium) like diagrams/ethereum.*.
+// diagrams/{uniswap,ens,ethereum-foundation,any-protocol}.{excalidraw,svg,png}: one diagram per ETHGlobal
+// Mumbai partner, and one for making any protocol quantum-safe, drawn by Excalidraw itself (esm.sh, in Chromium) like diagrams/ethereum.*.
 // Edit the .excalidraw files on excalidraw.com, or change this and run it again:
 //   node --use-system-ca scripts/diagram-partners.ts      (in backend/)
 
@@ -164,6 +164,35 @@ const ef = [
   box(60, 965, 2080, 100, 'EF anon-rpc (the Nox mixnet) in the wallet: a sandboxed, null-origin iframe runs only the worker whose keccak matches the on-chain\nspecifier (0x3513…7A9A). Every ENS lookup goes through it always; the account\'s reads and UserOperations, with one switch.', O, 16),
 ];
 
+const anyProtocol = [
+  text(40, 20, 'Any protocol, quantum-safe: its admin keys move to PQAdmin', 36),
+  text(40, 72, 'One button at opaque.credit/sepolia/quantum-safe · live on Sepolia · OpenZeppelin\'s ProxyAdmin, beacons, Ownable, AccessControl and AccessManager', 20, GREY),
+
+  // Before
+  frame(40, 130, 900, 500),
+  text(60, 142, 'Before: one ECDSA key decides everything', 18),
+  box(80, 290, 300, 120, 'The team\'s MetaMask\none ECDSA key', G),
+  box(580, 290, 320, 120, 'Your protocol\nupgrades · fees · pause\nroles', G),
+  arrow([[382, 350], [578, 350]], 'owner · ProxyAdmin\nbeacon · roles'),
+  box(80, 470, 820, 110, 'Q-Day: whoever derives this key from its public key\nupgrades, pauses or drains the protocol', K, 18),
+
+  // After
+  frame(980, 130, 1340, 500),
+  text(1000, 142, 'After one button', 18),
+  box(1010, 190, 360, 125, 'Guard key · FORS+C\nfrom 12 words of its own\nat most 8 signatures, then the next', O, 17),
+  box(1500, 310, 300, 115, 'PQAdmin\nacts only on a\nFORS+C signature', K, 18),
+  box(1930, 310, 360, 115, 'Your protocol\nevery admin power,\nheld by PQAdmin', G),
+  box(1010, 455, 360, 125, 'PQKeyRegistry.consume\nthis exact call, once,\nat the key\'s use count', O, 17),
+  box(1930, 490, 360, 110, 'The MetaMask key alone\nrefused:\nOwnableUnauthorizedAccount', K, 17),
+  arrow([[1372, 252], [1650, 252], [1650, 308]], 'signs execute(target, data, deadline)'),
+  arrow([[1498, 400], [1372, 500]], 'checks'),
+  arrow([[1802, 368], [1928, 368]], 'calls it'),
+  arrow([[2110, 488], [2110, 427]], '✕'),
+
+  // How it holds up
+  box(40, 670, 2280, 100, 'Anyone may submit a signed call: paying authorises nothing · the key rotates, and PQAdmin names the team\'s address, not a key, so nothing changes\nFound and handed over: an owner (two-step too) · a ProxyAdmin or EIP-1967 admin · a beacon · every AccessControl role · an AccessManager\'s admin role', O, 17),
+];
+
 const html = `<!doctype html><html><body><script type="module">
   import * as X from 'https://esm.sh/@excalidraw/excalidraw@0.18.0?bundle-deps';
   window.make = async ([skeleton, name]) => {
@@ -189,7 +218,7 @@ await page.goto('https://example.com');
 await page.setContent(html);
 await page.waitForFunction(() => (window as unknown as { ready?: boolean }).ready === true, undefined, { timeout: 120_000 });
 const dir = new URL('../../diagrams/', import.meta.url).pathname;
-for (const [name, els] of [['uniswap', uniswap], ['ens', ens], ['ethereum-foundation', ef]] as const) {
+for (const [name, els] of [['uniswap', uniswap], ['ens', ens], ['ethereum-foundation', ef], ['any-protocol', anyProtocol]] as const) {
   const out = await page.evaluate((a) => (window as unknown as { make: (a: unknown) => Promise<{ svg: string; json: string; png: string }> }).make(a), [els, `opaque-${name}`]);
   writeFileSync(join(dir, `${name}.svg`), out.svg);
   writeFileSync(join(dir, `${name}.excalidraw`), out.json);

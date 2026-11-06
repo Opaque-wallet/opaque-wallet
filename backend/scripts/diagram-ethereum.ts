@@ -21,13 +21,15 @@ const arrow = (pts: [number, number][], label?: string, size = 15) => ({
 });
 
 const els = [
-  text(40, 20, 'Opaque on Ethereum: every signature FORS+C, private by default', 36),
+  text(40, 20, 'Opaque: the post-quantum security layer for Ethereum', 36),
   text(40, 72, 'Live on Sepolia and the EIP-8141 devnet  ·  ETHGlobal Mumbai  ·  opaque.credit', 20, '#495057'),
 
   // You
   box(40, 130, 360, 300, 'Opaque wallet\n\nweb · extension · phone\nFORS+C keys from one\nrecovery phrase, sealed\nin the browser; they\nrotate themselves', W, 20),
   box(40, 480, 360, 110, 'Any dapp\n(EIP-6963: Opaque listed\nbeside MetaMask)'),
   box(40, 640, 360, 110, 'MetaMask users\nkeep MetaMask, guard it\nwith the Q-Day vault'),
+  box(40, 800, 360, 130, 'Any protocol\nowner · ProxyAdmin · beacon · roles\nhanded to its PQAdmin:\nFORS+C only', O, 17),
+  arrow([[220, 932], [220, 1098]], 'admin keys\nquantum-safe'),
   arrow([[220, 478], [220, 434]]),
 
   // Path A
@@ -45,7 +47,7 @@ const els = [
   text(478, 490, 'Path B · Sepolia · one ERC-4337 UserOperation', 17),
   box(480, 525, 560, 60, 'signature = FORS+C, checked by\nPQAccount + PQKeyRegistry'),
   text(482, 600, 'one executeBatch: send · swap · claim a name ·\ndeposit · a dapp\'s call approved in Opaque', 16, '#495057'),
-  text(482, 655, 'keys hand over to the next before they run out', 16, '#495057'),
+  text(482, 655, 'each key signs at most 8 times, then hands over to the next', 16, '#495057'),
   arrow([[402, 380], [430, 380], [430, 590], [458, 590]], 'Sepolia'),
 
   // Infrastructure
@@ -76,7 +78,7 @@ const els = [
   box(1890, 645, 440, 125, 'Stealth, post-quantum\nERC-6538: your ML-KEM-768 key\nERC-5564: the announcements'),
   box(1430, 785, 440, 110, 'Exitable pools · tUSDC and WETH\nleave without us:\nannounce, wait, reveal'),
   box(1890, 785, 440, 110, 'Q-Day vault\nin: any wallet · out: FORS+C only'),
-  text(1430, 910, 'every name, pool, hook and the vault answer to the same FORS+C key format', 16, '#495057'),
+  text(1430, 910, 'names, pools, hooks, the vault and every PQAdmin: one FORS+C key format', 16, '#495057'),
 
   // Privacy layer
   frame(460, 760, 600, 250),
@@ -93,11 +95,11 @@ const els = [
   arrow([[1362, 945], [1408, 935]]),
 
   // MetaMask → vault
-  arrow([[220, 752], [220, 1050], [2110, 1050], [2110, 897]]),
+  arrow([[402, 695], [440, 695], [440, 1050], [2110, 1050], [2110, 897]]),
   text(1180, 1018, 'MetaMask deposits; only FORS+C withdraws', 16, '#495057'),
 
   // Core
-  box(40, 1100, 2310, 110, 'PQ AUTH CORE · PQKeyRegistry + ForsVerifier / LeanFors\none FORS+C key format for accounts, names, LP guards and the vault · few-time keys, the next one committed ahead · hash-based: nothing for Shor\'s algorithm to attack', O, 22),
+  box(40, 1100, 2310, 110, 'PQ AUTH CORE · PQKeyRegistry + ForsVerifier / LeanFors\none FORS+C key format for accounts, names, LP guards, the vault and protocols\' admin keys · at most 8 signatures a key, the next one committed ahead · hash-based: nothing for Shor\'s algorithm to attack', O, 22),
 ];
 
 const html = `<!doctype html><html><body><script type="module">
