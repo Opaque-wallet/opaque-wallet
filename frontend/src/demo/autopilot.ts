@@ -71,7 +71,7 @@ function moveTo(x: number, y: number): void {
   at = { x, y };
 }
 function ring(): void { const c = document.getElementById('demo-cursor')!; c.classList.remove('down'); void c.offsetWidth; c.classList.add('down'); }
-function caption(step: string, text: string, buttons: [string, () => void, boolean?][] = [['Stop', stop, true]]): void {
+function caption(step: string, text: string, buttons: [string, () => void, boolean?][] = [['Skip', () => { skipping = true; }, true], ['Stop', stop, true]]): void {
   const c = make('demo-caption');
   c.replaceChildren(Object.assign(document.createElement('span'), {}));
   c.firstElementChild!.append(Object.assign(document.createElement('b'), { textContent: step }), text);
@@ -96,8 +96,10 @@ async function say(step: string, text: string): Promise<void> { log(`${step}: ${
 
 // ── acting as a person does ───────────────────────────────────────────────────────────────
 const STOP = new Error('stopped');
+const SKIP = new Error('skipped');
 let stopped = false;
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)).then(() => { if (stopped) throw STOP; });
+let skipping = false;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)).then(() => { if (stopped) throw STOP; if (skipping) throw SKIP; });
 const q = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel);
 const shown = (sel: string) => q(sel)?.checkVisibility() === true;
 const text = (id: string) => (document.getElementById(id)?.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -109,7 +111,7 @@ async function until(what: string, test: () => boolean | Promise<boolean>, ms = 
   }
 }
 /** Waits, without failing the run if `what` never comes. */
-const maybe = (p: Promise<void>) => p.catch((e) => { if (e === STOP) throw e; });
+const maybe = (p: Promise<void>) => p.catch((e) => { if (e === STOP || e === SKIP) throw e; });
 
 async function point(sel: string): Promise<HTMLElement> {
   await until(`${sel} to show`, () => shown(sel), 180_000);
@@ -152,6 +154,13 @@ async function status(id: string, done: RegExp, failed: RegExp, wait = '', ms = 
   return text(id);
 }
 const next = (phase: Phase) => { state!.phase = phase; save(); };
+const ORDER: Phase[] = ['aims', 'wallet', 'funds', 'payment', 'swap', 'name', 'named', 'paid', 'found', 'devnet', 'leave', 'withdraw', 'protocol', 'qday', 'done'];
+/** Skip: on to the step after this one. The way out without Opaque is skipped whole, and Opaque's servers come back. */
+function skipTo(): Phase {
+  const at = state!.phase;
+  if (at === 'leave' || at === 'withdraw') { delete state!.block; return 'protocol'; }
+  return ORDER[Math.min(ORDER.indexOf(at) + 1, ORDER.length - 1)]!;
+}
 /** Reloads into `phase`: the run goes on from there when the page is back. */
 const reloadInto = async (phase: Phase): Promise<never> => { next(phase); location.reload(); return new Promise<never>(() => undefined); };
 const hex = (bytes: number) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -393,9 +402,17 @@ const STEPS: Record<Exclude<Phase, 'done'>, () => Promise<void>> = {
     if (note === undefined) throw new Error(`no notes to take out: ${text('exit-status')}`);
     state!.note = note; save();
     await sleep(2_000);
-    clear('exit-status');
-    await press(`#exit-notes button[data-note="${note}"]`);
-    await status('exit-status', /^Exit announced/, /^Not done/, 'the announcement', 300_000);
+    // anon-rpc's mixnet drops a request now and then (a tunnel that doesn't open): pressed again.
+    for (let attempt = 1; ; attempt++) {
+      clear('exit-status');
+      await press(`#exit-notes button[data-note="${note}"]`);
+      try { await status('exit-status', /^Exit announced/, /^Not done/, 'the announcement', 300_000); break; } catch (error) {
+        if (error === STOP || error === SKIP || attempt >= 4 || !/network-error|Tunnel|timed? ?out|did not answer/i.test((error as Error).message)) throw error;
+        waiting();
+        log(`${(error as Error).message}: Start exit again`);
+        await sleep(10_000);
+      }
+    }
     await say('Without Opaque', 'Announced on chain; the pool waits five minutes, then pays');
     await sleep(4_000);
     next('withdraw');
@@ -515,13 +532,24 @@ function stop(): void {
 async function run(): Promise<void> {
   addEventListener('keydown', (e) => { if (e.key === 'Escape') stop(); });
   overlay();
+  // Skip and Stop from the first moment of every page, before a step has said anything.
+  if (state !== null && state.phase !== 'done') caption('Opaque demo', 'Carrying on…');
   // Set on the Sepolia pages, where the deployment is Sepolia's: a run from the front page arrives without it.
   if (state !== null && state.exitHost === undefined && here('/sepolia/app')) { state.exitHost = new URL(deployment.services.meshExitUrl ?? location.origin).host; save(); }
   try {
     while (state !== null && state.phase !== 'done') {
       const page = PAGE_OF[state.phase];
       if (!here(page)) { location.href = `${location.origin}${page}`; return; }
-      await STEPS[state.phase as Exclude<Phase, 'done'>]();
+      try { await STEPS[state.phase as Exclude<Phase, 'done'>](); } catch (error) {
+        if (error !== SKIP) throw error;
+        skipping = false;
+        waiting();
+        log(`skipped ${state.phase}`);
+        const to = skipTo();
+        next(to);
+        // A skipped step may have left its page mid-way: the next one starts on a fresh load.
+        if (PAGE_OF[to] === PAGE_OF[ORDER[ORDER.indexOf(to) - 1] ?? to]) { location.reload(); return; }
+      }
     }
     if (state === null) return;
     log('the demo is done');
@@ -531,7 +559,7 @@ async function run(): Promise<void> {
     if (error === STOP) return;
     waiting();
     log(`stopped at ${state?.phase}: ${(error as Error).message}`);
-    caption('Stopped', `${(error as Error).message.split('\n')[0]}. Reload to try this step again.`, [['Stop', stop, true]]);
+    caption('Stopped', `${(error as Error).message.split('\n')[0]}. Reload to try this step again, or skip it.`, [['Skip', () => { if (state !== null) { next(skipTo()); location.reload(); } }, true], ['Stop', stop, true]]);
   }
 }
 
