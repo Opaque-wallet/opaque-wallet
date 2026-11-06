@@ -40,49 +40,73 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 ## 1. The problem, and Opaque (0:00–0:38)
 
-| Time | On screen | Voiceover |
-|---|---|---|
-| 0:00 | You on camera: no Opaque page on screen yet | "Hi, I'm Swarnim from Opaque. We're building the quantum-safe layer for Ethereum." |
-| 0:06 | Cut to GitHub: diagrams/q-day.svg, the quantum computer at the top | "Every Ethereum account that has ever signed has put its public key on chain. A quantum computer turns that public key back into the private key." |
-| 0:16 | Same diagram: Wallets, Uniswap positions, ENS names, Protocol admin keys | "So wallets, Uniswap positions, ENS names and protocols' admin keys can all be taken." |
-| 0:24 | Same diagram: Stealth payments, SNARK privacy pools | "And privacy breaks backwards: stealth payments hidden with today's curves can be unmasked later, all at once. The data is already on chain." |
-| 0:32 | Same diagram: the orange Opaque box at the bottom | "Opaque moves every one of these to hash-based keys, today, without a fork." |
+**Say this, as one paragraph:**
+
+> Hi, I'm Swarnim from Opaque. We're building the quantum-safe layer for Ethereum. Every Ethereum account that has ever signed has put its public key on chain. A quantum computer turns that public key back into the private key. So wallets, Uniswap positions, ENS names and protocols' admin keys can all be taken. And privacy breaks backwards: stealth payments hidden with today's curves can be unmasked later, all at once. The data is already on chain. Opaque moves every one of these to hash-based keys, today, without a fork.
+
+**On screen:**
+
+| Time | Show |
+|---|---|
+| 0:00 | You on camera: no Opaque page on screen yet |
+| 0:06 | Cut to GitHub: diagrams/q-day.svg, the quantum computer at the top |
+| 0:16 | Same diagram: Wallets, Uniswap positions, ENS names, Protocol admin keys |
+| 0:24 | Same diagram: Stealth payments, SNARK privacy pools |
+| 0:32 | Same diagram: the orange Opaque box at the bottom |
 
 ## 2. The architecture (0:38–2:08)
 
-| Time | On screen | Voiceover |
-|---|---|---|
-| 0:38 | The core: GitHub: diagrams/opaque.svg, the README top: the PQ auth core at the bottom | "This is all of Opaque. At the bottom is the core: every orange box acts only on a FORS+C signature, a hash-based key checked in one registry. No key signs more than eight times." |
-| 0:52 | How it is sent: Same diagram: Who, then How it's sent | "The Opaque wallet holds those keys. It signs EIP-8141 frame transactions on the devnet, ERC-4337 operations on Sepolia, and reads through EF's anon-rpc." |
-| 1:02 | Privacy: Same diagram: Private payments, left to right | "Payments: a ring proof shows a note is one of eight, three relays carry it sealed with ML-KEM, our attester verifies and signs, and the pool pays. The payer's account sends nothing." |
-| 1:16 | ENS · Stealth: Same diagram: ENS, then Stealth addresses | "Names: opaque.eth is held by a FORS+C-only controller, and name.opaque.eth goes only to post-quantum accounts. Paying a name pays a one-time account, hidden with ML-KEM." |
-| 1:28 | Any protocol · EIP-8141: Same diagram: Keep what you have, then EIP-8141 devnet | "Nobody has to switch: MetaMask keeps funds in the Q-Day vault, protocols hand their admin keys to PQAdmin, and dapps list Opaque beside MetaMask. On EIP-8141, accounts verify themselves." |
-| 1:41 | Uniswap · Exit: Same diagram: Uniswap v4, then Leave without Opaque | "On Uniswap v4, our hooks let only post-quantum accounts trade, and PQGuardHook protects any LP. And if Opaque disappears, every note still leaves its pool: announce, wait, reveal." |
-| 1:55 | The whole picture: Same diagram, whole | "One hash-based key under all of it: wallets, names, liquidity, admin keys and private payments." |
+**Say this, as one paragraph:**
+
+> This is all of Opaque. At the bottom is the core: every orange box acts only on a FORS+C signature, a hash-based key checked in one registry. No key signs more than eight times. The Opaque wallet holds those keys. It signs EIP-8141 frame transactions on the devnet, ERC-4337 operations on Sepolia, and reads through EF's anon-rpc. Payments: a ring proof shows a note is one of eight, three relays carry it sealed with ML-KEM, our attester verifies and signs, and the pool pays. The payer's account sends nothing. Names: opaque.eth is held by a FORS+C-only controller, and name.opaque.eth goes only to post-quantum accounts. Paying a name pays a one-time account, hidden with ML-KEM. Nobody has to switch: MetaMask keeps funds in the Q-Day vault, protocols hand their admin keys to PQAdmin, and dapps list Opaque beside MetaMask. On EIP-8141, accounts verify themselves. On Uniswap v4, our hooks let only post-quantum accounts trade, and PQGuardHook protects any LP. And if Opaque disappears, every note still leaves its pool: announce, wait, reveal. One hash-based key under all of it: wallets, names, liquidity, admin keys and private payments.
+
+**On screen:**
+
+| Time | Show |
+|---|---|
+| 0:38 | GitHub: diagrams/opaque.svg, the README top: the PQ auth core at the bottom |
+| 0:52 | Same diagram: Who, then How it's sent |
+| 1:02 | Same diagram: Private payments, left to right |
+| 1:16 | Same diagram: ENS, then Stealth addresses |
+| 1:28 | Same diagram: Keep what you have, then EIP-8141 devnet |
+| 1:41 | Same diagram: Uniswap v4, then Leave without Opaque |
+| 1:55 | Same diagram, whole |
 
 ## 3. The demo (2:08–4:13)
 
-| Time | On screen | Voiceover |
-|---|---|---|
-| 2:08 | 3.1 The layer: opaque.credit/testnet/devnet → Activity → a Deposit transaction → Explorer ↗ (frames view) | "On the devnet, a deposit. Frame zero: the account checks its own FORS+C signature in 76,430 gas, under the 100,000 cap; we rewrote the verifier in assembly to fit. Seven frames follow." |
-| 2:21 | 3.2 Any protocol: Wallet's network drop-down → Keep what you have · Sepolia → Quantum-safe admin → Make a demo with roles → Make it quantum-safe → Take it back with the cracked key → Sign and upgrade | "From the wallet's menu: this contract's beacon and three roles sit on my MetaMask. One button hands them all to my PQAdmin. The cracked key is refused on all four; a signed upgrade goes through." |
-| 2:41 | 3.3 Any LP: GitHub: diagrams/uniswap.svg, then the terminal output of uniswap-sepolia.ts | "On Uniswap's own Sepolia v4, removing guarded liquidity pays only the recipient its FORS+C signature names. In our pools, an ordinary wallet's swap reverts." |
-| 2:52 | 3.4 MetaMask: opaque.credit/sepolia/vault → Deposit → Withdraw with the cracked key → "Refused by the chain: BadSignature" | "Keep MetaMask: put money in the Q-Day vault. A thief with the cracked MetaMask key is refused. Only the guard key's signature takes it out." |
-| 3:03 | 3.5 Any dapp: opaque.credit/connect-opaque: Opaque beside MetaMask → connect → Send 0.0001 ETH → approve in Opaque | "Any dapp lists Opaque beside MetaMask. Each transaction is approved in Opaque and signed with a hash-based key." |
-| 3:11 | 3.6 Private payment: Split screen. Left: opaque.credit/sepolia/app → Send 5 tUSDC. Right: railway logs --service opaque-sepolia | "I pay five dollars privately. The proof is built in my browser, and my note's secret never leaves it." |
-| 3:18 | 3.6 Private payment: Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" | "It crosses three relays as onion layers and arrives still sealed." |
-| 3:24 | 3.6 Private payment: Right: "settler  opened payment…", then "ring proof verified in 2.0 s; attested with the attester's FORS+C key…" | "Our attester verifies the ring proof and signs with its own hash-based key." |
-| 3:30 | 3.6 Private payment: Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…". Click the link. | "The pool pays. On Etherscan, the sender is our settler: my account sent nothing." |
-| 3:37 | 3.7 A name: Sepolia wallet → Names → claim yourname.opaque.eth → Send → type the name | "One signature claims a real ENSv2 name and publishes my ML-KEM key. Paying the name pays a fresh one-time account no quantum computer can link later." |
-| 3:49 | 3.8 Leave: DevTools → Network → block *opaque* and *railway.app* → reload | "Now I block every Opaque server." |
-| 3:53 | 3.8 Leave: Privacy → Leave without Opaque → Find my notes, without Opaque | "The wallet still finds my notes, through EF's anon-rpc and a public bundler." |
-| 4:00 | 3.8 Leave: The withdrawal step (cut the 300-second wait in the edit) | "It announces the exit, waits, then reveals the note. The contract recomputes it with AES-128 on chain and pays. No permission needed, not even ours." |
+**Say this, as one paragraph:**
+
+> On the devnet, a deposit. Frame zero: the account checks its own FORS+C signature in 76,430 gas, under the 100,000 cap; we rewrote the verifier in assembly to fit. Seven frames follow. From the wallet's menu: this contract's beacon and three roles sit on my MetaMask. One button hands them all to my PQAdmin. The cracked key is refused on all four; a signed upgrade goes through. On Uniswap's own Sepolia v4, removing guarded liquidity pays only the recipient its FORS+C signature names. In our pools, an ordinary wallet's swap reverts. Keep MetaMask: put money in the Q-Day vault. A thief with the cracked MetaMask key is refused. Only the guard key's signature takes it out. Any dapp lists Opaque beside MetaMask. Each transaction is approved in Opaque and signed with a hash-based key. I pay five dollars privately. The proof is built in my browser, and my note's secret never leaves it. It crosses three relays as onion layers and arrives still sealed. Our attester verifies the ring proof and signs with its own hash-based key. The pool pays. On Etherscan, the sender is our settler: my account sent nothing. One signature claims a real ENSv2 name and publishes my ML-KEM key. Paying the name pays a fresh one-time account no quantum computer can link later. Now I block every Opaque server. The wallet still finds my notes, through EF's anon-rpc and a public bundler. It announces the exit, waits, then reveals the note. The contract recomputes it with AES-128 on chain and pays. No permission needed, not even ours.
+
+**On screen:**
+
+| Time | Show |
+|---|---|
+| 2:08 | opaque.credit/testnet/devnet → Activity → a Deposit transaction → Explorer ↗ (frames view) |
+| 2:21 | Wallet's network drop-down → Keep what you have · Sepolia → Quantum-safe admin → Make a demo with roles → Make it quantum-safe → Take it back with the cracked key → Sign and upgrade |
+| 2:41 | GitHub: diagrams/uniswap.svg, then the terminal output of uniswap-sepolia.ts |
+| 2:52 | opaque.credit/sepolia/vault → Deposit → Withdraw with the cracked key → "Refused by the chain: BadSignature" |
+| 3:03 | opaque.credit/connect-opaque: Opaque beside MetaMask → connect → Send 0.0001 ETH → approve in Opaque |
+| 3:11 | Split screen. Left: opaque.credit/sepolia/app → Send 5 tUSDC. Right: railway logs --service opaque-sepolia |
+| 3:18 | Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" |
+| 3:24 | Right: "settler  opened payment…", then "ring proof verified in 2.0 s; attested with the attester's FORS+C key…" |
+| 3:30 | Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…". Click the link. |
+| 3:37 | Sepolia wallet → Names → claim yourname.opaque.eth → Send → type the name |
+| 3:49 | DevTools → Network → block *opaque* and *railway.app* → reload |
+| 3:53 | Privacy → Leave without Opaque → Find my notes, without Opaque |
+| 4:00 | The withdrawal step (cut the 300-second wait in the edit) |
 
 ## 4. The close (4:13–4:30)
 
-| Time | On screen | Voiceover |
-|---|---|---|
-| 4:13 | The GitHub README's top: logo, badges, diagram | "Opaque: the post-quantum security layer for Ethereum. Live on Sepolia and the EIP-8141 devnet, with 154 contract tests, 396 backend tests and eight browser suites. One operator today; multiple independent operators before mainnet." |
+**Say this, as one paragraph:**
+
+> Opaque: the post-quantum security layer for Ethereum. Live on Sepolia and the EIP-8141 devnet, with 154 contract tests, 396 backend tests and eight browser suites. One operator today; multiple independent operators before mainnet.
+
+**On screen:**
+
+| Time | Show |
+|---|---|
+| 4:13 | The GitHub README's top: logo, badges, diagram |
 
 ## Before you record
 
