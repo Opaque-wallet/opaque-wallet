@@ -33,6 +33,14 @@ function signFor(key: RegistryKey, chainId: bigint, controller: Address, useCoun
 }
 
 /**
+ * Any PQKeyRegistry.consume(account, payload, signature) at the key's `useCount`: the
+ * registry digests `payload` inside its user-action domain (the Q-Day vault's withdrawals,
+ * the Uniswap guard's removals).
+ */
+export const signAction = (key: RegistryKey, chainId: bigint, account: Address, useCount: bigint, payload: Hex): Hex =>
+  signFor(key, chainId, account, useCount, userActionPayload(payload));
+
+/**
  * PQKeyRegistry.rotate(controller, next, maxUses, deadline, signature): the key in
  * force promotes the pre-committed next key and commits `next` after it.
  */

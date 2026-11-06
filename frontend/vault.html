@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Q-Day Vault</title>
+<meta name="description" content="Keep your MetaMask wallet; protect what's in it. ETH and tokens in the Q-Day vault come out only with a post-quantum FORS+C signature, so a cracked ECDSA key takes nothing.">
+<meta name="theme-color" content="#070608">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&family=Quicksand:wght@700&display=swap">
+<style>
+  :root {
+    --ink: #070608; --surface: #0d0b0f; --raised: #151117; --cream: #f4efe9; --muted: #aaa19b; --faint: #746b66;
+    --line: rgba(244, 239, 233, 0.12); --orange: #ff7a18; --soft: #ffa052; --tint: rgba(255, 122, 24, 0.12);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--ink); color: var(--cream); font: 400 16px/1.6 "Poppins", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--soft); }
+  .wrap { width: min(100%, 980px); margin: 0 auto; padding: 0 max(18px, env(safe-area-inset-left, 0px)) 0 max(18px, env(safe-area-inset-right, 0px)); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; border-bottom: 1px solid var(--line); }
+  header img { height: 28px; display: block; }
+  header span { color: var(--muted); font-size: 14px; padding-left: 12px; border-left: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .hero { padding-block: 56px 28px; display: grid; gap: 16px; }
+  .eyebrow { margin: 0; color: var(--orange); font: 700 12px/1 "Quicksand", system-ui; letter-spacing: 0.16em; text-transform: uppercase; }
+  h1 { margin: 0; font: 800 clamp(40px, 6.4vw, 80px)/0.95 "Poppins", system-ui; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; }
+  h1 em { color: var(--orange); font-style: normal; }
+  .lede { margin: 0; max-width: 44em; color: var(--muted); font-size: 17px; }
+  .steps { display: grid; gap: 16px; padding-block: 12px 72px; }
+  .step { display: grid; gap: 14px; padding: 24px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); }
+  .step.done { border-color: rgba(255, 122, 24, 0.45); }
+  .step.locked { opacity: 0.5; pointer-events: none; }
+  .step h2 { margin: 0; display: flex; align-items: center; gap: 12px; font: 600 20px/1.2 "Poppins", system-ui; }
+  .step h2 i { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--raised); color: var(--orange); font: 700 13px "Quicksand", system-ui; font-style: normal; }
+  .step.done h2 i { background: var(--orange); color: var(--ink); }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: 600 15px "Poppins", system-ui; border-radius: 999px; padding: 0 22px; min-height: 48px; cursor: pointer; border: 1px solid var(--line); background: var(--raised); color: var(--cream); }
+  button.primary { background: var(--orange); border-color: var(--orange); color: var(--ink); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  input, select { min-height: 48px; padding: 0 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); color: var(--cream); font: 500 16px "Poppins", system-ui; min-width: 0; }
+  input:focus, select:focus { outline: none; border-color: var(--orange); }
+  .grow { flex: 1 1 200px; }
+  .words { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: w; }
+  .words li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--ink); font: 500 15px var(--mono); counter-increment: w; }
+  .words li::before { content: counter(w) ". "; color: var(--faint); }
+  .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; font-size: 15px; }
+  .kv dt { color: var(--faint); } .kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+  .status { min-height: 1.4em; margin: 0; color: var(--soft); font-size: 14px; overflow-wrap: anywhere; }
+  .bal { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .bal div { padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--ink); }
+  .bal b { display: block; font: 700 24px "Poppins", system-ui; } .bal small { color: var(--muted); }
+  .note { padding: 14px 16px; border-radius: 14px; background: var(--tint); color: var(--cream); font-size: 14px; }
+  .attack { border-style: dashed; }
+  footer { padding-block: 28px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
+</style>
+</head>
+<body>
+<header class="wrap"><a class="brand" href="/" aria-label="opaque, home"><img src="./media/logo.png" alt="opaque" width="942" height="200"><span>Q-Day vault</span></a><a href="/ethglobal-mumbai">What's this?</a></header>
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">Keep MetaMask · Live on Sepolia</p>
+    <h1>Protect what's in your wallet <em>before Q-Day.</em></h1>
+    <p class="lede">Your MetaMask address is guarded by one ECDSA key, and a large quantum computer can derive it. You don't have to switch wallets. Put ETH or tokens in the Q-Day vault: your ECDSA key can put money in, but only your post-quantum FORS+C key can take it out. Whoever breaks the ECDSA key finds nothing to move.</p>
+  </section>
+
+  <section class="steps">
+    <article class="step" id="s-connect">
+      <h2><i>1</i>Connect your wallet</h2>
+      <p>MetaMask, or any wallet in your browser, on Sepolia.</p>
+      <div class="row"><button class="primary" id="connect" type="button">Connect wallet</button><span class="status" id="connect-status" role="status"></span></div>
+    </article>
+
+    <article class="step locked" id="s-key">
+      <h2><i>2</i>Your post-quantum guard key</h2>
+      <p>A FORS+C key from 12 new words. It is its own secret: nothing about your ECDSA key or a MetaMask signature can rebuild it, so a cracked ECDSA key can't either. Write the words down: they are the only way to open the vault.</p>
+      <div class="row" id="key-make"><button class="primary" id="key-new" type="button">Make a guard key</button><button id="key-have" type="button">I have the words</button></div>
+      <div id="key-words" hidden><ol class="words" id="words"></ol></div>
+      <div class="row" id="key-enter" hidden><input class="grow" id="key-phrase" type="text" autocomplete="off" spellcheck="false" placeholder="your 12 words"><button id="key-use" type="button">Use these words</button></div>
+      <dl class="kv" id="key-info" hidden><dt>Guard key</dt><dd id="key-pk"></dd><dt>In the registry</dt><dd id="key-reg"></dd><dt>Signatures left</dt><dd id="key-left"></dd></dl>
+      <div class="row"><button class="primary" id="key-register" type="button" hidden>Register the guard key (one MetaMask transaction)</button></div>
+      <p class="status" id="key-status" role="status"></p>
+    </article>
+
+    <article class="step locked" id="s-vault">
+      <h2><i>3</i>Put money in</h2>
+      <p>An ordinary transaction from your wallet. What's in the vault is yours, held for your address.</p>
+      <div class="bal"><div><b id="bal-eth">—</b><small>ETH in the vault</small></div><div><b id="bal-usdc">—</b><small>tUSDC in the vault</small></div></div>
+      <div class="row"><input class="grow" id="dep-amount" type="text" inputmode="decimal" placeholder="0.001"><select id="dep-token"><option value="eth">ETH</option><option value="usdc">tUSDC</option></select><button class="primary" id="dep-go" type="button">Deposit</button></div>
+      <p class="status" id="dep-status" role="status"></p>
+    </article>
+
+    <article class="step locked" id="s-out">
+      <h2><i>4</i>Take money out, post-quantum</h2>
+      <p>This page signs the withdrawal with your guard key: the owner, the token, the exact amount, where it goes and a deadline. Your wallet only submits it. Any wallet can submit it, so you can still withdraw if your ECDSA key is ever lost or broken.</p>
+      <div class="row"><input class="grow" id="out-amount" type="text" inputmode="decimal" placeholder="0.001"><select id="out-token"><option value="eth">ETH</option><option value="usdc">tUSDC</option></select></div>
+      <div class="row"><input class="grow" id="out-to" type="text" spellcheck="false" placeholder="to: 0x… (your own address if empty)"><button class="primary" id="out-go" type="button">Sign and withdraw</button></div>
+      <p class="status" id="out-status" role="status"></p>
+    </article>
+
+    <article class="step locked attack" id="s-attack">
+      <h2><i>!</i>Try it as a thief</h2>
+      <p>Pretend Q-Day came and someone cracked your ECDSA key. They can sign anything MetaMask can. Here they ask the vault for everything, with a FORS+C signature from a key of their own. The chain answers.</p>
+      <div class="row"><button id="attack-go" type="button">Withdraw with the cracked key</button></div>
+      <p class="status" id="attack-status" role="status"></p>
+    </article>
+
+    <p class="note">Testnet: Sepolia ETH and tUSDC have no value. The vault, its tests and the on-chain proofs are in Opaque's repository (contracts/src/ethereum/vault/PQVault.sol). Your 12 words stay in this browser only if you leave them here: back them up.</p>
+  </section>
+</main>
+<footer class="wrap">Opaque · Apache-2.0 · <a href="/sepolia/app">The Opaque wallet</a></footer>
+<script type="module" src="./src/vault/vault.ts"></script>
+</body>
+</html>
