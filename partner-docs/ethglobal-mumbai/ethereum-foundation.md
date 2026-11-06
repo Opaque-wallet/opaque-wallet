@@ -10,6 +10,8 @@
 
 </div>
 
+![Three panels. S: an EIP-8141 frame transaction whose VERIFY frame checks FORS+C in 76,430 gas, under the 100k cap. C: a note leaves its pool through announceExit, a 300 s wait and spend, with AES-128 on chain, and no Opaque server. P: ML-KEM-768 stealth payments on ERC-6538 and ERC-5564, and reads through anon-rpc](../../diagrams/ethereum-foundation.svg)
+
 ## Contents
 
 1. [Why this matters](#why-this-matters)

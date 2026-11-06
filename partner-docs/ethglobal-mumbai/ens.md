@@ -10,6 +10,8 @@
 
 </div>
 
+![ENSv2 with opaque.eth held by PQNameController, which acts only on a FORS+C signature checked by PQKeyRegistry. OpaqueNames lets only Opaque's post-quantum accounts claim name.opaque.eth, and UniversalResolverV2 resolves through it, looked up over anon-rpc](../../diagrams/ens.svg)
+
 ## Contents
 
 1. [Why this matters](#why-this-matters)

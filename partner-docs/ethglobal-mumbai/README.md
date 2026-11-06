@@ -14,6 +14,16 @@
 | **ENS** | [ens.md](ens.md) | How ENSv2 lets a contract hold every role; `PQNameController` and `OpaqueNames` function by function; how opaque.eth was handed to the key, step by step; how a name resolves; the wallet; deployment addresses; tests |
 | **Ethereum Foundation** | [ethereum-foundation.md](ethereum-foundation.md) | anon-rpc in the wallet; the exit that needs nobody (AES-128 on chain); ML-KEM-768 stealth payments; the private path; EIP-8141 frame transactions, `LeanFors` and the 100k budget; CROPS; deployment addresses |
 
+## The diagrams
+
+Each is drawn in Excalidraw; edit the `.excalidraw` file on excalidraw.com, or change [`backend/scripts/diagram-partners.ts`](../../backend/scripts/diagram-partners.ts) and run it again.
+
+| Partner | Diagram | What it shows |
+|---|---|---|
+| Uniswap | [`diagrams/uniswap.svg`](../../diagrams/uniswap.svg) | Who calls the PoolManager, which callbacks each hook's flags turn on, the `actor` and post-quantum check behind every callback, and the guard's signed removal |
+| ENS | [`diagrams/ens.svg`](../../diagrams/ens.svg) | Who controls opaque.eth, who can hold `name.opaque.eth`, and how a payer resolves one through anon-rpc |
+| Ethereum Foundation | [`diagrams/ethereum-foundation.svg`](../../diagrams/ethereum-foundation.svg) | The FORS+C frame transaction, the exit with every Opaque server down, and post-quantum stealth payments |
+
 ## Where each partner's code is
 
 | Partner | Contracts | Tests | Backend | Wallet |

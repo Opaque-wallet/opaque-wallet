@@ -314,8 +314,10 @@ Found on the way:
 ## Who does what
 
 - **The user:**
+  - the ideation, the designs and the architectural decisions;
+  - the smart contracts and the backend, coded with Claude's assistance;
   - keys, signing and funding;
   - faucets, Railway and The Graph;
   - the license choice;
   - each deploy's go, and the video.
-- **Claude:** code, scripts, tests and the README, plus this file's ticks.
+- **Claude (AI assistant):** assisted with the code of the contracts, backend and wallet, the scripts, tests and the README, plus this file's ticks.

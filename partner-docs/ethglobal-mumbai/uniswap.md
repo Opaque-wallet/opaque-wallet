@@ -10,6 +10,8 @@
 
 </div>
 
+![Uniswap v4 with Opaque's hooks: the PoolManager calls only the callbacks whose bits are set in the hook's address. The post-quantum pools (0xAA0) admit only post-quantum accounts, before anything moves, and refuse an ECDSA caller with NotPostQuantum. The guard (0xB01) pays a removal only to the recipient a FORS+C signature names](../../diagrams/uniswap.svg)
+
 ## Contents
 
 1. [Why this matters](#why-this-matters)
