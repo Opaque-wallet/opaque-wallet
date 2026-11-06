@@ -754,3 +754,6 @@ input[role="switch"]:focus-visible { outline: 2px solid var(--soft); outline-off
   .name-hero__field span { font-size: 16px; }
   .name-hero__claim .primary { flex: 1; min-height: 58px; }
 }
+
+/* Two links under one asset's value: Make private, Send. */
+.asset-actions { display: flex; gap: 14px; justify-content: flex-end; }

@@ -10,6 +10,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 
 import {
   DENOMINATIONS,
+  ETH_DENOMINATIONS,
   PAYMENT_DOMAIN,
   POOL_ID_DOMAIN,
   PROTOCOL_VERSION,
@@ -99,7 +100,7 @@ export function asPrivacyScore(value: unknown): PrivacyScore {
 }
 
 export function asDenomination(value: unknown): Denomination {
-  if (!DENOMINATIONS.includes(value as Denomination)) {
+  if (!DENOMINATIONS.includes(value as never) && !ETH_DENOMINATIONS.includes(value as never)) {
     throw new ProtocolFailure('UNSUPPORTED_DENOMINATION', `denomination ${String(value)} is not supported`);
   }
   return value as Denomination;

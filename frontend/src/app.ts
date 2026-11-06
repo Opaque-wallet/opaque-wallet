@@ -14,7 +14,7 @@
 
 // First: it seals and opens what the wallet stores, so nothing reads storage before it.
 import { confirmPassword, unlockGate } from './lib/lock.ts';
-import type { IntentStatus, NoteSummary, PrivacyScore, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
+import type { IntentStatus, NoteSummary, PoolScope, PrivacyScore, StatusHandle, UnixSeconds } from '@opaque/protocol-types';
 
 import { fromUnits, makeAmount, MAX_NOTES_PER_DEPOSIT, swapHoldsPreview } from './lib/protocol/index.js';
 import { paymentDeadline } from './lib/payment-deadline.js';
@@ -120,6 +120,8 @@ interface SentPayment {
   readonly group?: string;
   /** The note's value; absent on payments from when every note was 1 USDC. */
   readonly usdc?: number;
+  /** A private ETH note's value, in wei. */
+  readonly eth?: string;
   state?: IntentStatus['state'];
   txHash?: string;
 }
@@ -137,7 +139,10 @@ const TERMINAL = new Set(['SETTLED', 'FAILED']);
 
 async function renderBudget(): Promise<void> {
   const state = await rt.app.walletState();
+  const first = opaqueAddress === '';
   opaqueAddress = state.accountAddress as string;
+  // The account's name is read by its address: now, the first time the address is known.
+  if (first) void refreshSubname();
   // The open account's address, for the account list: known here without working it out.
   if (account !== null && account !== 'browser' && arcState().addresses[account.id] === undefined) saveArcState({ addresses: { ...arcState().addresses, [account.id]: opaqueAddress.toLowerCase() } });
   el('account-short').textContent = shortAddress(opaqueAddress);
@@ -351,14 +356,28 @@ function onlyWholeAmounts(input: HTMLInputElement, after: () => void): void {
 }
 
 const denominations = (): number[] => rt.scopes.map((s) => Number(s.denomination) / 1e6);
-const countByValue = (list: readonly NoteSummary[]): Map<number, number> => {
+const countByValue = (list: readonly NoteSummary[], valueOf: (n: NoteSummary) => number = usdcOf): Map<number, number> => {
   const counts = new Map<number, number>();
-  for (const n of list) counts.set(usdcOf(n), (counts.get(usdcOf(n)) ?? 0) + 1);
+  for (const n of list) counts.set(valueOf(n), (counts.get(valueOf(n)) ?? 0) + 1);
   return counts;
 };
 /** 100 → 1, 1 → 3 reads "1×100 + 3×1". */
-const describe = (counts: ReadonlyMap<number, number>): string =>
-  [...counts].sort((a, b) => b[0] - a[0]).map(([usdc, n]) => `${n}×${usdc}`).join(' + ');
+const describe = (counts: ReadonlyMap<number, number>, show: (v: number) => string = String): string =>
+  [...counts].sort((a, b) => b[0] - a[0]).map(([v, n]) => `${n}×${show(v)}`).join(' + ');
+
+// ── private ETH: WETH notes, in units of 0.0001 ETH so a note's value is a small whole number ──
+const ETH_UNIT = 10n ** 14n;
+const ethUnitsOf = (n: NoteSummary): number => Number(BigInt(n.scope.denomination) / ETH_UNIT);
+const ethDenominations = (): number[] => rt.ethScopes.map((s) => Number(BigInt(s.denomination) / ETH_UNIT));
+const showEthUnits = (u: number): string => String(u / 1e4);
+/** An ETH amount typed in, as units; undefined unless it is a whole number of the smallest note. */
+function ethUnitsTyped(id: string): number | undefined {
+  let wei: bigint;
+  try { wei = parseEther(el<HTMLInputElement>(id).value.trim()); } catch { return undefined; }
+  const smallest = BigInt(rt.ethScopes[rt.ethScopes.length - 1]?.denomination ?? 0);
+  return wei > 0n && smallest > 0n && wei % smallest === 0n && wei / ETH_UNIT <= 1_000_000n ? Number(wei / ETH_UNIT) : undefined;
+}
+let ethNotes: NoteSummary[] = [];
 /**
  * The note sizes a deposit makes: those whose pool already holds a ring, so
  * every note can be sent at once. A newer pool joins as soon as it fills (from
@@ -386,7 +405,7 @@ function fillNote(values: Iterable<number>, adding: ReadonlyMap<number, number> 
 
 /** Deposits in each pool, through the mesh. One that fails keeps its last reading. */
 async function refreshPools(): Promise<void> {
-  await Promise.all(rt.scopes.map(async (s) => {
+  await Promise.all([...rt.scopes, ...rt.ethScopes].map(async (s) => {
     try { poolSizes.set(s.pool, (await rt.readRing(s)).candidates.length); } catch { /* retried next time */ }
   }));
   renderBalance();
@@ -394,8 +413,10 @@ async function refreshPools(): Promise<void> {
 }
 
 async function refreshNotes(): Promise<void> {
-  notes = (await Promise.all(rt.scopes.map((s) => rt.app.listNotes(s)))).flat();
+  const listed = async (list: readonly PoolScope[]) => (await Promise.all(list.map((s) => rt.app.listNotes(s)))).flat();
+  [notes, ethNotes] = await Promise.all([listed(rt.scopes), listed(rt.ethScopes)]);
   renderBalance();
+  renderTokenAssets();
 }
 
 function renderBalance(): void {
@@ -416,7 +437,10 @@ function renderBalance(): void {
   el('note-count').textContent = parts.join(' · ');
   el('asset-balance').textContent = `${total}.00`;
   el('asset-notes').textContent = `${available.length} private note${available.length === 1 ? '' : 's'}`;
-  el<HTMLButtonElement>('arm').disabled = !sendEth && available.length === 0;
+  el<HTMLButtonElement>('arm').disabled = sendPeth ? !ethNotes.some((n) => n.state === 'AVAILABLE') : !sendEth && available.length === 0;
+  const privateEth = ethNotes.filter((n) => n.state === 'AVAILABLE').reduce((sum, n) => sum + BigInt(n.scope.denomination), 0n);
+  el('hero-peth').hidden = privateEth === 0n;
+  el('hero-peth-amount').textContent = `${ethText(privateEth)} ETH · private`;
 }
 
 function renderDepositSplit(): void {
@@ -642,9 +666,24 @@ function renderTokenAssets(): void {
   if (ethHeld !== undefined) {
     const row = document.createElement('div');
     row.className = 'asset at-address';
-    row.innerHTML = `<i class="tok tok-eth">E</i><span><b>${CHAIN} ETH</b><small>At your address, public · pays gas</small></span><span class="asset-value"><b></b><button class="link" type="button">Send</button></span>`;
+    row.innerHTML = `<i class="tok tok-eth">E</i><span><b>${CHAIN} ETH</b><small>At your address, public · pays gas</small></span><span class="asset-value"><b></b><span class="asset-actions"><button class="link" type="button" data-do="private" hidden>Make private</button><button class="link" type="button" data-do="send">Send</button></span></span>`;
     row.querySelector('.asset-value b')!.textContent = `${ethText(ethHeld)} ETH`;
-    row.querySelector('button')!.addEventListener('click', () => { setSendAsset(true); showView('send'); });
+    row.querySelector('[data-do="send"]')!.addEventListener('click', () => { setSendAsset('eth'); showView('send'); });
+    const makePrivate = row.querySelector<HTMLButtonElement>('[data-do="private"]')!;
+    makePrivate.hidden = rt === undefined || rt.ethScopes.length === 0;
+    makePrivate.addEventListener('click', () => openEthPrivate());
+    if (rt !== undefined && rt.ethScopes.length > 0) {
+      const mine = ethNotes.filter((n) => n.state === 'AVAILABLE');
+      const held = document.createElement('div');
+      held.className = 'asset at-address';
+      held.innerHTML = `<i class="tok tok-eth">E</i><span><b>Private ETH</b><small></small></span><span class="asset-value"><b></b><button class="link" type="button">Send</button></span>`;
+      held.querySelector('small')!.textContent = mine.length === 0 ? 'WETH notes in Opaque\'s pools: none yet' : `${mine.length} private note${mine.length === 1 ? '' : 's'} · ${describe(countByValue(mine, ethUnitsOf), showEthUnits)} ETH`;
+      held.querySelector('.asset-value b')!.textContent = `${ethText(mine.reduce((sum, n) => sum + BigInt(n.scope.denomination), 0n))} ETH`;
+      const send = held.querySelector('button')!;
+      send.hidden = mine.length === 0;
+      send.addEventListener('click', () => { setSendAsset('peth'); showView('send'); });
+      el('assets').append(held);
+    }
     el('assets').append(row);
   }
   for (const t of SWAP_TOKENS) {
@@ -962,6 +1001,8 @@ function setupNameCard(keys: AccountKeys): void {
 
 const NAMES_ABI = parseAbi(['function claim(string label)', 'function release()']);
 let refreshSubname = async (): Promise<void> => undefined;
+/** An account's name under opaque.eth where it holds one (Sepolia), else "Account 1". */
+const labelOf = (key: AccountKeys | 'browser'): string => (key !== 'browser' && arcState().names?.[key.id] ? `${arcState().names![key.id]}.opaque.eth` : accountLabel(key));
 /** ?owner in the address: the project's own view, with the claim of opaque.eth itself. */
 const OWNER_VIEW = new URLSearchParams(location.search).has('owner');
 
@@ -973,6 +1014,12 @@ function setupSubname(): void {
   refreshSubname = async () => {
     if (opaqueAddress === '') return;
     held = await opaqueNameOf(opaqueAddress as `0x${string}`).catch(() => held);
+    // The name is the account's label: in the header, with its address under it, and in the account list.
+    if (account !== null && account !== 'browser') {
+      if ((arcState().names?.[account.id] ?? '') !== held) saveArcState({ names: { ...arcState().names, [account.id]: held } });
+      el('account-name').textContent = labelOf(account);
+      el('receive-name').textContent = labelOf(account);
+    }
     el('sub-claim-row').hidden = held !== '';
     el('sub-held').hidden = held === '';
     el('sub-name').textContent = held === '' ? '' : `${held}.opaque.eth`;
@@ -1249,16 +1296,20 @@ function offerExit(account: AccountKeys, why?: string): void {
 /** The account's ETH, read through the mesh; undefined where gas is USDC. */
 let ethHeld: bigint | undefined;
 let sendEth = false;
+/** Send pays from private ETH notes (WETH). */
+let sendPeth = false;
 const ethText = (wei: bigint): string => Number(formatEther(wei)).toLocaleString('en-US', { maximumFractionDigits: 5 });
 
-function setSendAsset(eth: boolean): void {
-  sendEth = eth;
-  el('send-title').textContent = eth ? 'Send ETH' : 'Send privately';
+function setSendAsset(mode: 'usdc' | 'eth' | 'peth'): void {
+  const eth = mode !== 'usdc';
+  sendEth = mode === 'eth';
+  sendPeth = mode === 'peth';
+  el('send-title').textContent = mode === 'eth' ? 'Send ETH' : 'Send privately';
   const tok = el('send-asset-tok');
   tok.className = `tok tok-${eth ? 'eth' : 'usdc'}`;
   tok.textContent = eth ? 'E' : 'U';
   el('send-asset-name').textContent = eth ? 'ETH' : 'USDC';
-  el('send-asset-mode').textContent = `${eth ? 'Public' : 'Private'} on ${CHAIN}`;
+  el('send-asset-mode').textContent = `${mode === 'eth' ? 'Public' : 'Private'} on ${CHAIN}`;
   el('send-unit').textContent = eth ? 'ETH' : 'USDC';
   const amount = el<HTMLInputElement>('send-amount');
   amount.dataset['decimal'] = eth ? '1' : '0';
@@ -1266,12 +1317,58 @@ function setSendAsset(eth: boolean): void {
   amount.pattern = eth ? '[0-9]*[.]?[0-9]*' : '[0-9]*';
   amount.maxLength = eth ? 24 : 6;
   amount.value = eth ? '0.001' : '1';
-  el('arm').textContent = eth ? 'Send ETH' : 'Send privately';
-  el('send-privacy').hidden = eth;
-  el('send-how').hidden = eth;
-  el('send-public-note').hidden = !eth;
+  el('arm').textContent = mode === 'eth' ? 'Send ETH' : 'Send privately';
+  el('send-privacy').hidden = mode === 'eth';
+  el('send-how').hidden = mode === 'eth';
+  el('send-public-note').hidden = mode !== 'eth';
+  el('send-weth-note').hidden = mode !== 'peth';
   setStatus('send-status', '');
   renderBalance();
+}
+
+/** The Make-private dialog's amount as WETH notes: undefined unless it splits into whole notes. */
+function ethSplit(): { counts: Map<number, number>; parts: { scope: PoolScope; count: number }[]; wei: bigint; notes: number } | undefined {
+  const units = ethUnitsTyped('eth-private-amount');
+  if (units === undefined) return undefined;
+  const counts = makeAmount(units, ethDenominations())!;
+  const unitsAt = (s: PoolScope) => Number(BigInt(s.denomination) / ETH_UNIT);
+  const parts = rt.ethScopes.filter((s) => counts.has(unitsAt(s))).map((scope) => ({ scope, count: counts.get(unitsAt(scope))! }));
+  return { counts, parts, wei: BigInt(units) * ETH_UNIT, notes: [...counts.values()].reduce((a, b) => a + b, 0) };
+}
+function renderEthSplit(): void {
+  const split = ethSplit();
+  el('eth-private-split').textContent = split === undefined ? `In steps of ${showEthUnits(Math.min(...ethDenominations()))} ETH, like 0.001.`
+    : split.notes > MAX_NOTES_PER_DEPOSIT ? `That is ${split.notes} notes; one deposit holds up to ${MAX_NOTES_PER_DEPOSIT}.`
+    : `As ${describe(split.counts, showEthUnits)} ETH notes.`;
+}
+function openEthPrivate(): void {
+  if (!runtimeReady) return;
+  setStatus('eth-private-status', '');
+  renderEthSplit();
+  el<HTMLDialogElement>('eth-private-dialog').showModal();
+}
+/** ETH at the address into WETH notes: wrapped, approved and deposited in one operation the PQ key signs. */
+function setupEthPrivate(): void {
+  el('eth-private-amount').addEventListener('input', renderEthSplit);
+  const go = el<HTMLButtonElement>('eth-private-go');
+  go.addEventListener('click', () => void (async () => {
+    const split = ethSplit();
+    if (split === undefined || split.notes > MAX_NOTES_PER_DEPOSIT) { renderEthSplit(); return; }
+    const have = await rt.ethBalance(opaqueAddress as `0x${string}`).catch(() => undefined);
+    if (have !== undefined && split.wei >= have) { setStatus('eth-private-status', `The account holds ${ethText(have)} ETH, and its gas comes from that too: make less private.`); return; }
+    go.disabled = true;
+    setStatus('eth-private-status', 'Wrapping and depositing, in one operation your post-quantum key signs…');
+    try {
+      await rt.depositEth(split.parts);
+      setStatus('eth-private-status', `Private: ${ethText(split.wei)} ETH, as ${describe(split.counts, showEthUnits)} ETH notes.`);
+      await refreshNotes();
+      void refreshTokens().catch(() => undefined);
+    } catch (error) {
+      setStatus('eth-private-status', `Not made private: ${gasWhy(error)}`);
+    } finally {
+      go.disabled = false;
+    }
+  })());
 }
 
 /** ETH from the account's address: one operation, its value the amount, signed by the account's PQ key. */
@@ -1321,16 +1418,19 @@ async function onSend(event: SubmitEvent): Promise<void> {
   }
   if (sendEth) { await sendEthTo(recipient as `0x${string}`); return; }
   // Paid in whole notes, each its own payment, the fewest that make the
-  // amount exactly: a note is spent whole, with no change (§6.6).
-  const amount = wholeAmount('send-amount');
-  const available = notes.filter((n) => n.state === 'AVAILABLE');
-  const total = available.reduce((sum, n) => sum + usdcOf(n), 0);
+  // amount exactly: a note is spent whole, with no change (§6.6). USDC's or ETH's (WETH).
+  const eth = sendPeth;
+  const valueOf = eth ? ethUnitsOf : usdcOf;
+  const show = eth ? (u: number) => `${showEthUnits(u)} ETH` : (u: number) => `${u} USDC`;
+  const amount = eth ? ethUnitsTyped('send-amount') : wholeAmount('send-amount');
+  const available = (eth ? ethNotes : notes).filter((n) => n.state === 'AVAILABLE');
+  const total = available.reduce((sum, n) => sum + valueOf(n), 0);
   if (amount === undefined) {
-    status.textContent = 'Send a whole amount of USDC, 1 or more.';
+    status.textContent = eth ? `Send ETH in steps of ${showEthUnits(Math.min(...ethDenominations()))}, like 0.001.` : 'Send a whole amount of USDC, 1 or more.';
     return;
   }
   if (amount > total) {
-    status.textContent = total === 0 ? 'No spendable note. Deposit first.' : `You hold ${total} USDC in notes. Deposit more to send ${amount}.`;
+    status.textContent = total === 0 ? (eth ? 'No private ETH yet: make some private under Your funds first.' : 'No spendable note. Deposit first.') : `You hold ${show(total)} in notes. ${eth ? 'Make more private' : 'Deposit more'} to send ${show(amount)}.`;
     return;
   }
   let deadline: UnixSeconds;
@@ -1357,20 +1457,22 @@ async function onSend(event: SubmitEvent): Promise<void> {
     progressLog.textContent = 'Checking which of your notes their pools can hide…';
     await refreshPools();
     const ready = available.filter(ringReady);
-    const pick = makeAmount(amount, denominations(), countByValue(ready));
+    const unit = eth ? showEthUnits : String;
+    const pick = makeAmount(amount, eth ? ethDenominations() : denominations(), countByValue(ready, valueOf));
     if (pick === undefined) {
       const waiting = available.filter((n) => !ringReady(n));
-      status.textContent = `Your notes can't make exactly ${amount} USDC: each is sent whole, with no change.`
-        + (ready.length > 0 ? ` Ready to send: ${describe(countByValue(ready))}.` : '')
-        + (waiting.length > 0 ? ` Waiting for their pool to fill: ${describe(countByValue(waiting))}.` : '');
+      status.textContent = `Your notes can't make exactly ${show(amount)}: each is sent whole, with no change.`
+        + (ready.length > 0 ? ` Ready to send: ${describe(countByValue(ready, valueOf), unit)}.` : '')
+        + (waiting.length > 0 ? ` Waiting for their pool to fill: ${describe(countByValue(waiting, valueOf), unit)}.` : '');
       progressDialog.close();
       return;
     }
-    const queue = [...pick].flatMap(([usdc, n]) => ready.filter((note) => usdcOf(note) === usdc).slice(0, n));
+    const queue = [...pick].flatMap(([v, n]) => ready.filter((note) => valueOf(note) === v).slice(0, n));
     count = queue.length;
 
     // A payee that receives privately is paid at a one-time address only it can find.
-    if (rt.stealth !== undefined) {
+    // ponytail: USDC only; the sweep takes USDC, so ETH goes to the payee's own address until it takes WETH.
+    if (!eth && rt.stealth !== undefined) {
       progressLog.textContent = 'Checking whether the payee receives privately…';
       const oneTime = await rt.stealth.addressFor(recipient as `0x${string}`);
       if (oneTime !== undefined) {
@@ -1404,7 +1506,7 @@ async function onSend(event: SubmitEvent): Promise<void> {
           idempotencyKey: `pay-${note.id}-${Date.now()}` as never,
       });
       // Recorded as each one goes, so a failure later still shows these.
-      sent.unshift({ handle: ref.statusHandle as string, recipient, at: Date.now(), group, usdc: usdcOf(note) });
+      sent.unshift({ handle: ref.statusHandle as string, recipient, at: Date.now(), group, ...(eth ? { eth: String(note.scope.denomination) } : { usdc: usdcOf(note) }) });
       saveSent();
       done++;
       if (count > 1) progressLog.textContent = `Sent ${done} of ${count} across the mesh…`;
@@ -1428,7 +1530,7 @@ async function onSend(event: SubmitEvent): Promise<void> {
       : `Sent ${done} of ${count}; the remaining note payments failed: ${(error as Error).message}`;
     if (done > 0) { await refreshNotes().catch(() => undefined); renderActivity(); }
   } finally {
-    button.disabled = notes.every((n) => n.state !== 'AVAILABLE');
+    button.disabled = (sendPeth ? ethNotes : notes).every((n) => n.state !== 'AVAILABLE');
   }
 }
 
@@ -1622,7 +1724,9 @@ function renderActivity(): void {
     head.className = 'intent-head';
     const amount = document.createElement('span');
     amount.className = 'intent-amt';
-    amount.textContent = `${payments.reduce((sum, p) => sum + (p.usdc ?? 1), 0)}.00 USDC`;
+    amount.textContent = payments[0]?.eth !== undefined
+      ? `${ethText(payments.reduce((sum, p) => sum + BigInt(p.eth ?? 0), 0n))} ETH`
+      : `${payments.reduce((sum, p) => sum + (p.usdc ?? 1), 0)}.00 USDC`;
     const badge = document.createElement('span');
     const settled = payments.filter((p) => p.state === 'SETTLED').length;
     const failed = payments.filter((p) => p.state === 'FAILED').length;
@@ -1781,14 +1885,15 @@ async function init(): Promise<void> {
       return true;
     },
     balanceOf: (key) => { const b = arcState().balances[idOf(key)]; return b === undefined ? '' : `${b} USDC`; },
+    nameOf: (key) => (arcState().names?.[key.id] ? `${arcState().names![key.id]}.opaque.eth` : undefined),
     rescan: async (progress) => { const kept = await rt.recover(true, progress); await refreshNotes(); return kept; },
     backup: backupTransport(),
   });
   account = activeAccount(browserAccount);
   // Nothing to open yet: a new wallet, or one brought from elsewhere.
   if (account === null) { openOnboarding('ob-welcome'); return; }
-  el('account-name').textContent = accountLabel(account);
-  el('receive-name').textContent = accountLabel(account);
+  el('account-name').textContent = labelOf(account);
+  el('receive-name').textContent = labelOf(account);
   document.querySelector('.acct .mark')!.innerHTML = markOf(account === 'browser' ? -1 : account.index);
   if (account !== 'browser') {
     el('backup-export').hidden = true;
@@ -1829,8 +1934,11 @@ async function init(): Promise<void> {
     const picker = el<HTMLDialogElement>('asset-dialog');
     el<HTMLButtonElement>('send-asset').disabled = false;
     el('send-asset').addEventListener('click', () => picker.showModal());
-    el('asset-usdc').addEventListener('click', () => { picker.close(); setSendAsset(false); });
-    el('asset-eth').addEventListener('click', () => { picker.close(); setSendAsset(true); });
+    el('asset-usdc').addEventListener('click', () => { picker.close(); setSendAsset('usdc'); });
+    el('asset-eth').addEventListener('click', () => { picker.close(); setSendAsset('eth'); });
+    el('asset-peth').hidden = !deployment.pools.some((p) => p.asset === 'eth');
+    el('asset-peth').addEventListener('click', () => { picker.close(); setSendAsset('peth'); });
+    setupEthPrivate();
     picker.addEventListener('click', (e) => { if (e.target === picker) picker.close(); });
     el('receive-eth').hidden = false;
   }

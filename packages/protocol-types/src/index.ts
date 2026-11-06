@@ -55,7 +55,12 @@ export const DENOMINATIONS = Object.freeze([
   200_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 5_000_000_000, 10_000_000_000,
   20_000_000_000, 50_000_000_000, 100_000_000_000, 200_000_000_000, 500_000_000_000, 1_000_000_000_000,
 ] as const);
-export type Denomination = (typeof DENOMINATIONS)[number];
+/**
+ * ETH's notes (WETH pools on Sepolia), in wei: 0.0005, 0.001 and 0.005 ETH. Apart from
+ * USDC's, so nothing that splits a USDC amount (greedyDecompose) ever picks one.
+ */
+export const ETH_DENOMINATIONS = Object.freeze([500_000_000_000_000, 1_000_000_000_000_000, 5_000_000_000_000_000] as const);
+export type Denomination = (typeof DENOMINATIONS)[number] | (typeof ETH_DENOMINATIONS)[number];
 
 /**
  * How an amount splits into notes, taking each with `take` (false when that

@@ -33,6 +33,7 @@ import type {
   IntentRef,
   IntentStatus,
   MeshQuery,
+  NoteSummary,
   PoolScope,
   PrivacyConditions,
   RelayPath,
@@ -53,6 +54,7 @@ import { browserPayer, createBrowserPool, createMeshChainObserver, type DepositM
 import { capabilitiesOf } from '../../../backend/chain/pool.ts';
 import { createWalletRpcAnswerer, ethBalance, readOne, readState, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
 import { extsloadCall } from '../../../backend/chain/uniswap-v4.ts';
+import { encodeFunctionData, parseAbi } from '../../../backend/ethereum/frame.ts';
 import { exitClient } from '../../../backend/chain/ring-exit.ts';
 import { anonFetch, anonReadsOn } from './anon-rpc.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
@@ -129,6 +131,10 @@ export interface WalletRuntime {
   readonly app: ReturnType<typeof createPaymentApplication>;
   /** Every ring pool, largest denomination first. */
   readonly scopes: readonly PoolScope[];
+  /** ETH's pools (WETH), largest first; none where the network has none. Their notes are never USDC's. */
+  readonly ethScopes: readonly PoolScope[];
+  /** ETH at the account made into WETH notes: wrap, approve and deposit, one operation its PQ key signs. */
+  depositEth(parts: readonly { readonly scope: PoolScope; readonly count: number }[]): Promise<readonly NoteSummary[]>;
   readonly config: StackConfig;
   /** A fresh 3-hop path, drawn from the verified directory. */
   pathFor(): Promise<RelayPath>;
@@ -245,15 +251,18 @@ export interface RuntimeHost {
 
 export async function startWallet(config?: StackConfig, account: AccountKeys | 'browser' = 'browser', host: RuntimeHost = {}): Promise<WalletRuntime> {
   const cfg = config ?? (await loadStack());
-  // USDC's pools; ETH's (WETH) are kept apart, so no note of one is ever counted as the other.
-  const scopes: readonly PoolScope[] = deployment.pools
-    .filter((p) => p.proofMode === 'RING_8' && p.asset !== 'eth')
+  // USDC's pools and ETH's (WETH), kept apart, so no note of one is ever counted as the other.
+  const scopesOf = (eth: boolean): readonly PoolScope[] => deployment.pools
+    .filter((p) => p.proofMode === 'RING_8' && (p.asset === 'eth') === eth)
     .sort((a, b) => b.denomination - a.denomination)
     .map((p) => ({
       chainId: BigInt(deployment.network.chainId) as PoolScope['chainId'],
       pool: p.address as PoolScope['pool'],
       denomination: p.denomination as PoolScope['denomination'],
     }));
+  const scopes = scopesOf(false);
+  const ethScopes = scopesOf(true);
+  const WETH = deployment.tokens.weth?.address as `0x${string}` | undefined;
 
   const prover = (host.prover ?? createWorkerProver)();
   let mesh: ReturnType<typeof meshOf>;
@@ -390,8 +399,8 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
   async function recover(full: boolean, progress?: (line: string) => void): Promise<number> {
     if (account === 'browser') return 0;
     let added = 0;
-    for (const scope of scopes) {
-      progress?.(`Looking for your ${Number(scope.denomination) / 1e6} USDC notes…`);
+    for (const scope of [...scopes, ...ethScopes]) {
+      progress?.(ethScopes.includes(scope) ? `Looking for your ${Number(scope.denomination) / 1e18} ETH notes…` : `Looking for your ${Number(scope.denomination) / 1e6} USDC notes…`);
       const deposits = new Set((await query<RingSnapshot>({ kind: 'RING_SNAPSHOT', scope })).value.candidates.map((c) => c.commitment.toLowerCase()));
       const known = counters.next(scope);
       const { found, next } = await findNotes(account, scope, deposits, full ? 0 : known, known);
@@ -413,6 +422,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
   return {
     app: createPaymentApplication(ports),
     scopes,
+    ethScopes,
     config: cfg,
     pathFor: () => bootstrap.pathFor(),
     async obtainCredential(recipient) {
@@ -441,6 +451,27 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       // Notes drawn from the phrase: catch up with any another device made first, so no index is used twice.
       if (account !== 'browser') await recover(false);
       const from = { ...pool, depositMany, deposit: async ({ scope, commitment }: { scope: PoolScope; commitment: never }) => depositMany([{ scope, commitments: [commitment] }]) };
+      return createPaymentApplication({ ...ports, pool: from as never }).depositNotes(parts);
+    },
+    async depositEth(parts) {
+      if (WETH === undefined) throw new Error('this network has no ETH pools');
+      const WETH_ABI = parseAbi(['function deposit() payable', 'function approve(address, uint256) returns (bool)']);
+      const POOL_ABI = parseAbi(['function deposit(bytes32)']);
+      // One operation: the ETH wrapped, each pool approved exactly its notes, each note deposited.
+      const wrapAndDeposit: DepositMany = async (groups) => {
+        const sum = (g: (typeof groups)[number]) => BigInt(g.scope.denomination) * BigInt(g.commitments.length);
+        const total = groups.reduce((t, g) => t + sum(g), 0n);
+        const me = (await wallet.getState()).accountAddress as `0x${string}`;
+        return opsFor(me).execute([
+          { to: WETH, data: encodeFunctionData({ abi: WETH_ABI, functionName: 'deposit' }), value: total },
+          ...groups.flatMap((g) => [
+            { to: WETH, data: encodeFunctionData({ abi: WETH_ABI, functionName: 'approve', args: [g.scope.pool as `0x${string}`, sum(g)] }) },
+            ...g.commitments.map((c) => ({ to: g.scope.pool as never, data: encodeFunctionData({ abi: POOL_ABI, functionName: 'deposit', args: [c as `0x${string}`] }) })),
+          ]),
+        ] as never);
+      };
+      if (account !== 'browser') await recover(false);
+      const from = { ...pool, depositMany: wrapAndDeposit, deposit: async ({ scope, commitment }: { scope: PoolScope; commitment: never }) => wrapAndDeposit([{ scope, commitments: [commitment] }]) };
       return createPaymentApplication({ ...ports, pool: from as never }).depositNotes(parts);
     },
     account,

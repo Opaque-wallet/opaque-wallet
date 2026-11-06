@@ -78,6 +78,8 @@ export interface ArcState {
   readonly deployers?: Readonly<Record<string, number>>;
   /** What each account deployed (lib/contracts.ts), newest first, by account id. */
   readonly contracts?: Readonly<Record<string, readonly { readonly address: string; readonly tx: string; readonly at: number }[]>>;
+  /** Each account's name under opaque.eth, by account id, where the network has names (Sepolia): its label in the header and the list. */
+  readonly names?: Readonly<Record<string, string>>;
 }
 const read = <T>(key: string, fallback: T): T => { try { return (JSON.parse(localStorage.getItem(key) ?? 'null') as T | null) ?? fallback; } catch { return fallback; } };
 export const arcState = (): ArcState => ({ addresses: {}, balances: {}, scanned: {}, generations: {}, ...read<Partial<ArcState>>(STATE_KEY, {}) });

@@ -191,6 +191,8 @@ export interface AccountsPage {
   fillAddresses?(keys: readonly AccountKeys[]): Promise<boolean>;
   /** The last balance an account showed, formatted, or ''. */
   balanceOf(key: OpenAccount): string;
+  /** A name the account holds (alice.opaque.eth), shown in place of "Account 1". */
+  nameOf?(key: AccountKeys): string | undefined;
   /** Looks for the open account's notes again; returns how many were new. */
   rescan(progress: (line: string) => void): Promise<number>;
   /** The passkey backup's way to its store, through this page's relays. */
@@ -212,7 +214,7 @@ export function renderAccounts(): void {
     b.className = `account-row${key === 'browser' ? ' browser' : key.imported !== undefined ? ' imported' : ''}`;
     b.setAttribute('aria-current', String(open));
     b.innerHTML = `<span class="mark">${markOf(key === 'browser' ? -1 : key.index)}</span><span><b></b><small></small></span><span class="balance-cell"></span>`;
-    b.querySelector('b')!.textContent = accountLabel(key);
+    b.querySelector('b')!.textContent = (key === 'browser' ? undefined : page.nameOf?.(key)) ?? accountLabel(key);
     b.querySelector('small')!.textContent = key === 'browser' ? page.browserNote : open ? 'Open now' : key.imported !== undefined ? 'Brought in by its key' : 'From your recovery phrase';
     b.querySelector('.balance-cell')!.textContent = page.balanceOf(key);
     const item = document.createElement('div');

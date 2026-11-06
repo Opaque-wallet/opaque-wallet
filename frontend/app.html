@@ -75,7 +75,7 @@
       <div class="hero-top"><span class="hero-label">Private balance</span><span class="shield">Shielded on Arc</span></div>
       <h1 class="balance"><span id="balance">—</span> <small>USDC</small></h1>
       <p class="sub" id="note-count">Loading notes…</p>
-      <div class="hero-assets"><span class="chip on"><i class="tok tok-usdc">U</i><b>USDC</b></span><button class="chip" id="hero-eth" type="button" hidden title="ETH at your address: public, and it pays gas. The pools hold USDC, so ETH is never private."><i class="tok tok-eth">E</i><b id="hero-eth-amount">ETH</b></button></div>
+      <div class="hero-assets"><span class="chip on"><i class="tok tok-usdc">U</i><b>USDC</b></span><button class="chip" id="hero-peth" type="button" hidden title="ETH in private notes: WETH in Opaque's pools, sent like USDC."><i class="tok tok-eth">E</i><b id="hero-peth-amount">ETH · private</b></button><button class="chip" id="hero-eth" type="button" hidden title="ETH at your address: public, and it pays gas. Make it private under Your funds."><i class="tok tok-eth">E</i><b id="hero-eth-amount">ETH</b></button></div>
     </div>
     <div class="tiles">
       <button id="action-send" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 10 14M20.5 3.5 14 20.5l-4-6.5-6.5-4z"/></svg></i>Send</button>
@@ -142,6 +142,7 @@
           <p class="immediate-note" id="immediate-settlement">Send now: settles as soon as the network accepts it.</p>
           <label class="field deadline-field" id="privacy-deadline-wrap" for="privacy-deadline" hidden><span>Settle no later than</span><input id="privacy-deadline" type="datetime-local" autocomplete="off" aria-describedby="privacy-deadline-help" disabled><small id="privacy-deadline-help">A latest-settlement deadline, not a scheduled send time.</small></label>
         </fieldset>
+        <p class="fine-print" id="send-weth-note" hidden>Paid from your private ETH notes, each sent whole, through the relays: nothing on chain names you. The recipient receives WETH, wrapped ETH, which any wallet or Uniswap turns back into ETH.</p>
         <p class="fine-print" id="send-public-note" hidden>ETH leaves your account's address in the open, as an ERC-4337 operation your post-quantum key signs. Only tUSDC goes privately, through the pool.</p>
         <button class="primary" id="arm" type="submit">Send privately</button>
         <p class="status" id="send-status" role="status"></p>
@@ -370,7 +371,15 @@
 <dialog id="asset-dialog" class="networks">
   <form method="dialog" class="dialog-head"><h2>Send</h2><button value="close" aria-label="Close">×</button></form>
   <button class="net-row" id="asset-usdc" type="button"><i class="tok tok-usdc">U</i><span><b>tUSDC</b><small>Private: the pool pays, nothing on chain names you</small></span></button>
+  <button class="net-row" id="asset-peth" type="button" hidden><i class="tok tok-eth">E</i><span><b>ETH, privately</b><small>From your private ETH notes: the pool pays WETH, nothing on chain names you</small></span></button>
   <button class="net-row" id="asset-eth" type="button"><i class="tok tok-eth">E</i><span><b>ETH</b><small id="asset-eth-note">Public: a transfer from your account, signed with FORS+C</small></span></button>
+</dialog>
+<dialog id="eth-private-dialog">
+  <form method="dialog" class="dialog-head"><div><p class="eyebrow">Private ETH</p><h2>Make ETH private</h2></div><button value="close" aria-label="Close">×</button></form>
+  <p>The ETH at your address is wrapped to WETH and deposited as private notes, in one operation your post-quantum key signs. Notes come in 0.0005, 0.001 and 0.005 ETH, and each pool already holds a ring of deposits, so they can be sent at once.</p>
+  <label class="field" for="eth-private-amount"><span>Amount (ETH)</span><input id="eth-private-amount" type="text" inputmode="decimal" autocomplete="off" value="0.001"><small id="eth-private-split">As 1×0.001 ETH notes.</small></label>
+  <div class="dialog-actions"><button class="primary" id="eth-private-go" type="button">Make private</button></div>
+  <p class="status" id="eth-private-status" role="status"></p>
 </dialog>
 <dialog id="receive-dialog">
   <form method="dialog" class="dialog-head"><div><p class="eyebrow">Receive on Arc</p><h2 id="receive-name">Your Opaque account</h2></div><button value="close" aria-label="Close">×</button></form>

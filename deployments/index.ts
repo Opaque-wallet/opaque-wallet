@@ -83,7 +83,8 @@ export interface Deployment {
     readonly sitePath: string;
     readonly nativeCurrency: { readonly name: string; readonly symbol: string; readonly decimals: number };
   };
-  readonly tokens: { readonly usdc: { readonly address: Address; readonly decimals: number } };
+  /** weth: what ETH's pools hold (Sepolia), so ETH can be private. */
+  readonly tokens: { readonly usdc: { readonly address: Address; readonly decimals: number }; readonly weth?: { readonly address: Address; readonly decimals: number } };
   readonly contracts: Readonly<Record<ContractName, DeployedContract | null>>;
   readonly accounts: { readonly attester: Address | null };
   readonly pools: readonly PoolDeployment[];

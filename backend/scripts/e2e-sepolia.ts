@@ -197,6 +197,17 @@ try {
   check(true, `ERC-6538's registry holds the wallet's ML-KEM-768 key (${META_ADDRESS_BYTES} bytes) under the PQ scheme`);
   await until('ENS to resolve the new name', async () => { const r = await resolveName(`${label}.opaque.eth`, ETHEREUM_COIN); return r.address.toLowerCase() === account.toLowerCase() && r.pq; }, 120_000);
   check(true, `ENSv2's UniversalResolver: ${label}.opaque.eth → ${account}, held by a PQ account`);
+  // Opened again, the wallet reads its name from the chain: the account is called by it, its address under it.
+  await page.reload();
+  await unlockIfAsked(page);
+  await page.waitForFunction((n: string) => document.getElementById('account-name')?.textContent === n, `${label}.opaque.eth`, { timeout: 180_000 })
+    .catch(async (e: Error) => { throw new Error(`${e.message}; the header says ${await page.textContent('#account-name')}`); });
+  await page.waitForFunction(() => (globalThis as { opaque?: unknown }).opaque !== undefined, undefined, { timeout: 180_000 });
+  await page.click('#tab-names');
+  // Names reads the chain once the account's address is known: wait for it, then for the card.
+  await page.waitForFunction((n: string) => document.getElementById('sub-name')?.textContent === n && document.getElementById('sub-claim-row')?.hidden === true, `${label}.opaque.eth`, { timeout: 120_000 })
+    .catch(async (e: Error) => { throw new Error(`${e.message}; Names says ${await page.textContent('#sub-title')}`); });
+  check(true, `after a reload the header reads ${label}.opaque.eth over ${await page.textContent('#account-short')}, and Names shows it held`);
   const before = await pub.getBlockNumber();
   await page.click('#tab-send');
   // Notes are whole and spent whole: after 3 (2 + 1) the notes still make 2 and 5.
