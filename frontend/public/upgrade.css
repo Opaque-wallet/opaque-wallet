@@ -129,6 +129,13 @@ section { padding-block: clamp(72px, 11vw, 150px); }
 .limits li { padding: 18px 20px; border: 1px solid var(--line); border-radius: 18px; color: var(--muted); font-size: 15px; }
 .limits li b { display: block; margin-bottom: 4px; color: var(--cream); font-weight: 600; }
 .credit { display: grid; gap: 18px; align-content: start; }
+/* Why now, the page's argument: on an orange-lit panel, its point in orange. */
+.limits--why { position: relative; padding: clamp(28px, 5vw, 64px); border: 1px solid rgba(255, 122, 24, 0.45); border-radius: 28px; background: radial-gradient(120% 90% at 0% 0%, rgba(255, 122, 24, 0.22), transparent 60%), radial-gradient(80% 80% at 100% 100%, rgba(255, 122, 24, 0.12), transparent 60%), var(--surface); box-shadow: 0 30px 90px -40px rgba(255, 122, 24, 0.45); }
+.limits--why .eyebrow { color: var(--orange); }
+.limits--why h2 em { color: var(--orange); font-style: normal; }
+.limits--why .credit p:not(.eyebrow) { color: var(--cream); font-size: clamp(16px, 1.4vw, 19px); }
+.limits--why li { border-color: rgba(255, 122, 24, 0.28); border-left: 3px solid var(--orange); background: rgba(7, 6, 8, 0.55); }
+.limits--why li b { color: var(--soft); }
 .credit p { margin: 0; color: var(--muted); }
 .credit a { color: var(--soft); text-underline-offset: 3px; }
 
