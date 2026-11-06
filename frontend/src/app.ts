@@ -619,6 +619,9 @@ async function refreshTokens(): Promise<void> {
   tokenHeld = await rt.tokenBalances(opaqueAddress as `0x${string}`);
   if (!GAS_IN_USDC) {
     ethHeld = await rt.ethBalance(opaqueAddress as `0x${string}`);
+    // Beside the private balance, the account's public ETH: what pays its gas.
+    el('hero-eth').hidden = false;
+    el('hero-eth-amount').textContent = `${ethText(ethHeld)} ETH · public`;
     if (!el('view-contracts').hidden) el('contracts-gas').textContent = `${ethText(ethHeld)} ETH`;
   }
   if (SWAPS) renderSwapSides();
@@ -1824,6 +1827,7 @@ async function init(): Promise<void> {
     }
   }
   runtimeReady = true;
+  el('hero-eth').addEventListener('click', () => el('home-notes').scrollIntoView({ behavior: 'smooth' }));
   void refreshSubname();
   setupStealth();
   setupV4Swap();

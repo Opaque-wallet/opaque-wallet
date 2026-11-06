@@ -107,6 +107,7 @@ h1, h2, h3, p { margin: 0; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; background: rgba(7, 6, 8, 0.12); color: rgba(7, 6, 8, 0.6); font-size: 12px; font-weight: 600; }
 .chip.on { background: rgba(7, 6, 8, 0.86); color: var(--text); }
 .chip .tok { width: 20px; height: 20px; font-size: 10px; box-shadow: none; }
+button.chip { border: 0; cursor: pointer; font-family: inherit; }
 
 /* The actions: one card, a grid of tiles with hairlines between them. */
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--line); }
