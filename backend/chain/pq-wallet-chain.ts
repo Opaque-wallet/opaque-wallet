@@ -319,6 +319,13 @@ type Op = {
   factory?: Address; factoryData?: Hex;
 };
 const WEI_PER_USDC6 = 10n ** 12n;
+/**
+ * Arc pays gas in USDC, so a deposit's notes and its gas come out of one
+ * balance and are checked together. Elsewhere (Sepolia) gas is ETH, a second
+ * balance: only the tokens are checked here, and an account short of gas
+ * hears it from the bundler.
+ */
+const GAS_IS_USDC = deployment.network.nativeCurrency.symbol === 'USDC';
 
 /** Each account's operation under way, in this page or process (oneOperationAtATime). */
 const operating = new Map<string, Promise<unknown>>();
@@ -447,7 +454,7 @@ export function createPqAccountOps(options: {
       ]));
       // Gas the EntryPoint already holds for the account is spent first.
       const need = total * WEI_PER_USDC6 + (prefundOf(op) > have.prepaidGas ? prefundOf(op) - have.prepaidGas : 0n);
-      if (have.usdc6 * WEI_PER_USDC6 < need) throw shortfall(need, have);
+      if (GAS_IS_USDC && have.usdc6 * WEI_PER_USDC6 < need) throw shortfall(need, have);
       return submit(op);
     }),
 
@@ -475,7 +482,7 @@ export function createPqAccountOps(options: {
       const op = await prepare(calls);
       const have = await funds();
       const need = spendsUsdc * WEI_PER_USDC6 + (prefundOf(op) > have.prepaidGas ? prefundOf(op) - have.prepaidGas : 0n);
-      if (have.usdc6 * WEI_PER_USDC6 < need) throw shortfall(need, have);
+      if (GAS_IS_USDC ? have.usdc6 * WEI_PER_USDC6 < need : have.usdc6 < spendsUsdc) throw shortfall(need, have);
       return submit(op);
     }),
 
@@ -485,6 +492,12 @@ export function createPqAccountOps(options: {
      * a few cents that pay for its next operation.
      */
     withdraw: (to: Address): Promise<TxHash> => oneOperationAtATime(account, async () => {
+      if (!GAS_IS_USDC) {
+        // The token goes; the ETH that pays gas stays for the account's next operation.
+        const have = await funds();
+        if (have.usdc6 === 0n) throw new ProtocolFailure('INVALID_INPUT', 'the account holds no USDC to withdraw');
+        return submit(await prepare([{ to: deployment.tokens.usdc.address as Address, data: encodeFunctionData({ abi: parseAbi(['function transfer(address to, uint256 value) returns (bool)']), functionName: 'transfer', args: [to, have.usdc6] }) as Hex }]));
+      }
       const op = await prepare([{ to, value: 1n }]);
       const have = await funds();
       const fromBalance = prefundOf(op) > have.prepaidGas ? prefundOf(op) - have.prepaidGas : 0n;

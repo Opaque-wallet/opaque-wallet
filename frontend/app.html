@@ -98,11 +98,22 @@
         <label class="deposit-amount" for="deposit-count"><input id="deposit-count" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1" aria-describedby="deposit-split"><span>USDC</span></label>
         <button class="primary" id="deposit" type="button">Deposit</button>
       </div>
+      <button class="secondary" id="test-faucet" type="button" hidden>Get test funds: 100 tUSDC and gas, free</button>
       <label class="auto-toggle" id="auto-wrap" for="auto-deposit" hidden><input id="auto-deposit" type="checkbox" checked><span>Turn USDC that arrives into private notes by itself</span></label>
       <small class="deposit-split" id="deposit-split">As notes of 1 to 100 USDC, each hidden among notes its size</small>
       <p class="status" id="deposit-status" role="status"></p>
     </div>
 
+    <div class="deposit-card" id="name-card" hidden>
+      <div class="deposit-copy"><p class="eyebrow">opaque.eth</p><p id="name-copy">Reading opaque.eth on ENS…</p></div>
+      <div class="deposit-row" id="name-claim-row">
+        <label class="deposit-amount" for="name-code"><input id="name-code" type="text" autocomplete="off" spellcheck="false" placeholder="claim code" maxlength="32"><span>code</span></label>
+        <button class="primary" id="name-claim" type="button">Claim</button>
+      </div>
+      <button class="secondary" id="name-point" type="button" hidden>Point opaque.eth at this wallet</button>
+      <small class="deposit-split" id="name-records"></small>
+      <p class="status" id="name-status" role="status"></p>
+    </div>
     <div id="home-notes">
       <div class="list-head"><span>Your funds</span><button class="link" id="refresh-balance" type="button">Refresh</button></div>
       <div id="assets"><div class="asset"><i class="tok tok-usdc">U</i><span><b>USD Coin</b><small>Private notes on Arc</small></span><span class="asset-value"><b><span id="asset-balance">—</span> USDC</b><small id="asset-notes">—</small></span></div></div>

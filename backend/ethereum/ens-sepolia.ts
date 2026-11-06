@@ -19,12 +19,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { canonical, keyGen, pkCommitment, utf8 } from '@opaque/pq-wallet';
+import { pkCommitment } from '@opaque/pq-wallet';
 import { concat, createPublicClient, createWalletClient, decodeFunctionResult, encodeFunctionData, http, keccak256, namehash, parseAbi, stringToBytes, toHex, type Abi, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 
-import { signExecute, type RegistryKey } from './ens.ts';
+import { masterKey, signExecute, type RegistryKey } from './ens.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIR = join(HERE, '..', '.stack', 'eth-sepolia');
@@ -53,7 +53,7 @@ const secret = (name: string, make: () => Hex): Hex => {
 const deployer = privateKeyToAccount(secret('deployer.key', () => { throw new Error('no Sepolia deployer key'); }));
 const master = () => secret('ens.master', () => toHex(randomBytes(32)));
 /** The controller's registry key of generation g: one master, a key per rotation. */
-const keyOf = (g: number): RegistryKey => keyGen(keccak256(canonical([utf8('opaque/v1/ens/controller'), Buffer.from(master().slice(2), 'hex'), utf8(String(g))]), 'bytes'));
+const keyOf = (g: number): RegistryKey => masterKey(Buffer.from(master().slice(2), 'hex'), 'opaque/v1/ens/controller', g);
 const pub = createPublicClient({ chain: sepolia, transport: http(RPC) });
 const wallet = createWalletClient({ account: deployer, chain: sepolia, transport: http(RPC) });
 const artifact = (name: string): { abi: Abi; bytecode: { object: Hex } } => JSON.parse(readFileSync(join(HERE, '..', '..', 'contracts', 'out', `${name}.sol`, `${name}.json`), 'utf8'));

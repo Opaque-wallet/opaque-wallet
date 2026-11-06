@@ -18,8 +18,8 @@
   },
   "tokens": {
     "usdc": {
-      "$comment": "Circle's Sepolia USDC (symbol() and decimals() read on chain); faucet.circle.com hands it out. Unlike Arc, ETH pays gas here.",
-      "address": "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238",
+      "$comment": "tUSDC, Opaque's 6-decimal test dollar (contracts/frame/TestToken.sol), in place of Circle's Sepolia USDC: the pools' decoys alone take 1,504, and the stack's faucet gives it to new wallets. No value.",
+      "address": "0x0bb803acb0172ba18e849c7f6194c124897cc948",
       "decimals": 6
     }
   },
@@ -29,27 +29,120 @@
       "address": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
       "deployedAtBlock": 0
     },
-    "pqKeyRegistry": null,
+    "pqKeyRegistry": {
+      "address": "0x8b47560d32bcda788ab5233ab2bda55204cacca3",
+      "deployedAtBlock": 12072633
+    },
     "singleNotePqVerifier": null,
-    "attestedRingVerifier": null,
-    "attestedRingVerifier2": null,
-    "attestedRingVerifier5": null,
-    "attestedRingVerifier10": null,
-    "attestedRingVerifier20": null,
-    "attestedRingVerifier50": null,
-    "attestedRingVerifier100": null,
-    "relayDirectory": null,
+    "attestedRingVerifier": {
+      "address": "0xa36268c8c95c10be43b087d3bbc4c7e611335e7c",
+      "deployedAtBlock": 12072931
+    },
+    "attestedRingVerifier2": {
+      "address": "0x5789049537837382ebd33d53cbc4be0a3ae39d8e",
+      "deployedAtBlock": 12072933
+    },
+    "attestedRingVerifier5": {
+      "address": "0x9d0fc82bdb1cc094f1832cc115cbfa092b6626d8",
+      "deployedAtBlock": 12072935
+    },
+    "attestedRingVerifier10": {
+      "address": "0x598c3f88ab0ac981f6a0db76bb418b6199c2d00c",
+      "deployedAtBlock": 12072937
+    },
+    "attestedRingVerifier20": {
+      "address": "0xe3cfaa9896a2a1c5deda3f5318b27b39047fd289",
+      "deployedAtBlock": 12072939
+    },
+    "attestedRingVerifier50": {
+      "address": "0x953e738166c09190661c0d01574c68b04ca2101a",
+      "deployedAtBlock": 12072941
+    },
+    "attestedRingVerifier100": {
+      "address": "0x6beccf3dbaf670d796913a4d6a3a9607214e3e5b",
+      "deployedAtBlock": 12072948
+    },
+    "relayDirectory": {
+      "address": "0xcaec9e595377103731d04d34bbce7da215f3725f",
+      "deployedAtBlock": 12072928
+    },
     "crePolicyGate": null,
     "creBatchSettlement": null,
-    "pqAccountImplementation": null,
-    "pqAccountFactory": null,
-    "pqAccountValidator": null
+    "pqAccountImplementation": {
+      "address": "0x17fc96e5b93eb031b2db2aac415dd507ad932dbf",
+      "deployedAtBlock": 12072925
+    },
+    "pqAccountFactory": {
+      "address": "0xe5931be6e8ec9a689f96d4de767f73718bdab08f",
+      "deployedAtBlock": 12072927
+    },
+    "pqAccountValidator": {
+      "address": "0x939428875c7d61d559e5b81ae0df513804f87ba6",
+      "deployedAtBlock": 12072924
+    }
   },
   "accounts": {
     "$comment": "The attester is made in docs/mumbai/PLAN.md T4, with FORS keys of its own: never Arc's, which are few-time.",
-    "attester": null
+    "attester": "0x00385d7592000211587c6139317c069d51b1e3ce"
   },
-  "pools": [],
+  "pools": [
+    {
+      "address": "0xac3944e5f40eeae02a216008dfc4939827b75fd9",
+      "denomination": 1000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier",
+      "deployedAtBlock": 12072932,
+      "decoys": 8
+    },
+    {
+      "address": "0x424adde8a777ff878452d9dfc0fe1e5b04388672",
+      "denomination": 2000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier2",
+      "deployedAtBlock": 12072934,
+      "decoys": 8
+    },
+    {
+      "address": "0x6cfd137c68f2eab5bdb7209f77efbf5876f126ea",
+      "denomination": 5000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier5",
+      "deployedAtBlock": 12072936,
+      "decoys": 8
+    },
+    {
+      "address": "0x62364895f16ec6a0a1df5537e3b25e6b3b7633e8",
+      "denomination": 10000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier10",
+      "deployedAtBlock": 12072938,
+      "decoys": 8
+    },
+    {
+      "address": "0x604a2352796b0d1943d87a51ec8df3a6b64df1a7",
+      "denomination": 20000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier20",
+      "deployedAtBlock": 12072940,
+      "decoys": 8
+    },
+    {
+      "address": "0x30384c60b3ac76af2a16226230f5ea5fc0a6cad6",
+      "denomination": 50000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier50",
+      "deployedAtBlock": 12072944,
+      "decoys": 8
+    },
+    {
+      "address": "0x46f8f5b16ebecf380c6542d689db9556a6201b1f",
+      "denomination": 100000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier100",
+      "deployedAtBlock": 12072949,
+      "decoys": 8
+    }
+  ],
   "erc4337": {
     "$comment": "All three EntryPoints have code on Sepolia, and Pimlico's keyless endpoint serves them (eth_supportedEntryPoints, chain 0xaa36a7, checked 2026-11-05).",
     "entryPoints": {
@@ -63,9 +156,9 @@
   },
   "mesh": {
     "$comment": "Sepolia's own relay directory root, from a master Arc never uses. Filled in by `node scripts/new-mesh-master.ts eth-sepolia` (in backend/), which keeps the master in backend/.stack/eth-sepolia/mesh-master.",
-    "genesis": 0,
+    "genesis": 1793924361,
     "trustRoot": {
-      "signerCommitment": "0x",
+      "signerCommitment": "0x48756a9a3b551c7bcea0c5ecb6a229a27a0ae0a1d948fa68b777c91024603a14",
       "minVersion": 0
     }
   },

@@ -9,9 +9,11 @@
 import { decodeFunctionResult, devnet, encodeFunctionData, labelhash, namehash, parseAbi } from '../../../backend/ethereum/frame.ts';
 import sepolia from '../../../deployments/eth-sepolia.json' with { type: 'json' };
 
-const ENS = sepolia.ens as { ethRegistry: `0x${string}`; universalResolverV2: `0x${string}`; controller: `0x${string}` };
+export const ENS = sepolia.ens as { ethRegistry: `0x${string}`; universalResolverV2: `0x${string}`; controller: `0x${string}`; resolver: `0x${string}`; pqKeyRegistry: `0x${string}` };
 const RPCS = [sepolia.network.rpcUrl, ...sepolia.network.rpcFallbacks];
-const COIN = 0x80000000n | BigInt(devnet.chainId);
+/** ENSIP-11 coin types: the devnet's (0x80000000 | its chain id), and Ethereum's, 60, which ENS's app shows on Sepolia too. */
+export const DEVNET_COIN = 0x80000000n | BigInt(devnet.chainId);
+export const ETHEREUM_COIN = 60n;
 const UR = parseAbi(['function resolve(bytes name, bytes data) view returns (bytes, address)']);
 const PROFILE = parseAbi(['function addr(bytes32 node, uint256 coinType) view returns (bytes)']);
 const REGISTRY = parseAbi(['function getTokenId(uint256) view returns (uint256)', 'function ownerOf(uint256) view returns (address)']);
@@ -20,12 +22,12 @@ const REGISTRY = parseAbi(['function getTokenId(uint256) view returns (uint256)'
 export const isName = (text: string): boolean => /^([a-z0-9-]+\.)+eth$/i.test(text.trim());
 
 /** DNS wire format: each label length-prefixed, then 0. */
-function dnsEncode(name: string): `0x${string}` {
+export function dnsEncode(name: string): `0x${string}` {
   const bytes = name.split('.').flatMap((label) => { const b = new TextEncoder().encode(label); return [b.length, ...b]; });
   return `0x${[...bytes, 0].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
-async function ethCall(to: `0x${string}`, data: `0x${string}`): Promise<`0x${string}`> {
+export async function ethCall(to: `0x${string}`, data: `0x${string}`): Promise<`0x${string}`> {
   let last: unknown;
   for (const url of RPCS) {
     try {
@@ -40,16 +42,16 @@ async function ethCall(to: `0x${string}`, data: `0x${string}`): Promise<`0x${str
   throw last instanceof Error ? last : new Error('Sepolia did not answer');
 }
 
-/** The name's devnet address, and whether a FORS+C key holds the name. */
-export async function resolveName(name: string): Promise<{ address: `0x${string}`; pq: boolean }> {
+/** The name's address for `coin` (the devnet's by default), and whether a FORS+C key holds the name. */
+export async function resolveName(name: string, coin = DEVNET_COIN): Promise<{ address: `0x${string}`; pq: boolean }> {
   const n = name.trim().toLowerCase();
   const out = await ethCall(ENS.universalResolverV2, encodeFunctionData({
     abi: UR, functionName: 'resolve',
-    args: [dnsEncode(n), encodeFunctionData({ abi: PROFILE, functionName: 'addr', args: [namehash(n), COIN] })],
+    args: [dnsEncode(n), encodeFunctionData({ abi: PROFILE, functionName: 'addr', args: [namehash(n), coin] })],
   })).catch(() => { throw new Error(`${n} has no ENS records`); });
   const [record] = decodeFunctionResult({ abi: UR, functionName: 'resolve', data: out });
   const bytes = decodeFunctionResult({ abi: PROFILE, functionName: 'addr', data: record });
-  if (bytes.length !== 42) throw new Error(`${n} has no address on the devnet`);
+  if (bytes.length !== 42) throw new Error(`${n} has no address ${coin === DEVNET_COIN ? 'on the devnet' : 'for this chain'}`);
   // Held by our controller: a second-level .eth name whose token it owns.
   const labels = n.split('.');
   let pq = false;

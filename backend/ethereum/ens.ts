@@ -3,12 +3,12 @@
 // (target, exact calldata, deadline) under PQKeyRegistry's digest, which binds
 // the chain, the controller and the key's use count.
 
-import { encodeSignature, forsSchemeId, keyGen, pqDigest, sign } from '@opaque/pq-wallet';
+import { canonical, encodeSignature, forsSchemeId, keyGen, pkCommitment, pqDigest, sign, utf8 } from '@opaque/pq-wallet';
 import type { Bytes32 } from '@opaque/protocol-types';
-import { encodeAbiParameters, keccak256, parseAbiParameters, type Address, type Hex } from 'viem';
+import { encodeAbiParameters, keccak256, parseAbi, parseAbiParameters, type Address, type Hex } from 'viem';
 
 // Not in pq-wallet's pinned public API; imported from source, as cre/attester-keys.ts does.
-import { userActionPayload } from '../../packages/pq-wallet/src/registry.ts';
+import { rotationPayload, userActionPayload } from '../../packages/pq-wallet/src/registry.ts';
 
 export type RegistryKey = ReturnType<typeof keyGen>;
 
@@ -25,3 +25,27 @@ export function signExecute(key: RegistryKey, chainId: bigint, controller: Addre
   });
   return encodeSignature(key.publicKey, sign(key.secretKey, digest as Bytes32)) as Hex;
 }
+
+/** The registry's digest of `payload` for `controller` at `useCount`, signed by `key`. */
+function signFor(key: RegistryKey, chainId: bigint, controller: Address, useCount: bigint, payload: Hex): Hex {
+  const digest = pqDigest({ chainId: chainId as never, walletAddress: controller.toLowerCase() as never, schemeId: forsSchemeId(key.publicKey.params), useCount, payload });
+  return encodeSignature(key.publicKey, sign(key.secretKey, digest as Bytes32)) as Hex;
+}
+
+/**
+ * PQKeyRegistry.rotate(controller, next, maxUses, deadline, signature): the key in
+ * force promotes the pre-committed next key and commits `next` after it.
+ */
+export const signRotation = (key: RegistryKey, chainId: bigint, controller: Address, useCount: bigint, next: Hex, maxUses: bigint, deadline: bigint): Hex =>
+  signFor(key, chainId, controller, useCount, rotationPayload(next as Bytes32, maxUses, deadline));
+
+/** Generation g of a key drawn from `master` under `label`: a name's controller keys. */
+export const masterKey = (master: Uint8Array, label: string, g: number): RegistryKey =>
+  keyGen(keccak256(canonical([utf8(label), master, utf8(String(g))]), 'bytes'));
+export const commitmentOf = (key: RegistryKey): Hex => pkCommitment(key.publicKey) as Hex;
+
+export const REGISTRY_ABI = parseAbi([
+  'function stateOf(address) view returns ((bytes32 pkCommitment, bytes32 nextCommitment, uint64 useCount, uint64 maxUses, uint64 rotationDeadline, uint64 disableAfter))',
+  'function rotate(address account, bytes32 newNextCommitment, uint64 newMaxUses, uint64 newRotationDeadline, bytes signature)',
+]);
+export const CONTROLLER_ABI = parseAbi(['function execute(address target, bytes data, uint256 deadline, bytes signature) returns (bytes)']);

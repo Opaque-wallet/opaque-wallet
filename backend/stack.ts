@@ -30,18 +30,19 @@
 // With MESH_MASTER set, this box derives that chain. Only a dev server's
 // wallet takes the root written here, for the random mesh an unset master gives.
 
+import { timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type RequestListener } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createPublicClient, nonceManager, parseAbi, parseEventLogs, WaitForTransactionReceiptTimeoutError } from 'viem';
+import { createPublicClient, createWalletClient, nonceManager, parseAbi, parseEther, parseEventLogs, WaitForTransactionReceiptTimeoutError } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 import { ProtocolFailure, type GraphSelectionClient, type PoolScope, type RelaySnapshot, type RingSnapshot, type UnixSeconds } from '@opaque/protocol-types';
 import { asChainId, fromHex, spendHash, toHex } from '@opaque/protocol-types/codecs.js';
 
-import { deployment, meshTrustRoot, poolFor, requireAttester, requireContract, requireService, type PoolDeployment } from '../deployments/index.ts';
+import { deployment, meshTrustRoot, poolFor, requireAttester, requireContract, type PoolDeployment } from '../deployments/index.ts';
 import { GraphHttpClient } from '../graph/src/client.ts';
 import { evaluatePublicReadiness } from '../graph/src/privacy-score.ts';
 import { registryAttesterKeys } from './chain/attester-registry.ts';
@@ -54,6 +55,7 @@ import { credentialJson } from './cre/credential.ts';
 import { createExecutorServer } from './cre/executor-server.ts';
 import { generateIntentKeypair } from './cre/seal-client.ts';
 import { createSettler, type Settler, type SettlerOptions } from './cre/settler.ts';
+import { commitmentOf, CONTROLLER_ABI, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signRotation } from './ethereum/ens.ts';
 import { createCreSimulator } from './cre/simulator.ts';
 import { createEgress, egressClient } from './mesh/egress.ts';
 import { backupFromEnv, backupHttpHandler } from './mesh/backup-store.ts';
@@ -181,16 +183,24 @@ verify(inForce.signed, inForce.root, nowS());
 // still come from the signed directory and the chain; the Graph weighs them.
 // Relays report every 10 minutes (each report is a transaction), so a health
 // observation is fresh for 15: one missed report plus indexing lag.
+//
+// A network with no subgraph (Sepolia: services.graphUrl null) weighs every
+// relay the same and reads its rings from the chain alone, as the XRPL and
+// devnet stacks do.
 const HEALTH_MAX_AGE = 900n;
-const graph = new GraphHttpClient({ endpoint: requireService('graphUrl'), pinnedRelays: mesh.signed.directory.entries, maxObservationAgeSeconds: HEALTH_MAX_AGE });
+const GRAPH_URL = deployment.services.graphUrl;
+const graph = GRAPH_URL === null ? undefined : new GraphHttpClient({ endpoint: GRAPH_URL, pinnedRelays: mesh.signed.directory.entries, maxObservationAgeSeconds: HEALTH_MAX_AGE });
 // Clamped, so a hostile index can steer load but never exclude a relay.
-const relayHealth = createGraphHealth({ fetchSnapshot: () => graph.getRelaySnapshot(), maxAgeSeconds: HEALTH_MAX_AGE });
-void relayHealth.refresh();
-setInterval(() => void relayHealth.refresh(), 90_000).unref();
+const relayHealth = graph === undefined ? undefined : createGraphHealth({ fetchSnapshot: () => graph.getRelaySnapshot(), maxAgeSeconds: HEALTH_MAX_AGE });
+if (relayHealth !== undefined) {
+  void relayHealth.refresh();
+  setInterval(() => void relayHealth.refresh(), 90_000).unref();
+}
+const EVEN_HEALTH = { reliabilityScore: 9_000 as never, batchOccupancy: 1, recentSelectionCount: 0 };
 const relaySnapshot = (): RelaySnapshot => ({
   nodes: mesh.signed.directory.entries.map((e) => ({
     id: e.id, endpoint: e.endpoint, kemPublicKey: e.kemPublicKey, keyEpoch: e.keyEpoch, operatorId: e.operatorId,
-    ...relayHealth.health(e), lastSeenAt: nowS(),
+    ...(relayHealth?.health(e) ?? EVEN_HEALTH), lastSeenAt: nowS(),
   })),
   directoryVersion: mesh.signed.directory.version.toString(),
   observedAt: nowS(),
@@ -200,13 +210,13 @@ const relaySnapshot = (): RelaySnapshot => ({
 const indexed = new Map<string, { at: number; ring: Promise<RingSnapshot> }>();
 const ringSources = new Map(ringPools.map((p) => [p.address, createChainRingSource({
   publicClient: publicClient as never, scope: scopeOf(p), deployedAtBlock: BigInt(p.deployedAtBlock), relaySnapshot,
-  indexed: (s) => {
+  ...(graph === undefined ? {} : { indexed: (s: PoolScope) => {
     const hit = indexed.get(p.address);
     if (hit !== undefined && Date.now() - hit.at < 30_000) return hit.ring;
     const ring = graph.getRingSnapshot(s);
     indexed.set(p.address, { at: Date.now(), ring });
     return ring;
-  },
+  } }),
 })]));
 // Each question goes to the source for its pool; each source refuses any other.
 const ringSource: GraphSelectionClient = {
@@ -388,6 +398,100 @@ const credentialHandler: RequestListener = (req, res) => {
   });
 };
 const credentials = createServer(credentialHandler);
+
+// ── a name a FORS+C key holds (Sepolia: deployments ens) ─────────────────
+// opaque.eth's PQNameController answers to a key this stack draws from
+// ENS_MASTER until a wallet claims it with the one-time ENS_CLAIM_CODE: two
+// rotations in PQKeyRegistry hand it to the wallet's key. After that the stack
+// only submits calls the wallet's key signed, paying their gas; the controller
+// checks every signature itself, so submitting grants nothing.
+const ENS = (deployment as unknown as { ens?: { pqKeyRegistry: `0x${string}`; controller: `0x${string}` } }).ens;
+const ENS_MASTER = process.env['ENS_MASTER'];
+const ENS_CLAIM_CODE = process.env['ENS_CLAIM_CODE'];
+const NAMES = ENS !== undefined && ENS_MASTER !== undefined && ENS_CLAIM_CODE !== undefined && ENS_CLAIM_CODE.length >= 8;
+const nameWallet = () => createWalletClient({ account: egressAccount, chain: ARC, transport: rpcTransport() });
+async function claimName(pk: `0x${string}`, next: `0x${string}`): Promise<`0x${string}`[]> {
+  const master = fromHex(ENS_MASTER as `0x${string}`);
+  const keyAt = (g: number) => masterKey(master, 'opaque/v1/ens/controller', g);
+  const hashes: `0x${string}`[] = [];
+  for (let step = 0; step < 3; step++) {
+    const s = await publicClient.readContract({ address: ENS!.pqKeyRegistry, abi: NAME_REGISTRY_ABI, functionName: 'stateOf', args: [ENS!.controller] });
+    if (s.pkCommitment.toLowerCase() === pk.toLowerCase()) return hashes;
+    const g = [0, 1, 2, 3, 4, 5, 6, 7].find((i) => commitmentOf(keyAt(i)) === s.pkCommitment.toLowerCase());
+    if (g === undefined) throw new Error('the name answers to a key this stack does not hold: it was claimed already');
+    // The key in force commits the wallet's key next; once that is committed, the wallet's own next key.
+    const after = s.nextCommitment.toLowerCase() === pk.toLowerCase() ? next : pk;
+    const deadline = (await publicClient.getBlock()).timestamp + 30n * 86_400n;
+    const signature = signRotation(keyAt(g), BigInt(deployment.network.chainId), ENS!.controller, s.useCount, after, 32n, deadline);
+    const hash = await writeInTurn(egressAccount.address, () => nameWallet().writeContract({ address: ENS!.pqKeyRegistry, abi: NAME_REGISTRY_ABI, functionName: 'rotate', args: [ENS!.controller, after, 32n, deadline, signature] }));
+    if ((await publicClient.waitForTransactionReceipt({ hash })).status !== 'success') throw new Error(`the rotation reverted: ${hash}`);
+    hashes.push(hash);
+  }
+  throw new Error('the handover did not finish');
+}
+const namesHandler = (url: string, req: Parameters<RequestListener>[0], res: Parameters<RequestListener>[1]): void => {
+  res.setHeader('access-control-allow-origin', '*');
+  res.setHeader('access-control-allow-headers', 'content-type');
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+  const reply = (status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+  const chunks: Buffer[] = [];
+  let size = 0;
+  // A FORS+C signature is about 9 KB, 18 KB as hex.
+  req.on('data', (c: Buffer) => { size += c.length; if (size > 64_000) req.destroy(); else chunks.push(c); });
+  req.on('end', () => void (async () => {
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<string, string>;
+    const hex32 = (v: unknown): v is `0x${string}` => typeof v === 'string' && /^0x[0-9a-f]{64}$/i.test(v);
+    if (url === '/v1/ens/claim') {
+      const code = Buffer.from(String(body['code'] ?? ''));
+      const want = Buffer.from(ENS_CLAIM_CODE!);
+      if (code.length !== want.length || !timingSafeEqual(code, want)) return reply(403, { message: 'that is not the claim code' });
+      if (!hex32(body['pk']) || !hex32(body['next'])) return reply(400, { message: 'two key commitments, please' });
+      return reply(200, { hashes: await claimName(body['pk'], body['next']) });
+    }
+    const { target, data, signature } = body;
+    const deadline = BigInt(body['deadline'] ?? 0);
+    if (!/^0x[0-9a-f]{40}$/i.test(String(target)) || !/^0x([0-9a-f]{2})*$/i.test(String(data)) || !/^0x([0-9a-f]{2})+$/i.test(String(signature))) return reply(400, { message: 'target, data, deadline and signature, please' });
+    // Simulated first: a call the controller would refuse costs nothing.
+    const { request } = await publicClient.simulateContract({ account: egressAccount, address: ENS!.controller, abi: CONTROLLER_ABI, functionName: 'execute', args: [target as `0x${string}`, data as `0x${string}`, deadline, signature as `0x${string}`] });
+    const hash = await writeInTurn(egressAccount.address, () => nameWallet().writeContract(request));
+    reply(200, { hash, ok: (await publicClient.waitForTransactionReceipt({ hash })).status === 'success' });
+  })().catch((e: Error & { shortMessage?: string }) => reply(400, { message: (e.shortMessage ?? e.message).split('\n')[0] })));
+};
+
+// ── a test faucet (FAUCET=1, testnet stacks only) ────────────────────────
+// Gas and test dollars for a new wallet, from the egress, which already pays
+// for settlements: so a wallet on Sepolia needs no faucet of anyone else's.
+// Once an hour per address, and at most 60 an hour in all.
+const FAUCET = process.env['FAUCET'] === '1';
+const FAUCET_ETH = parseEther(process.env['FAUCET_ETH'] ?? '0.003');
+const FAUCET_USDC = 100n * 10n ** BigInt(deployment.tokens.usdc.decimals);
+const dripped = new Map<string, number>();
+let dripsThisHour: { hour: number; n: number } = { hour: 0, n: 0 };
+const faucetHandler: RequestListener = (req, res) => {
+  res.setHeader('access-control-allow-origin', '*');
+  res.setHeader('access-control-allow-headers', 'content-type');
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+  const reply = (status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+  const chunks: Buffer[] = [];
+  let size = 0;
+  req.on('data', (c: Buffer) => { size += c.length; if (size > 256) req.destroy(); else chunks.push(c); });
+  req.on('end', () => void (async () => {
+    const address = String((JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as { address?: string }).address ?? '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(address)) return reply(400, { message: 'an address, please' });
+    const hour = Math.floor(Date.now() / 3_600_000);
+    if (dripsThisHour.hour !== hour) dripsThisHour = { hour, n: 0 };
+    if (Date.now() - (dripped.get(address) ?? 0) < 3_600_000) return reply(429, { message: 'once an hour per address' });
+    if (dripsThisHour.n >= 60) return reply(429, { message: 'the faucet is resting: try again within the hour' });
+    dripped.set(address, Date.now());
+    dripsThisHour.n++;
+    const w = createWalletClient({ account: egressAccount, chain: ARC, transport: rpcTransport() });
+    const [eth, usdc] = await writeInTurn(egressAccount.address, async () => [
+      await w.sendTransaction({ to: address as `0x${string}`, value: FAUCET_ETH }),
+      await w.writeContract({ address: deployment.tokens.usdc.address, abi: parseAbi(['function transfer(address to, uint256 value) returns (bool)']), functionName: 'transfer', args: [address as `0x${string}`, FAUCET_USDC] }),
+    ] as const);
+    reply(200, { eth, usdc });
+  })().catch((e: Error) => reply(500, { message: e.message.split('\n')[0] })));
+};
 await new Promise<void>((r) => credentials.listen(PORTS.credentials, LOOPBACK, r));
 
 // ── what the wallet reads ────────────────────────────────────────────────
@@ -422,6 +526,8 @@ const router = PORT === undefined ? undefined : createServer((req, res) => {
   if (hop && relay) { req.url = hop[2]; relay.handler(req, res); return; }
   if (url.startsWith('/v1/mesh/') || url.startsWith('/v1/cre/')) { exit.handler(req, res); return; }
   if (url === '/v1/credential') { credentialHandler(req, res); return; }
+  if (FAUCET && url === '/v1/faucet') { faucetHandler(req, res); return; }
+  if (NAMES && (url === '/v1/ens/claim' || url === '/v1/ens/execute')) { namesHandler(url, req, res); return; }
   if (url === '/v1/backup' && backup.kept) { backupHttpHandler(backup.send)(req, res); return; }
   if (url === '/stack.json') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
@@ -435,7 +541,7 @@ if (router) await new Promise<void>((r) => router.listen(Number(PORT), '0.0.0.0'
 // Seed every pool from the windows the subgraph names, then read the full
 // histories one pool at a time: seven at once is the burst Arc refuses, and
 // starves the wallets' own reads on the same RPC.
-for (const [pool, s] of ringSources) {
+for (const [pool, s] of graph === undefined ? [] : ringSources) {
   await s.seed().catch((e: unknown) => log(`  ring seed  ${pool} refused (${String((e as Error).message).split('\n')[0]}); backfill will read it`));
 }
 void (async () => { for (const s of ringSources.values()) await s.backfill(); })();

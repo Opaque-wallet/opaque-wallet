@@ -1,12 +1,13 @@
 // The header's network button and its sheet, shared by every network's wallet
-// page: Arc's (app.html) and XRPL's (xrpl.html); Ethereum's rows show Soon
-// until its page exists. Each network is its own build,
-// mainnet at the site root and testnet under testnet/ (`npm run build:site`),
+// page: Arc's and Sepolia's (app.html), XRPL's (xrpl.html) and the devnet's
+// (devnet.html). Each network is its own build, mainnet at the site root,
+// testnet under testnet/ and Sepolia under sepolia/ (`npm run build:site`),
 // with storage names of its own, so switching network is a page load and never
 // a change of keys. A new chain is an entry here and a page in
 // extension/build.mjs, never a second wallet.
 
 import { deployment, networks, type NetworkId } from '../../../deployments/index.ts';
+import sepolia from '../../../deployments/eth-sepolia.json' with { type: 'json' };
 
 /** An EVM network id, or 'xrpl': the XRPL wallet page (testnet/xrpl.html). */
 export type WalletPage = NetworkId | 'xrpl' | 'devnet';
@@ -17,7 +18,8 @@ const dirOf = (sitePath: string): string =>
 
 interface Network { readonly id: string; readonly chain: string; readonly name: string; readonly note: string; readonly href?: string; readonly flag?: string }
 const NETWORKS: Network[] = [
-  { id: 'sepolia', chain: 'Ethereum', name: 'Sepolia', note: 'Private test USDC, no value' },
+  // The Arc wallet's code, built for Sepolia (VITE_NETWORK=sepolia) into its own directory.
+  { id: 'sepolia', chain: 'Ethereum', name: 'Sepolia', note: 'Private test USDC, no value', href: `${dirOf(sepolia.network.sitePath)}app.html` },
   ...networks.map((n) => ({
     id: n.id as string, chain: 'Arc', name: n.displayName, href: `${dirOf(n.sitePath)}app.html`,
     note: n.id === 'mainnet' ? 'Private USDC, real funds' : 'Private test USDC, no value',

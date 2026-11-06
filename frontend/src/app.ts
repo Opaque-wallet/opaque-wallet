@@ -25,10 +25,14 @@ import { keyStoreName } from './lib/backup.ts';
 import { asHexBytes, CREATE2_FACTORY, deployment as deployOf, MAX_INITCODE, newSalt, riskOfCall } from './lib/contracts.ts';
 import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/wallet-keys.ts';
 import { acceptTerms, copy, idOf, markOf, openOnboarding, setupWalletScreens, swapProgress, tokenBadge, type OpenAccount } from './lib/wallet-ui.ts';
-import { deployment, NETWORK, type SwapToken } from '../../deployments/index.ts';
+import { deployment, NETWORK, requireService, type SwapToken } from '../../deployments/index.ts';
 import type { SwapQuote } from '../../backend/chain/wallet-rpc.ts';
 import { oneOperationAtATime } from '../../backend/chain/pq-wallet-chain.ts';
 import { networkPicker } from './lib/network-picker.ts';
+import { ENS, ETHEREUM_COIN, ethCall, dnsEncode, isName, resolveName } from './ethereum/ens-name.ts';
+import { commitmentOf, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signExecute } from '../../backend/ethereum/ens.ts';
+import { decodeFunctionResult, encodeFunctionData, parseAbi } from '../../backend/ethereum/frame.ts';
+import { stream } from './lib/wallet-keys.ts';
 import { scoped } from './lib/storage-name.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -84,6 +88,17 @@ const shortAddress = (value: string) => value ? `${value.slice(0, 6)}…${value.
 const isRejected = (error: unknown) => typeof error === 'object' && error !== null && 'code' in error && (error as { code: unknown }).code === 4001;
 
 function setStatus(id: string, message: string): void { el(id).textContent = message; }
+/** The chain this build runs on, as the copy names it: app.html was written for Arc. */
+const CHAIN = NETWORK === 'sepolia' ? 'Sepolia' : 'Arc';
+/** Puts the chain's name where app.html says Arc, on another chain's build. */
+function nameTheChain(): void {
+  if (CHAIN === 'Arc') return;
+  const swap = (text: string) => text.replace(/\bAn Arc\b/g, `A ${CHAIN}`).replace(/\ban Arc\b/g, `a ${CHAIN}`).replace(/\bArc\b/g, CHAIN);
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) n.nodeValue = swap(n.nodeValue ?? '');
+  for (const e of document.querySelectorAll<HTMLInputElement>('[placeholder]')) e.placeholder = swap(e.placeholder);
+  document.title = swap(document.title);
+}
 
 
 // ── payments this browser has sent ────────────────────────────────────────
@@ -205,7 +220,7 @@ async function autoRotate(): Promise<void> {
 
 async function onWithdraw(): Promise<void> {
   const to = el<HTMLInputElement>('withdraw-to').value.trim().toLowerCase();
-  if (!/^0x[0-9a-f]{40}$/.test(to)) { setStatus('wallet-status', 'Enter an Arc address to withdraw to.'); return; }
+  if (!/^0x[0-9a-f]{40}$/.test(to)) { setStatus('wallet-status', `Enter a ${CHAIN} address to withdraw to.`); return; }
   const button = el<HTMLButtonElement>('withdraw');
   button.disabled = true;
   setStatus('wallet-status', 'Signing the withdrawal with your PQ key; it goes to the bundler through the mesh…');
@@ -751,7 +766,7 @@ async function firstLook(keys: AccountKeys): Promise<void> {
     const phrase = storedPhrase();
     if (keys.index === 0 && keys.imported === undefined && walletState().imported && phrase !== null) {
       for (let n = 1; n < 20; n++) {
-        progress(`Looking for Account ${n + 1} of this phrase on Arc…`);
+        progress(`Looking for Account ${n + 1} of this phrase on ${CHAIN}…`);
         if (!await rt.inUse(arcAddressOf(accountKeys(phrase, n)))) break;
         more = n;
       }
@@ -760,7 +775,7 @@ async function firstLook(keys: AccountKeys): Promise<void> {
     await refreshNotes();
     // Said for a phrase brought in, found or not; for one made here, only when there was something.
     const imported = walletState().imported || keys.imported !== undefined;
-    progress(found === 0 && more === 0 && !imported ? '' : `Found ${found} ${found === 1 ? 'note' : 'notes'} of ${accountLabel(keys)} on Arc${more > 0 ? `, and ${more} more ${more === 1 ? 'account' : 'accounts'} of this phrase` : ''}.`);
+    progress(found === 0 && more === 0 && !imported ? '' : `Found ${found} ${found === 1 ? 'note' : 'notes'} of ${accountLabel(keys)} on ${CHAIN}${more > 0 ? `, and ${more} more ${more === 1 ? 'account' : 'accounts'} of this phrase` : ''}.`);
   } catch (error) {
     progress(`Could not look for your notes: ${(error as Error).message}. Rescan from the account menu.`);
   }
@@ -845,12 +860,83 @@ async function refreshRing(): Promise<void> {
   }
 }
 
+// ── opaque.eth, held by a FORS+C key (Sepolia) ───────────────────────────
+// PQNameController (contracts/src/ethereum/ens/) owns the name and acts only on
+// a signature from its key in PQKeyRegistry. This wallet draws a key of its own
+// for names from the phrase; claiming hands the controller to it (the stack's
+// key signs two rotations), and from then on this page signs the name's
+// changes and the stack only submits them, paying the gas.
+const NAME = 'opaque.eth';
+const RESOLVER_ABI = parseAbi(['function setAddress(bytes name, uint256 coinType, bytes addressBytes)', 'function setText(bytes name, string key, string value)', 'function multicall(bytes[] calls) returns (bytes[])']);
+function setupNameCard(keys: AccountKeys): void {
+  const nameKey = (g: number) => masterKey(stream(keys.key, 'opaque/v1/ens/names')(32), 'opaque/v1/ens/wallet', g);
+  const stackUrl = new URL(requireService('meshExitUrl')).origin;
+  el('name-card').hidden = false;
+  const post = async (path: string, body: unknown) => {
+    const res = await fetch(`${stackUrl}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) });
+    const out = await res.json().catch(() => ({})) as { message?: string; hash?: string; hashes?: string[] };
+    if (!res.ok) throw new Error(out.message ?? `the stack answered ${res.status}`);
+    return out;
+  };
+  const state = async () => decodeFunctionResult({ abi: NAME_REGISTRY_ABI, functionName: 'stateOf', data: await ethCall(ENS.pqKeyRegistry, encodeFunctionData({ abi: NAME_REGISTRY_ABI, functionName: 'stateOf', args: [ENS.controller] })) });
+  /** Which of this wallet's name keys the controller answers to, if any (each costs about a second to draw). */
+  let mine: number | undefined;
+  async function show(): Promise<void> {
+    const s = await state();
+    mine = [0, 1, 2].find((g) => commitmentOf(nameKey(g)) === s.pkCommitment.toLowerCase());
+    const ours = mine !== undefined;
+    el('name-claim-row').hidden = ours;
+    el('name-point').hidden = !ours;
+    el('name-copy').textContent = ours
+      ? `${NAME} answers to this wallet's post-quantum key (${s.useCount} of ${s.maxUses} signatures used). Only a FORS+C signature from it changes the name.`
+      : `${NAME} is held by a FORS+C key on ENSv2. Claim it for this wallet's key with the claim code.`;
+    const at = await resolveName(NAME, ETHEREUM_COIN).then((r) => r.address, () => '—');
+    el('name-records').textContent = `Resolves to ${at}`;
+  }
+  el('name-claim').addEventListener('click', () => void (async () => {
+    const code = el<HTMLInputElement>('name-code').value.trim();
+    if (code === '') { setStatus('name-status', 'Enter the claim code.'); return; }
+    setStatus('name-status', 'Drawing this wallet\'s name keys, then asking the name\'s key to hand over…');
+    try {
+      const out = await post('/v1/ens/claim', { code, pk: commitmentOf(nameKey(0)), next: commitmentOf(nameKey(1)) });
+      setStatus('name-status', `Claimed: ${NAME} now answers to this wallet's key (${out.hashes?.length ?? 0} rotations).`);
+      await show();
+    } catch (error) { setStatus('name-status', `Not claimed: ${(error as Error).message}`); }
+  })());
+  el('name-point').addEventListener('click', () => void (async () => {
+    if (mine === undefined || opaqueAddress === '') return;
+    setStatus('name-status', `Signing ${NAME}'s records with this wallet's post-quantum key…`);
+    try {
+      const s = await state();
+      const name = dnsEncode(NAME);
+      const data = encodeFunctionData({ abi: RESOLVER_ABI, functionName: 'multicall', args: [[
+        encodeFunctionData({ abi: RESOLVER_ABI, functionName: 'setAddress', args: [name, ETHEREUM_COIN, opaqueAddress as `0x${string}`] }),
+        encodeFunctionData({ abi: RESOLVER_ABI, functionName: 'setText', args: [name, 'pq-key', commitmentOf(nameKey(mine))] }),
+      ]] });
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+      const signature = signExecute(nameKey(mine), BigInt(deployment.network.chainId), ENS.controller, s.useCount, ENS.resolver, data, deadline);
+      const out = await post('/v1/ens/execute', { target: ENS.resolver, data, deadline, signature });
+      setStatus('name-status', `${NAME} now resolves to this wallet: ${out.hash}`);
+      await show();
+    } catch (error) { setStatus('name-status', `Not changed: ${(error as Error).message}`); }
+  })());
+  void show().catch((error: Error) => setStatus('name-status', error.message));
+}
 // ── sending ───────────────────────────────────────────────────────────────
 
 async function onSend(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const status = el('send-status');
-  const recipient = el<HTMLInputElement>('recipient').value.trim().toLowerCase();
+  let recipient = el<HTMLInputElement>('recipient').value.trim().toLowerCase();
+  // An ENS name, on Sepolia: ENSv2's own UniversalResolver names the address it is paid at.
+  if (NETWORK === 'sepolia' && isName(recipient)) {
+    status.textContent = `Looking up ${recipient} on ENS…`;
+    try {
+      const found = await resolveName(recipient, ETHEREUM_COIN);
+      status.textContent = `${recipient} → ${found.address}${found.pq ? ', a name a FORS+C key holds' : ''}`;
+      recipient = found.address.toLowerCase();
+    } catch (error) { status.textContent = (error as Error).message; return; }
+  }
   if (!/^0x[0-9a-f]{40}$/.test(recipient)) {
     el('recipient').focus();
     status.textContent = 'Enter a recipient address (0x followed by 40 hex characters).';
@@ -1265,6 +1351,7 @@ async function init(): Promise<void> {
   // browser wallet. Each network is its own page (opaque.credit/ and
   // /testnet/, the same in the extension), with its own storage names.
   networkPicker(el<HTMLButtonElement>('network-switch'), NETWORK);
+  nameTheChain();
   // Nothing opens before the Terms of Use and Privacy Policy are accepted.
   await acceptTerms();
   // A wallet with a password opens locked.
@@ -1284,7 +1371,7 @@ async function init(): Promise<void> {
   }
   setupWalletScreens({
     views: ['home', 'send', 'swap', 'ring', 'activity', 'contracts'], account: () => account, hasBrowserWallet: () => browserAccount,
-    browserNote: 'This browser only, backed up by file', where: 'on Arc',
+    browserNote: 'This browser only, backed up by file', where: `on ${CHAIN}`,
     addressOf: (key) => arcState().addresses[key.id] ?? null,
     shortAddress,
     // Two key generations each: one at a time, so the page keeps moving.
@@ -1306,7 +1393,8 @@ async function init(): Promise<void> {
     el('backup-export').hidden = true;
     el('backup-box').querySelector('p:not(.eyebrow):not(.status)')!.textContent = 'Your recovery phrase backs this account up. A backup file from before phrases brings that browser account back here.';
   }
-  if (NETWORK === 'testnet') {
+  // Test networks turn arriving USDC into notes by themselves, if the switch says so.
+  if (NETWORK !== 'mainnet') {
     const sayAuto = () => {
       el('deposit-copy').textContent = autoOn() ? 'USDC sent to your address becomes private notes by itself.' : 'USDC at your address becomes private notes when you deposit it.';
       el('receive-then').textContent = autoOn() ? 'on testnet it becomes private notes by itself' : 'Deposit turns it into private notes';
@@ -1320,6 +1408,24 @@ async function init(): Promise<void> {
       void renderBudget().catch(() => undefined);
     });
     sayAuto();
+  }
+  if (NETWORK === 'sepolia') {
+    // Sepolia's stack gives a new wallet gas and test dollars (stack.ts FAUCET), so nothing else is needed to try it.
+    el('test-faucet').hidden = false;
+    el('test-faucet').addEventListener('click', () => void (async () => {
+      if (opaqueAddress === '') { setStatus('deposit-status', 'Your address is still being drawn: a moment.'); return; }
+      setStatus('deposit-status', 'Asking Opaque\'s faucet for test funds…');
+      const res = await fetch(`${new URL(requireService('meshExitUrl')).origin}/v1/faucet`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: opaqueAddress }),
+      }).catch(() => undefined);
+      const body = await res?.json().catch(() => ({})) as { message?: string };
+      setStatus('deposit-status', res?.ok ? 'On its way: 100 tUSDC and a little Sepolia ETH for gas, in a few seconds.' : `The faucet said no: ${body.message ?? 'it is not reachable'}.`);
+      if (res?.ok) setTimeout(() => void refreshNotes().catch(() => undefined), 15_000);
+    })());
+  }
+  if (NETWORK === 'sepolia') {
+    el<HTMLInputElement>('recipient').placeholder = '0x… or an ENS name, like opaque.eth';
+    if (account !== 'browser') setupNameCard(account);
   }
   loadSent(arcStorageOf(account, keyStoreName()).sent);
   renderActivity();
