@@ -136,6 +136,19 @@ section { padding-block: clamp(72px, 11vw, 150px); }
 .limits--why .credit p:not(.eyebrow) { color: var(--cream); font-size: clamp(16px, 1.4vw, 19px); }
 .limits--why li { border-color: rgba(255, 122, 24, 0.28); border-left: 3px solid var(--orange); background: rgba(7, 6, 8, 0.55); }
 .limits--why li b { color: var(--soft); }
+/* What it doesn't hide: the caveats, on a redacted panel; each says what stays visible. */
+.limits--honest { grid-template-columns: minmax(0, 1fr); gap: clamp(28px, 4vw, 48px); padding: clamp(28px, 5vw, 64px); border: 1px dashed rgba(255, 122, 24, 0.5); border-radius: 28px; background: repeating-linear-gradient(135deg, rgba(255, 122, 24, 0.05) 0 2px, transparent 2px 16px), var(--surface); }
+.limits--honest .credit { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: end; gap: 18px clamp(24px, 5vw, 72px); }
+.limits--honest .credit .eyebrow { grid-column: 1 / -1; color: var(--orange); }
+.limits--honest h2 em { color: var(--orange); font-style: normal; }
+.limits--honest .credit p:not(.eyebrow) { color: var(--cream); font-size: clamp(16px, 1.4vw, 19px); }
+.limits--honest ul { grid-template-columns: repeat(4, minmax(0, 1fr)); counter-reset: caveat; }
+.limits--honest li { counter-increment: caveat; display: grid; align-content: start; gap: 10px; padding: 22px; border-color: rgba(255, 122, 24, 0.22); background: rgba(7, 6, 8, 0.7); }
+.limits--honest li::before { content: counter(caveat, decimal-leading-zero); color: var(--orange); font: 800 34px/1 var(--display); letter-spacing: -0.03em; }
+.limits--honest li b { margin: 0; }
+.limits--honest .tag { justify-self: start; padding: 4px 10px; border-radius: 999px; background: var(--tint); color: var(--soft); font: 700 11px/1.2 var(--mark); letter-spacing: 0.12em; text-transform: uppercase; }
+@media (max-width: 1180px) { .limits--honest ul { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .limits--honest ul, .limits--honest .credit { grid-template-columns: minmax(0, 1fr); } }
 .credit p { margin: 0; color: var(--muted); }
 .credit a { color: var(--soft); text-underline-offset: 3px; }
 

@@ -536,17 +536,17 @@
   </section>
 
   <section class="wrap" aria-labelledby="limits-title">
-    <div class="limits">
+    <div class="limits limits--honest">
       <div class="credit">
         <p class="eyebrow">Honest about it</p>
-        <h2 class="display" id="limits-title" style="font-size: clamp(36px, 5vw, 72px)">What it doesn't hide.</h2>
+        <h2 class="display" id="limits-title" style="font-size: clamp(36px, 5vw, 72px)">What it <em>doesn't hide.</em></h2>
         <p>Built on the Ethereum Foundation's <a href="https://ethereum.github.io/anon-rpc/" target="_blank" rel="noopener">anon-rpc</a> and the <a href="https://demo.nox.hisoka.io/anon-rpc" target="_blank" rel="noopener">Nox</a> mixnet. Opaque's code is <a href="https://github.com/Opaque-wallet/opaque-wallet" target="_blank" rel="noopener">open source</a> (Apache-2.0). On Sepolia today.</p>
       </div>
       <ul>
-        <li><b>One bootstrap read.</b> The wallet reads the worker's hash from its contract once, directly, before anything is anonymized.</li>
-        <li><b>Payments still use Opaque's relays.</b> A private payment needs our attester, so it crosses our three-hop mesh, which hides your IP but is one operator.</li>
-        <li><b>Slower.</b> Mixing is the point: a read takes about a second instead of a blink.</li>
-        <li><b>The chain is still public.</b> anon-rpc hides who asks. Opaque's pools and stealth addresses hide who pays and who is paid.</li>
+        <li><b>One bootstrap read.</b><span class="tag">Seen once</span> The wallet reads the worker's hash from its contract once, directly, before anything is anonymized.</li>
+        <li><b>Payments still use Opaque's relays.</b><span class="tag">One operator</span> A private payment needs our attester, so it crosses our three-hop mesh, which hides your IP but is one operator.</li>
+        <li><b>Slower.</b><span class="tag">About 1 s a read</span> Mixing is the point: a read takes about a second instead of a blink.</li>
+        <li><b>The chain is still public.</b><span class="tag">On chain</span> anon-rpc hides who asks. Opaque's pools and stealth addresses hide who pays and who is paid.</li>
       </ul>
     </div>
   </section>
