@@ -29,9 +29,9 @@ import { deployment, NETWORK, requireService, type SwapToken } from '../../deplo
 import type { SwapQuote } from '../../backend/chain/wallet-rpc.ts';
 import { oneOperationAtATime } from '../../backend/chain/pq-wallet-chain.ts';
 import { networkPicker } from './lib/network-picker.ts';
-import { ENS, ETHEREUM_COIN, ethCall, dnsEncode, isName, resolveName } from './ethereum/ens-name.ts';
+import { ENS, ETHEREUM_COIN, ethCall, dnsEncode, isName, opaqueNameFree, opaqueNameOf, resolveName } from './ethereum/ens-name.ts';
 import { commitmentOf, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signExecute } from '../../backend/ethereum/ens.ts';
-import { decodeFunctionResult, encodeFunctionData, parseAbi } from '../../backend/ethereum/frame.ts';
+import { decodeFunctionResult, encodeFunctionData, formatEther, parseAbi, parseEther } from '../../backend/ethereum/frame.ts';
 import { stream } from './lib/wallet-keys.ts';
 import { scoped } from './lib/storage-name.ts';
 
@@ -325,6 +325,7 @@ function requestedDeadline(): UnixSeconds {
  */
 function onlyWholeAmounts(input: HTMLInputElement, after: () => void): void {
   input.addEventListener('input', () => {
+    if (input.dataset['decimal'] === '1') return; // an ETH amount (setSendAsset): parseEther checks it
     // Strip as it arrives, typed or pasted; leading zeros go too, so "007"
     // does not read as an amount of its own.
     const cleaned = input.value.replace(/\D+/g, '').replace(/^0+(?=\d)/, '').slice(0, MAX_AMOUNT_DIGITS);
@@ -340,6 +341,7 @@ function onlyWholeAmounts(input: HTMLInputElement, after: () => void): void {
   });
   // An empty or 0 field left behind on blur returns to the smallest amount.
   input.addEventListener('blur', () => {
+    if (input.dataset['decimal'] === '1') return; // an ETH amount: 0.001 is not "empty"
     if (wholeAmount(input.id) === undefined) { input.value = '1'; after(); }
   });
 }
@@ -410,7 +412,7 @@ function renderBalance(): void {
   el('note-count').textContent = parts.join(' · ');
   el('asset-balance').textContent = `${total}.00`;
   el('asset-notes').textContent = `${available.length} private note${available.length === 1 ? '' : 's'}`;
-  el<HTMLButtonElement>('arm').disabled = available.length === 0;
+  el<HTMLButtonElement>('arm').disabled = !sendEth && available.length === 0;
 }
 
 function renderDepositSplit(): void {
@@ -611,6 +613,10 @@ const spendable = (t: SwapToken): bigint => {
 async function refreshTokens(): Promise<void> {
   if (!runtimeReady || !opaqueAddress) return;
   tokenHeld = await rt.tokenBalances(opaqueAddress as `0x${string}`);
+  if (!GAS_IN_USDC) {
+    ethHeld = await rt.ethBalance(opaqueAddress as `0x${string}`);
+    if (!el('view-contracts').hidden) el('contracts-gas').textContent = `${ethText(ethHeld)} ETH`;
+  }
   if (SWAPS) renderSwapSides();
   renderTokenAssets();
 }
@@ -626,6 +632,14 @@ function renderSwapSides(): void {
 /** Tokens other than USDC at the address, under Your funds: public until swapped to USDC and deposited. */
 function renderTokenAssets(): void {
   el('assets').querySelectorAll('.at-address').forEach((n) => n.remove());
+  if (ethHeld !== undefined) {
+    const row = document.createElement('div');
+    row.className = 'asset at-address';
+    row.innerHTML = `<i class="tok tok-eth">E</i><span><b>${CHAIN} ETH</b><small>At your address, public · pays gas</small></span><span class="asset-value"><b></b><button class="link" type="button">Send</button></span>`;
+    row.querySelector('.asset-value b')!.textContent = `${ethText(ethHeld)} ETH`;
+    row.querySelector('button')!.addEventListener('click', () => { setSendAsset(true); showView('send'); });
+    el('assets').append(row);
+  }
   for (const t of SWAP_TOKENS) {
     const held = tokenHeld[t.symbol] ?? 0n;
     if (isUsdc(t) || held === 0n) continue;
@@ -875,7 +889,8 @@ const RESOLVER_ABI = parseAbi(['function setAddress(bytes name, uint256 coinType
 function setupNameCard(keys: AccountKeys): void {
   const nameKey = (g: number) => masterKey(stream(keys.key, 'opaque/v1/ens/names')(32), 'opaque/v1/ens/wallet', g);
   const stackUrl = new URL(requireService('meshExitUrl')).origin;
-  el('name-card').hidden = false;
+  // opaque.eth itself is its owner's to claim, with the code: behind a link, or shown once this wallet holds it.
+  el('name-owner').addEventListener('click', () => { el('name-card').hidden = false; el('name-owner').hidden = true; });
   const post = async (path: string, body: unknown) => {
     const res = await fetch(`${stackUrl}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) });
     const out = await res.json().catch(() => ({})) as { message?: string; hash?: string; hashes?: string[]; ok?: boolean };
@@ -889,6 +904,7 @@ function setupNameCard(keys: AccountKeys): void {
     const s = await state();
     mine = [0, 1, 2].find((g) => commitmentOf(nameKey(g)) === s.pkCommitment.toLowerCase());
     const ours = mine !== undefined;
+    if (ours) { el('name-card').hidden = false; el('name-owner').hidden = true; }
     el('name-claim-row').hidden = ours;
     el('name-point').hidden = !ours;
     el('name-copy').textContent = ours
@@ -930,6 +946,114 @@ function setupNameCard(keys: AccountKeys): void {
   })());
   void show().catch((error: Error) => setStatus('name-status', error.message));
 }
+// ── name.opaque.eth (Sepolia) ─────────────────────────────────────────────
+// Any wallet claims one name under opaque.eth: a call to OpaqueNames its own
+// account makes, signed by its FORS+C key, so the name is held by the account
+// and resolves to it. OpaqueNames refuses any caller that is not a PQ account.
+
+const NAMES_ABI = parseAbi(['function claim(string label)', 'function release()']);
+let refreshSubname = async (): Promise<void> => undefined;
+
+function setupSubname(): void {
+  const names = ENS.names;
+  if (names === undefined) return;
+  el('sub-card').hidden = false;
+  let held = '';
+  refreshSubname = async () => {
+    if (opaqueAddress === '') return;
+    held = await opaqueNameOf(opaqueAddress as `0x${string}`).catch(() => held);
+    el('sub-claim-row').hidden = held !== '';
+    el('sub-held').hidden = held === '';
+    el('sub-name').textContent = held === '' ? '' : `${held}.opaque.eth`;
+    el('sub-copy').textContent = held === ''
+      ? 'A name under opaque.eth for this wallet: anyone can pay it by name, and only this wallet\'s post-quantum key holds it.'
+      : `This wallet's name. Anyone can pay ${held}.opaque.eth: it resolves to this wallet's address, and only its post-quantum key holds the name.`;
+  };
+  /** One call from the account, signed by its key; then the read waits out a public RPC a block behind. */
+  const run = async (data: `0x${string}`, doing: string, done: (tx: string) => string, changed: () => boolean) => {
+    if (!runtimeReady || opaqueAddress === '') { setStatus('sub-status', 'Opaque is still starting.'); return; }
+    setStatus('sub-status', doing);
+    try {
+      const tx = await rt.execute(opaqueAddress as `0x${string}`, [{ to: names, data }]);
+      for (let tries = 0; tries < 20 && (await refreshSubname(), !changed()); tries++) await new Promise((r) => setTimeout(r, 3_000));
+      setStatus('sub-status', done(tx));
+      void refreshTokens().catch(() => undefined);
+      void renderBudget().catch(() => undefined);
+    } catch (error) { setStatus('sub-status', `Not done: ${gasWhy(error)}`); }
+  };
+  el('sub-claim').addEventListener('click', () => void (async () => {
+    const label = el<HTMLInputElement>('sub-label').value.trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(label)) { setStatus('sub-status', 'Use 3 to 32 of a to z, 0 to 9 and hyphens, not at either end.'); return; }
+    if (!await opaqueNameFree(label).catch(() => true)) { setStatus('sub-status', `${label}.opaque.eth is taken. Try another.`); return; }
+    await run(encodeFunctionData({ abi: NAMES_ABI, functionName: 'claim', args: [label] }),
+      `Claiming ${label}.opaque.eth: this wallet's post-quantum key signs it…`,
+      (tx) => `${label}.opaque.eth is yours: ${tx}`, () => held === label);
+  })());
+  el('sub-release').addEventListener('click', () => void (async () => {
+    const was = held;
+    if (!confirm(`Release ${was}.opaque.eth? Anyone can claim it after you.`)) return;
+    await run(encodeFunctionData({ abi: NAMES_ABI, functionName: 'release' }),
+      `Releasing ${was}.opaque.eth…`, () => `${was}.opaque.eth is free again.`, () => held === '');
+  })());
+}
+
+// ── ETH, where gas is ETH (Sepolia) ─────────────────────────────────────
+// Public, at the account's address: it pays gas, and Send can move it as an
+// ordinary transfer the account's FORS+C key signs. Only USDC goes privately.
+
+/** The account's ETH, read through the mesh; undefined where gas is USDC. */
+let ethHeld: bigint | undefined;
+let sendEth = false;
+const ethText = (wei: bigint): string => Number(formatEther(wei)).toLocaleString('en-US', { maximumFractionDigits: 5 });
+
+function setSendAsset(eth: boolean): void {
+  sendEth = eth;
+  el('send-title').textContent = eth ? 'Send ETH' : 'Send privately';
+  const tok = el('send-asset-tok');
+  tok.className = `tok tok-${eth ? 'eth' : 'usdc'}`;
+  tok.textContent = eth ? 'E' : 'U';
+  el('send-asset-name').textContent = eth ? 'ETH' : 'USDC';
+  el('send-asset-mode').textContent = `${eth ? 'Public' : 'Private'} on ${CHAIN}`;
+  el('send-unit').textContent = eth ? 'ETH' : 'USDC';
+  const amount = el<HTMLInputElement>('send-amount');
+  amount.dataset['decimal'] = eth ? '1' : '0';
+  amount.inputMode = eth ? 'decimal' : 'numeric';
+  amount.pattern = eth ? '[0-9]*[.]?[0-9]*' : '[0-9]*';
+  amount.maxLength = eth ? 24 : 6;
+  amount.value = eth ? '0.001' : '1';
+  el('arm').textContent = eth ? 'Send ETH' : 'Send privately';
+  el('send-privacy').hidden = eth;
+  el('send-how').hidden = eth;
+  el('send-public-note').hidden = !eth;
+  setStatus('send-status', '');
+  renderBalance();
+}
+
+/** ETH from the account's address: one operation, its value the amount, signed by the account's PQ key. */
+async function sendEthTo(to: `0x${string}`): Promise<void> {
+  const status = el('send-status');
+  let value = 0n;
+  try { value = parseEther(el<HTMLInputElement>('send-amount').value.trim()); } catch { /* checked below */ }
+  if (value <= 0n) { status.textContent = 'Enter an amount of ETH, like 0.001.'; return; }
+  if (!runtimeReady || opaqueAddress === '') { status.textContent = 'Opaque is still starting.'; return; }
+  const have = await rt.ethBalance(opaqueAddress as `0x${string}`).catch(() => undefined);
+  if (have !== undefined && value >= have) { status.textContent = `The account holds ${ethText(have)} ETH, and its gas comes from that too: send less.`; return; }
+  const button = el<HTMLButtonElement>('arm');
+  button.disabled = true;
+  status.textContent = 'Signing with this account\'s post-quantum key, and sending it through the relays…';
+  try {
+    const tx = await rt.execute(opaqueAddress as `0x${string}`, [{ to, data: '0x', value }]);
+    status.textContent = '';
+    status.append(`Sent ${ethText(value)} ETH to ${to}. `, Object.assign(document.createElement('a'), { href: `${ARC_EXPLORER}/tx/${tx}`, target: '_blank', rel: 'noopener', textContent: 'View the transaction' }));
+    void refreshTokens().catch(() => undefined);
+    void renderBudget().catch(() => undefined);
+  } catch (error) {
+    status.textContent = `Not sent: ${gasWhy(error)}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // ── sending ───────────────────────────────────────────────────────────────
 
 async function onSend(event: SubmitEvent): Promise<void> {
@@ -950,6 +1074,7 @@ async function onSend(event: SubmitEvent): Promise<void> {
     status.textContent = 'Enter a recipient address (0x followed by 40 hex characters).';
     return;
   }
+  if (sendEth) { await sendEthTo(recipient as `0x${string}`); return; }
   // Paid in whole notes, each its own payment, the fewest that make the
   // amount exactly: a note is spent whole, with no change (§6.6).
   const amount = wholeAmount('send-amount');
@@ -1127,14 +1252,15 @@ async function newDeployer(): Promise<void> {
 /** A bundler's refusal, in words: AA21 is an account with nothing to pay gas from. */
 const gasWhy = (error: unknown): string => {
   const message = (error as Error).message;
-  return /AA21/.test(message) ? 'this account has no USDC to pay gas. Send it 1 or 2 USDC from your notes first.' : message;
+  if (!/AA21/.test(message)) return message;
+  return GAS_IN_USDC ? 'this account has no USDC to pay gas. Send it 1 or 2 USDC from your notes first.' : `this account has too little ${CHAIN} ETH to pay gas. Get test funds on Home, or send it some.`;
 };
 
 const contractsOf = () => (account === null ? [] : arcState().contracts?.[idOf(account)] ?? []);
 
 function renderContracts(): void {
   el('contracts-account').textContent = opaqueAddress || 'Starting…';
-  el('contracts-gas').textContent = runtimeReady ? `${accountUsdc} USDC` : '—';
+  el('contracts-gas').textContent = !runtimeReady ? '—' : GAS_IN_USDC ? `${accountUsdc} USDC` : `${ethText(ethHeld ?? 0n)} ETH`;
   el('contracts-auto').hidden = NETWORK !== 'testnet' || !autoOn();
   if (el<HTMLInputElement>('deploy-salt').value === '') el<HTMLInputElement>('deploy-salt').value = newSalt();
   renderDeployAt();
@@ -1432,10 +1558,21 @@ async function init(): Promise<void> {
       if (res?.ok) setTimeout(() => void refreshNotes().catch(() => undefined), 15_000);
     })());
   }
+  if (!GAS_IN_USDC) {
+    // ETH is the account's second asset here: picked on Send, named in Receive.
+    const picker = el<HTMLDialogElement>('asset-dialog');
+    el<HTMLButtonElement>('send-asset').disabled = false;
+    el('send-asset').addEventListener('click', () => picker.showModal());
+    el('asset-usdc').addEventListener('click', () => { picker.close(); setSendAsset(false); });
+    el('asset-eth').addEventListener('click', () => { picker.close(); setSendAsset(true); });
+    picker.addEventListener('click', (e) => { if (e.target === picker) picker.close(); });
+    el('receive-eth').hidden = false;
+  }
   if (NETWORK === 'sepolia') {
     el<HTMLInputElement>('recipient').placeholder = '0x… or an ENS name, like opaque.eth';
     el('recipient').nextElementSibling!.textContent = 'A Sepolia address or an ENS name.';
     if (account !== 'browser') setupNameCard(account);
+    setupSubname();
   }
   loadSent(arcStorageOf(account, keyStoreName()).sent);
   renderActivity();
@@ -1460,6 +1597,7 @@ async function init(): Promise<void> {
     }
   }
   runtimeReady = true;
+  void refreshSubname();
 
   // One failed read must not stop the rest of the page from starting.
   await Promise.all([

@@ -146,3 +146,11 @@ test('F63c_a_bundler_that_never_answers_is_given_up_on', async () => {
     clearInterval(alive);
   }
 });
+
+test('an_eth_balance_read_is_allowed_only_where_gas_is_eth', async () => {
+  const { walletRpcAllowlist } = await import('../wallet-rpc.ts');
+  const { deployment } = await import('../../../deployments/index.ts');
+  const multicall = walletRpcAllowlist().get('0xca11bde05977b3631167028862be2a173976ca11');
+  if (deployment.network.nativeCurrency.symbol === 'USDC') assert.equal(multicall, undefined, 'Arc reads its USDC, never Multicall3');
+  else assert.deepEqual([...multicall!], [toFunctionSelector('getEthBalance(address)')], 'only getEthBalance, nothing else Multicall3 can do');
+});

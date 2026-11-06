@@ -104,6 +104,16 @@
       <p class="status" id="deposit-status" role="status"></p>
     </div>
 
+    <div class="deposit-card" id="sub-card" hidden>
+      <div class="deposit-copy"><p class="eyebrow">Your ENS name</p><p id="sub-copy">A name under opaque.eth for this wallet: anyone can pay it by name, and only this wallet's post-quantum key holds it.</p></div>
+      <div class="deposit-row" id="sub-claim-row">
+        <label class="deposit-amount" for="sub-label"><input id="sub-label" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="yourname" maxlength="32"><span>.opaque.eth</span></label>
+        <button class="primary" id="sub-claim" type="button">Claim</button>
+      </div>
+      <div class="deposit-row" id="sub-held" hidden><b class="mono" id="sub-name"></b><button class="link" id="sub-release" type="button">Release</button></div>
+      <small class="deposit-split"><button class="link" id="name-owner" type="button">Hold opaque.eth itself? Claim it with the code</button></small>
+      <p class="status" id="sub-status" role="status"></p>
+    </div>
     <div class="deposit-card" id="name-card" hidden>
       <div class="deposit-copy"><p class="eyebrow">opaque.eth</p><p id="name-copy">Reading opaque.eth on ENS…</p></div>
       <div class="deposit-row" id="name-claim-row">
@@ -131,25 +141,26 @@
   </section>
 
   <section class="view flow-view" id="view-send" aria-labelledby="tab-send" hidden>
-    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Send privately</h1><span></span></div>
+    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1 id="send-title">Send privately</h1><span></span></div>
     <div class="flow">
       <form class="form flow-main" id="send-form">
         <div class="amount">
-          <div class="amount-head"><span class="tok-pick static"><i class="tok tok-usdc">U</i><span>USDC</span></span><span>Private on Arc</span></div>
-          <strong><input id="send-amount" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1" aria-label="Amount to send"><small>USDC</small></strong>
+          <div class="amount-head"><button class="tok-pick static" id="send-asset" type="button" aria-haspopup="dialog" aria-label="Choose what to send" disabled><i class="tok tok-usdc" id="send-asset-tok">U</i><span id="send-asset-name">USDC</span></button><span id="send-asset-mode">Private on Arc</span></div>
+          <strong><input id="send-amount" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1" aria-label="Amount to send"><small id="send-unit">USDC</small></strong>
         </div>
         <div class="to-card one">
           <label class="field" for="recipient"><span>To</span><input id="recipient" class="mono" type="text" placeholder="0x…" autocomplete="off" spellcheck="false"><small>An Arc address.</small></label>
         </div>
-        <fieldset class="privacy-choice">
+        <fieldset class="privacy-choice" id="send-privacy">
           <label class="privacy-toggle switch" for="wait-for-privacy"><input id="wait-for-privacy" type="checkbox"><span><b>Wait for stronger privacy</b><small>Settles once privacy conditions are strong, and no later than the time below.</small></span></label>
           <p class="immediate-note" id="immediate-settlement">Send now: settles as soon as the network accepts it.</p>
           <label class="field deadline-field" id="privacy-deadline-wrap" for="privacy-deadline" hidden><span>Settle no later than</span><input id="privacy-deadline" type="datetime-local" autocomplete="off" aria-describedby="privacy-deadline-help" disabled><small id="privacy-deadline-help">A latest-settlement deadline, not a scheduled send time.</small></label>
         </fieldset>
+        <p class="fine-print" id="send-public-note" hidden>ETH leaves your account's address in the open, as an ERC-4337 operation your post-quantum key signs. Only tUSDC goes privately, through the pool.</p>
         <button class="primary" id="arm" type="submit">Send privately</button>
         <p class="status" id="send-status" role="status"></p>
       </form>
-      <aside class="flow-side">
+      <aside class="flow-side" id="send-how">
         <p class="eyebrow">How a private send works</p>
         <ol class="steps">
           <li><b>A ring of eight</b><small>Your payment proves it owns one of 8 identical notes, never which.</small></li>
@@ -285,9 +296,14 @@
   <p class="send-progress-log" id="deposit-progress-log" role="status" aria-live="polite"></p>
 </dialog>
 
+<dialog id="asset-dialog" class="networks">
+  <form method="dialog" class="dialog-head"><h2>Send</h2><button value="close" aria-label="Close">×</button></form>
+  <button class="net-row" id="asset-usdc" type="button"><i class="tok tok-usdc">U</i><span><b>tUSDC</b><small>Private: the pool pays, nothing on chain names you</small></span></button>
+  <button class="net-row" id="asset-eth" type="button"><i class="tok tok-eth">E</i><span><b>ETH</b><small id="asset-eth-note">Public: a transfer from your account, signed with FORS+C</small></span></button>
+</dialog>
 <dialog id="receive-dialog">
   <form method="dialog" class="dialog-head"><div><p class="eyebrow">Receive on Arc</p><h2 id="receive-name">Your Opaque account</h2></div><button value="close" aria-label="Close">×</button></form>
-  <p>One address for every payment to this account: share it as often as you like. Only its post-quantum key can move what it holds. Send USDC here from any wallet or exchange (Opaque never connects to one); <span id="receive-then">Deposit turns it into private notes</span>, and the first deposit also sets the account up on chain.</p>
+  <p>One address for every payment to this account: share it as often as you like. Only its post-quantum key can move what it holds. Send USDC here from any wallet or exchange (Opaque never connects to one); <span id="receive-then">Deposit turns it into private notes</span>, and the first deposit also sets the account up on chain.<span id="receive-eth" hidden> Sepolia ETH can come here too: it pays the account's gas, and stays public.</span></p>
   <div class="address"><code id="receive-address">Starting…</code></div>
   <div class="dialog-actions"><button class="secondary" id="copy-address" type="button">Copy address</button><a class="primary" id="open-explorer" href="#" target="_blank" rel="noopener">View on explorer</a></div>
 </dialog>

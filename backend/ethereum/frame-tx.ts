@@ -42,7 +42,7 @@ import { poolId } from '@opaque/protocol-types/codecs.js';
 
 import { attesterCommitment } from '../cre/attester-keys.ts';
 import { createNoteSecret, deriveCommitment } from '../zk/index.ts';
-import { accountOf, accountTx, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, forsKey, hasCode, keyNow, keyOf, MAX_USES, mined, nonceOf, seededKey, sendCalls, settled, txUrl, type Call } from './frame.ts';
+import { accountOf, accountTx, ATTESTER_FIRST_GENERATION, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, forsKey, hasCode, keyNow, keyOf, MAX_USES, mined, nonceOf, seededKey, sendCalls, settled, STACK_FORS, txUrl, type Call } from './frame.ts';
 import { pqUSD, poolSetup, swapCalls, tokenBalance } from './uniswap.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -172,7 +172,7 @@ async function send(): Promise<void> {
 
 /** Hands the account to a fresh key now; with [eth], the same transaction tops up Opaque's devnet faucet. */
 async function rotate(): Promise<void> {
-  const faucet = (devnet.contracts as { faucet: Address }).faucet;
+  const faucet = (devnet.contracts as unknown as { faucet: Address }).faucet;
   const topUp = process.argv[3] === undefined ? [] : [{ to: faucet, value: parseEther(process.argv[3]), gas: 50_000n }];
   const hash = await signed(topUp, false, true);
   await settled(hash);
@@ -259,7 +259,7 @@ async function privacy(): Promise<void> {
     address: getContractAddress({ opcode: 'CREATE2', from: create2Deployer, salt, bytecode: initCode }).toLowerCase() as Address,
     call: { to: create2Deployer, data: concat([salt, initCode]), gas, state } as Call,
   });
-  const stackKey0 = seededKey(stackMaster(), 'stack/fors', 0);
+  const stackKey0 = seededKey(stackMaster(), STACK_FORS, 0);
   const stack = (await accountOf(keyOf(stackKey0))).toLowerCase() as Address;
 
   // 1. The CREATE helper, and pqUSDC: 6 decimals, as the note sizes assume; its supply to this account.
@@ -310,7 +310,7 @@ async function privacy(): Promise<void> {
     const master = attesterMaster();
     const now = BigInt((await call('eth_getBlockByNumber', ['latest', false])).timestamp);
     // As Arc's attester: 32 signatures a key, rotation within 30 days (contracts/script/DeployRingPool.s.sol).
-    const args = [attesterCommitment(master, 0), attesterCommitment(master, 1), 32n, now + 30n * 86_400n] as const;
+    const args = [attesterCommitment(master, ATTESTER_FIRST_GENERATION), attesterCommitment(master, ATTESTER_FIRST_GENERATION + 1), 32n, now + 30n * 86_400n] as const;
     const hash = await sendCalls(stack, stackKey0, [{ to: p.pqKeyRegistry.address, data: encodeFunctionData({ abi: PRIVACY_ABI, functionName: 'register', args }), gas: 300_000n, state: 500_000n }]);
     await settled(hash);
     p.attester = stack;

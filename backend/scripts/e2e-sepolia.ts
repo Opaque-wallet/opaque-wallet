@@ -2,6 +2,8 @@
 // the Sepolia page (Arc's code, VITE_NETWORK=sepolia), test funds from the stack's
 // faucet, a deposit its FORS key signs (an ERC-4337 operation, made into notes by
 // itself), a private payment through the mesh, and the recipient's tUSDC on chain;
+// the account's ETH listed and sent publicly from Send; a name.opaque.eth claimed
+// by the wallet, resolved by ENS, paid by name and released;
 // then opaque.eth claimed from the page with the stack's claim code, pointed at the
 // wallet by a FORS+C signature, and paid by name. The name goes back to the stack's
 // key at the end (two rotations the test wallet's name keys sign), so the claim
@@ -60,7 +62,9 @@ async function handBack({ phrase, to }: { phrase: string; to: number }): Promise
   const deadline = (await pub.getBlock()).timestamp + 30n * 86_400n;
   const [home, after] = [commitmentOf(stackKey(to)), commitmentOf(stackKey(to + 1))];
   const isMine = (c: string) => [0, 1].some((g) => commitmentOf(mine(g)) === c.toLowerCase());
-  let s = await settled((x) => isMine(x.pkCommitment) || x.pkCommitment.toLowerCase() === home, 'the test wallet\'s key or the stack\'s');
+  const stacks = (c: string) => Array.from({ length: to + 2 }, (_, g) => g).some((g) => commitmentOf(stackKey(g)) === c.toLowerCase());
+  let s = await settled((x) => isMine(x.pkCommitment) || stacks(x.pkCommitment), 'the test wallet\'s key or the stack\'s');
+  if (!isMine(s.pkCommitment)) { console.log('    opaque.eth never left the stack\'s key: nothing to hand back'); return; }
   let restored = false;
   while (isMine(s.pkCommitment)) {
     const key = [0, 1].map(mine).find((k) => commitmentOf(k) === s.pkCommitment.toLowerCase())!;
@@ -131,6 +135,49 @@ try {
   await until('the pool to pay the recipient', async () => (await tusdc(recipient)) === 3_000_000n, 600_000);
   check(true, `paid privately: ${recipient} holds exactly 3 tUSDC, from the pool`);
 
+  // ETH, public, from the same account: Home lists it, Send picks it, the account's PQ key signs the transfer.
+  await page.click('#tab-home');
+  await page.waitForFunction(() => [...document.querySelectorAll('#assets .asset b')].some((b) => /^[\d.,]+ ETH$/.test(b.textContent ?? '')), undefined, { timeout: 120_000 });
+  check(true, `Your funds lists the account's ETH: ${await page.$$eval('#assets .asset b', (bs: Element[]) => bs.map((b) => b.textContent).filter((t) => / ETH$/.test(t ?? '')).join(''))}`);
+  const ethTo = `0x${randomBytes(20).toString('hex')}` as `0x${string}`;
+  await page.click('#tab-send');
+  await page.click('#send-asset');
+  await page.click('#asset-eth');
+  await page.fill('#recipient', ethTo);
+  await page.fill('#send-amount', '0.001');
+  await page.click('#arm');
+  // Any answer but "Signing…": a refusal must fail here, with its words, not as a timeout.
+  await page.waitForFunction(() => { const s = document.getElementById('send-status')?.textContent ?? ''; return s !== '' && !s.startsWith('Signing'); }, undefined, { timeout: 300_000 });
+  check((await page.textContent('#send-status'))?.startsWith('Sent'), `sent ETH from the page: ${await page.textContent('#send-status')}`);
+  await until('the ETH to arrive', async () => (await pub.getBalance({ address: ethTo })) === 1_000_000_000_000_000n, 120_000);
+  check(true, `${ethTo} holds exactly 0.001 ETH`);
+  await page.click('#send-asset');
+  await page.click('#asset-usdc');
+
+  // name.opaque.eth: the wallet claims its own name; ENS resolves it to the wallet; a payment by that name arrives.
+  const label = `e2e-${randomBytes(4).toString('hex')}`;
+  await page.click('#tab-home');
+  await page.fill('#sub-label', label);
+  await page.click('#sub-claim');
+  await page.waitForFunction(() => /is yours|^Not done/.test(document.getElementById('sub-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
+  check((await page.textContent('#sub-status'))?.includes('is yours'), `claimed from the page: ${await page.textContent('#sub-status')}`);
+  await until('ENS to resolve the new name', async () => { const r = await resolveName(`${label}.opaque.eth`, ETHEREUM_COIN); return r.address.toLowerCase() === account.toLowerCase() && r.pq; }, 120_000);
+  check(true, `ENSv2's UniversalResolver: ${label}.opaque.eth → ${account}, held by a PQ account`);
+  const before = await pub.getBlockNumber();
+  await page.click('#tab-send');
+  // Notes are whole and spent whole: after 3 (2 + 1) the notes still make 2 and 5.
+  await page.fill('#recipient', `${label}.opaque.eth`);
+  await page.fill('#send-amount', '2');
+  await page.click('#arm');
+  await until(`${label}.opaque.eth to be paid`, async () => (await pub.getLogs({ address: d.tokens.usdc.address, event: parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])[0], args: { to: account }, fromBlock: before })).some((l) => l.args.value === 2_000_000n), 600_000)
+    .catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
+  check(true, `paid ${label}.opaque.eth by name: 2 tUSDC from the pool to the wallet that holds it`);
+  page.once('dialog', (dialog: any) => void dialog.accept());
+  await page.click('#tab-home');
+  await page.click('#sub-release');
+  await page.waitForFunction(() => /free again|^Not done/.test(document.getElementById('sub-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
+  check((await page.textContent('#sub-status'))?.includes('free again'), `released: ${await page.textContent('#sub-status')}`);
+
   // opaque.eth, claimed on the page with the stack's claim code.
   const held = await nameState();
   const k = Array.from({ length: 62 }, (_, i) => i).find((g) => commitmentOf(stackKey(g)) === held.pkCommitment.toLowerCase());
@@ -140,6 +187,7 @@ try {
   const ours = commitmentOf(nameKeys(phrase)(0));
   await page.route('**/v1/ens/claim', (route: any) => (JSON.parse(route.request().postData()).pk === ours ? route.continue() : route.abort()));
   await page.click('#tab-home');
+  await page.click('#name-owner');
   await page.waitForSelector('#name-claim', { state: 'visible', timeout: 60_000 });
   await page.fill('#name-code', readFileSync(new URL('ens-claim-code', STACK), 'utf8').trim());
   await page.click('#name-claim');
@@ -161,10 +209,11 @@ try {
   const TRANSFER = parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])[0];
   await page.click('#tab-send');
   await page.fill('#recipient', 'opaque.eth');
-  await page.fill('#send-amount', '2');
+  await page.fill('#send-amount', '5');
   await page.click('#arm');
-  await until('opaque.eth to be paid', async () => (await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { to: account }, fromBlock: from })).some((l) => l.args.value === 2_000_000n), 600_000);
-  check(true, 'paid opaque.eth by name: 2 tUSDC from the pool to the address ENS names');
+  await until('opaque.eth to be paid', async () => (await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { to: account }, fromBlock: from })).some((l) => l.args.value === 5_000_000n), 600_000)
+    .catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
+  check(true, 'paid opaque.eth by name: 5 tUSDC from the pool to the address ENS names');
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 } finally {
   await browser.close();

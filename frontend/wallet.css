@@ -225,6 +225,10 @@ button.intent:hover { background: var(--surface); }
 }
 .tok-pick select:hover, .tok-pick select:focus-visible { border-color: rgba(255, 122, 24, 0.5); background-color: #241e25; }
 .tok-pick.static { align-items: center; height: 42px; padding: 0 16px 0 43px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--text); font-weight: 600; }
+button.tok-pick.static { font: inherit; font-weight: 600; }
+button.tok-pick.static:not(:disabled) { cursor: pointer; }
+button.tok-pick.static:not(:disabled)::after { content: '▾'; margin-left: 8px; color: var(--muted); }
+button.tok-pick.static:not(:disabled):hover { border-color: rgba(255, 122, 24, 0.5); }
 
 /* Who it goes to: the address and its tag side by side when there is room. */
 .to-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); }

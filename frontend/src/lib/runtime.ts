@@ -51,7 +51,7 @@ import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
 import { ARC_AUTHORITY, checkSwapCall, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../../backend/chain/pq-wallet-chain.ts';
 import { browserPayer, createBrowserPool, createMeshChainObserver, type DepositMany } from '../../../backend/chain/wallet-chain.ts';
 import { capabilitiesOf } from '../../../backend/chain/pool.ts';
-import { readOne, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
+import { ethBalance, readOne, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient } from '../../../packages/ring-client/src/index.ts';
 import type { RingProver } from '../../../packages/ring-client/src/ring-client.ts';
@@ -138,7 +138,9 @@ export interface WalletRuntime {
   /** Everything the account holds, less this operation's gas, to `to`. */
   withdraw(address: `0x${string}`, to: `0x${string}`): Promise<TxHash>;
   /** Calls the account makes in one operation its PQ key signs, gas from its USDC: a contract deploy, or a call to one. */
-  execute(address: `0x${string}`, calls: readonly { readonly to: `0x${string}`; readonly data: `0x${string}` }[]): Promise<TxHash>;
+  execute(address: `0x${string}`, calls: readonly { readonly to: `0x${string}`; readonly data: `0x${string}`; readonly value?: bigint }[]): Promise<TxHash>;
+  /** The account's ETH, where gas is ETH (Sepolia). */
+  ethBalance(address: `0x${string}`): Promise<bigint>;
   /** The account open: one of the recovery phrase's, or this browser's own from before phrases. */
   readonly account: AccountKeys | 'browser';
   /** Where this account's sent payments are kept. */
@@ -385,7 +387,8 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       return { usdc: Number(f.usdc6) / 1e6, prepaidGas: Number(f.prepaidGas) / 1e18 };
     },
     withdraw: (address, to) => opsFor(address).withdraw(to.toLowerCase() as never),
-    execute: (address, calls) => opsFor(address).execute(calls.map((c) => ({ to: c.to.toLowerCase() as never, data: c.data }))),
+    execute: (address, calls) => opsFor(address).execute(calls.map((c) => ({ to: c.to.toLowerCase() as never, data: c.data, ...(c.value === undefined ? {} : { value: c.value }) }))),
+    ethBalance: (address) => ethBalance(walletRpc, address as never),
     account,
     sentKey: names.sent,
     async open() {
@@ -407,6 +410,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
       saveArcState({ generations: { ...generations, [account.id]: (generations[account.id] ?? 0) + 1 } });
     },
     async tokenBalances(address) {
+      if (deployment.swap.tokens.length === 0) return {}; // Sepolia: no swap tokens, and an empty STATE read is refused
       const amounts = await tokenBalances(walletRpc, address as never, deployment.swap.tokens.map((t) => t.address as never));
       return Object.fromEntries(deployment.swap.tokens.map((t, i) => [t.symbol, amounts[i]!]));
     },

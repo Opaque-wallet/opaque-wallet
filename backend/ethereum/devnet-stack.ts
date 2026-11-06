@@ -52,7 +52,7 @@ import type { DirectoryTrustRoot } from '../mesh/contracts.ts';
 import { chainTo, verify } from '../mesh/directory.ts';
 import { buildLocalMesh, meshRootAt, serveLocalMesh } from '../mesh/local-mesh.ts';
 import type { MeshMessageKind } from '../mesh/transport.ts';
-import { accountOf, devnet, keyFor, keyOf, MAX_USES, mined, nonceOf, seededKey, sendCalls, type Call, type ForsKey } from './frame.ts';
+import { accountOf, devnet, INSTANCE, keyFor, keyOf, MAX_USES, mined, nonceOf, seededKey, sendCalls, STACK_FORS, type Call, type ForsKey } from './frame.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE = join(HERE, '..', '.stack', 'eth-devnet');
@@ -76,7 +76,7 @@ const mesh0 = (devnet as unknown as { mesh?: { genesis: number; trustRoot: { sig
 // ── the stack's account: its frame keys pay, its registry key attests ────
 const master = (env: string, file: string): Hex => (process.env[env] ?? readFileSync(join(STATE, file), 'utf8')).trim() as Hex;
 const stackMaster = master('DEVNET_STACK_MASTER', 'stack.master');
-const keyAt = (i: number): ForsKey => seededKey(stackMaster, 'stack/fors', i);
+const keyAt = (i: number): ForsKey => seededKey(stackMaster, STACK_FORS, i);
 const account = privacy.attester;
 if ((await accountOf(keyOf(keyAt(0)))).toLowerCase() !== account.toLowerCase()) throw new Error('DEVNET_STACK_MASTER does not draw the attester account in deployments/eth-devnet.json');
 
@@ -123,7 +123,8 @@ const attesterKeys = createAttesterKeys({
   master: fromHex(master('ATTESTER_FORS_MASTER', 'attester.master')),
   attester: account as never,
   chainId: BigInt(devnet.chainId),
-  log: process.env['ATTESTER_LOG'] || join(STATE, 'attester-uses.json'),
+  // One log per devnet instance: a log names its attester and refuses any other.
+  log: process.env['ATTESTER_LOG'] || join(STATE, INSTANCE === 1 ? 'attester-uses.json' : `attester-uses-${INSTANCE}.json`),
   async readState() {
     const s = await publicClient.readContract({ address: registry, abi: REGISTRY_ABI, functionName: 'stateOf', args: [account] });
     return { pkCommitment: asBytes32(s[0].toLowerCase()), useCount: s[2], maxUses: s[3] };

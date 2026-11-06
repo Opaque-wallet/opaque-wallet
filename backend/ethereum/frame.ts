@@ -18,6 +18,16 @@ import { concat, decodeFunctionResult, encodeAbiParameters, encodeFunctionData, 
 import devnet from '../../deployments/eth-devnet.json' with { type: 'json' };
 
 export { devnet };
+/**
+ * Which of the devnet's chains this is (deployments/eth-devnet.json `instance`): it was
+ * reset once already, chain id kept. Our accounts draw their keys per instance, so a
+ * transaction signed on an earlier chain never replays here and no FORS key signs again.
+ */
+export const INSTANCE: number = (devnet as { instance?: number }).instance ?? 1;
+/** The stack's account keys' label, per instance. */
+export const STACK_FORS = INSTANCE === 1 ? 'stack/fors' : `stack/fors/${INSTANCE}`;
+/** The attester's first registry-key generation on this instance: two fresh ones each. */
+export const ATTESTER_FIRST_GENERATION = 2 * (INSTANCE - 1);
 // For the wallet's page, which has no viem of its own.
 export { decodeFunctionResult, encodeFunctionData, formatEther, isAddress, labelhash, namehash, parseAbi, parseEther } from 'viem';
 export const profile = getProfile('ethrex-eip8141-tracer');

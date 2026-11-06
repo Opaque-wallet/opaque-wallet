@@ -62,7 +62,10 @@ export const STATE_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',
   'function getNonce(address, uint192) view returns (uint256)',
   'function capabilities() view returns ((uint8 proofMode, uint8 ringSize, bytes32 verifierId, uint256 denomination, bool requiresCommitReveal))',
+  'function getEthBalance(address) view returns (uint256)',
 ]);
+/** Multicall3, at this address on every EVM chain: its getEthBalance makes an ETH balance a view call STATE can make. */
+const MULTICALL3 = '0xca11bde05977b3631167028862be2a173976ca11';
 
 /** Which view calls STATE will make: target -> selectors. Everything else is refused. */
 export function walletRpcAllowlist(): ReadonlyMap<string, ReadonlySet<string>> {
@@ -75,6 +78,8 @@ export function walletRpcAllowlist(): ReadonlyMap<string, ReadonlySet<string>> {
   add(deployment.tokens.usdc.address, 'balanceOf(address)');
   for (const token of deployment.swap.tokens) add(token.address, 'balanceOf(address)');
   add(entryPoint(), 'balanceOf(address)', 'getNonce(address,uint192)');
+  // Where gas is ETH (Sepolia), the account's ETH is one of its assets. On Arc the native balance is the USDC read above.
+  if (deployment.network.nativeCurrency.symbol !== 'USDC') add(MULTICALL3, 'getEthBalance(address)');
   return allow;
 }
 
@@ -349,6 +354,12 @@ export interface SwapQuote {
 export async function tokenBalances(send: WalletRpcSend, account: Address, tokens: readonly Address[]): Promise<bigint[]> {
   const { results } = await readState(send, tokens.map((to) => ({ to, data: encodeFunctionData({ abi: STATE_ABI, functionName: 'balanceOf', args: [account] }) as Hex })));
   return results.map((r) => BigInt(r));
+}
+
+/** The account's ETH, through the mesh (Multicall3.getEthBalance). */
+export async function ethBalance(send: WalletRpcSend, account: Address): Promise<bigint> {
+  const { results } = await readState(send, [{ to: MULTICALL3 as Address, data: encodeFunctionData({ abi: STATE_ABI, functionName: 'getEthBalance', args: [account] }) as Hex }]);
+  return BigInt(results[0]!);
 }
 
 /** LI.FI's best route, asked through the mesh. */

@@ -4,12 +4,13 @@
 // which name was looked up; never who pays it, nor how much, nor when.
 //
 // `pq` says the name is held by our PQNameController (deployments/eth-sepolia.json
-// `ens`): a name only a FORS+C signature can change, records included.
+// `ens`): a name only a FORS+C signature can change, records included; or that it
+// is a name.opaque.eth, which OpaqueNames lets only an Opaque PQ account hold.
 
 import { decodeFunctionResult, devnet, encodeFunctionData, labelhash, namehash, parseAbi } from '../../../backend/ethereum/frame.ts';
 import sepolia from '../../../deployments/eth-sepolia.json' with { type: 'json' };
 
-export const ENS = sepolia.ens as { ethRegistry: `0x${string}`; universalResolverV2: `0x${string}`; controller: `0x${string}`; resolver: `0x${string}`; pqKeyRegistry: `0x${string}` };
+export const ENS = sepolia.ens as { ethRegistry: `0x${string}`; universalResolverV2: `0x${string}`; controller: `0x${string}`; resolver: `0x${string}`; pqKeyRegistry: `0x${string}`; names?: `0x${string}` };
 const RPCS = [sepolia.network.rpcUrl, ...sepolia.network.rpcFallbacks];
 /** ENSIP-11 coin types: the devnet's (0x80000000 | its chain id), and Ethereum's, 60, which ENS's app shows on Sepolia too. */
 export const DEVNET_COIN = 0x80000000n | BigInt(devnet.chainId);
@@ -55,6 +56,7 @@ export async function resolveName(name: string, coin = DEVNET_COIN): Promise<{ a
   // Held by our controller: a second-level .eth name whose token it owns.
   const labels = n.split('.');
   let pq = false;
+  if (labels.length === 3 && labels[1] === 'opaque' && labels[2] === 'eth') pq = ENS.names !== undefined;
   if (labels.length === 2) {
     const id = decodeFunctionResult({ abi: REGISTRY, functionName: 'getTokenId', data: await ethCall(ENS.ethRegistry, encodeFunctionData({ abi: REGISTRY, functionName: 'getTokenId', args: [BigInt(labelhash(labels[0]!))] })) });
     const owner = decodeFunctionResult({ abi: REGISTRY, functionName: 'ownerOf', data: await ethCall(ENS.ethRegistry, encodeFunctionData({ abi: REGISTRY, functionName: 'ownerOf', args: [id] })) });
@@ -62,3 +64,11 @@ export async function resolveName(name: string, coin = DEVNET_COIN): Promise<{ a
   }
   return { address: bytes as `0x${string}`, pq };
 }
+
+const NAMES = parseAbi(['function nameOf(address) view returns (string)', 'function holderOf(bytes32) view returns (address)']);
+/** The label `account` holds under opaque.eth ('' for none). */
+export const opaqueNameOf = async (account: `0x${string}`): Promise<string> =>
+  ENS.names === undefined ? '' : decodeFunctionResult({ abi: NAMES, functionName: 'nameOf', data: await ethCall(ENS.names, encodeFunctionData({ abi: NAMES, functionName: 'nameOf', args: [account] })) });
+/** Whether `label`.opaque.eth is free to claim. */
+export const opaqueNameFree = async (label: string): Promise<boolean> =>
+  /^0x0{64}$/.test(await ethCall(ENS.names!, encodeFunctionData({ abi: NAMES, functionName: 'holderOf', args: [labelhash(label)] })));

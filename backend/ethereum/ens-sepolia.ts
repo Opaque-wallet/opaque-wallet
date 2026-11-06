@@ -125,7 +125,8 @@ async function deploy(): Promise<void> {
 async function execute(target: Address, data: Hex, what: string): Promise<void> {
   const { controller, pqKeyRegistry } = ens();
   const state = await pub.readContract({ address: pqKeyRegistry, abi: REGISTRY, functionName: 'stateOf', args: [controller] });
-  const g = [0, 1, 2, 3, 4, 5, 6, 7].find((i) => pkCommitment(keyOf(i).publicKey) === state.pkCommitment.toLowerCase());
+  // Claims and the e2e's hand-backs move it two generations at a time (stack.ts claimName searches as far).
+  const g = Array.from({ length: 64 }, (_, i) => i).find((i) => pkCommitment(keyOf(i).publicKey) === state.pkCommitment.toLowerCase());
   if (g === undefined) throw new Error('the controller answers to none of the master\'s first keys');
   const deadline = (await pub.getBlock()).timestamp + 3600n;
   const signature = signExecute(keyOf(g), BigInt(sepolia.id), controller, state.useCount, target, data, deadline);
@@ -171,7 +172,28 @@ async function status(): Promise<void> {
     .then(() => console.log('!! an ECDSA write went through'), (err: Error & { shortMessage?: string }) => console.log(`an ECDSA write is refused: ${(err.shortMessage ?? err.message).split('\n')[0]}`));
 }
 
-const commands: Record<string, () => Promise<void>> = { deploy, adopt, records, status };
+/**
+ * name.opaque.eth for every Opaque wallet: OpaqueNames deployed (resumable), then made
+ * opaque.eth's subregistry by one FORS-signed call through the controller.
+ */
+async function names(): Promise<void> {
+  const SUB = parseAbi(['function setSubregistry(uint256 anyId, address registry)', 'function getSubregistry(string label) view returns (address)']);
+  const f = file();
+  if (f.ens.names === undefined) {
+    const a = artifact('OpaqueNames');
+    const hash = await wallet.deployContract({ abi: a.abi, bytecode: a.bytecode.object, args: [ETH_REGISTRY, f.contracts.pqAccountImplementation.address] });
+    const r = await pub.waitForTransactionReceipt({ hash });
+    if (r.status !== 'success' || r.contractAddress == null) throw new Error(`OpaqueNames did not deploy: ${hash}`);
+    f.ens.names = r.contractAddress.toLowerCase();
+    save(f);
+    console.log(`OpaqueNames ${f.ens.names}: https://sepolia.etherscan.io/tx/${hash}`);
+  }
+  const now = await pub.readContract({ address: ETH_REGISTRY, abi: SUB, functionName: 'getSubregistry', args: ['opaque'] });
+  if (now.toLowerCase() === f.ens.names) { console.log(`${NAME}'s subregistry is already OpaqueNames`); return; }
+  await execute(ETH_REGISTRY, encodeFunctionData({ abi: SUB, functionName: 'setSubregistry', args: [await tokenId(), f.ens.names] }), `${NAME}'s subnames are OpaqueNames'`);
+}
+
+const commands: Record<string, () => Promise<void>> = { deploy, adopt, records, status, names };
 const run = commands[process.argv[2] ?? ''];
 if (run === undefined) throw new Error(`usage: node ethereum/ens-sepolia.ts ${Object.keys(commands).join(' | ')}`);
 await run();

@@ -1,11 +1,12 @@
 {
-  "$comment": "The EIP-8141 alt-mempool devnet (ethrex eip8141-tracer + the Skandha gateway, chain 1337). Not an EVM network of index.ts's shape: no bundler, and its accounts are FramePQAccounts. Our contracts are written here by backend/ethereum/frame-tx.ts; `privacy` is Opaque's privacy layer (T11, `frame-tx.ts privacy`), served by backend/ethereum/devnet-stack.ts; the Uniswap v4 contracts are the devnet's predeploys, whose code was read on chain. Public values only.",
+  "$comment": "The EIP-8141 alt-mempool devnet (ethrex eip8141-tracer + the Skandha gateway, chain 1337). Not an EVM network of index.ts's shape: no bundler, and its accounts are FramePQAccounts. Our contracts are written here by backend/ethereum/frame-tx.ts; `privacy` is Opaque's privacy layer (T11, `frame-tx.ts privacy`), served by backend/ethereum/devnet-stack.ts; the Uniswap v4 contracts are the devnet's predeploys, whose code was read on chain. Public values only. `instance` counts the devnet's chains: 2 since its reset on 6 November 2026 (genesis 0x2ad3f67b059fbde111ad7af27cfb4955d997351579612237ca0318937a5bae7a, same chain id). Keys our accounts sign with are drawn per instance, so nothing signed on an earlier chain can be replayed here.",
   "chainId": 1337,
+  "instance": 2,
   "gateway": "https://altmempoolgateway.forshtat.com/rpc",
   "miner": "https://altmempool.forshtat.com",
   "explorer": "https://altmempoolexplorer.forshtat.com",
   "contracts": {
-    "factory": "0x5516c44Eb7cBCCC15b9E1dFf522b7F75452880ae",
+    "factory": "0xd254366DeE9D4D2dE2F11982cabEAF94a16a3e0C",
     "faucet": "0x4F4b98A8f60Daaeee8D6a0D82a612003f3eaEec2"
   },
   "uniswap": {
@@ -15,73 +16,73 @@
     "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
     "weth9": "0x1b7d32025F7cA633943BbCC9Ec61a98ef66187b6",
     "create2Deployer": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
-    "pqUSD": "0x26453ffc2FdEC380396852947A3b2c1467384D9B"
+    "pqUSD": "0x4719875265Ea7a662aAcF2FcC8183ae518A3f155"
   },
   "privacy": {
     "pools": [
       {
         "denomination": 1000000,
-        "address": "0xb68de8e6984c97835bb2b2b65e821292518257f8",
-        "verifier": "0xb574c6af7bcf24f44a6d22b9ba04f49061aac22f",
-        "deployedAtBlock": 407054,
+        "address": "0x2e0885ee43ca35e823b18b73033e4b39407e55ec",
+        "verifier": "0xddc0e3cdc7cd4344742562576f50608eb19eade0",
+        "deployedAtBlock": 299,
         "decoys": 8
       },
       {
         "denomination": 2000000,
-        "address": "0x04c8fbeb9b2d0b72446c3841aa4ddbd20821a621",
-        "verifier": "0xa997857eaeece68e18e928f172df8bb9d8acc3d9",
-        "deployedAtBlock": 407057,
+        "address": "0x5d73c621e403b06be5207466811a8b3b63d75dce",
+        "verifier": "0x6cda2643d2f89aca7bd5619cfdff893fad6e67cc",
+        "deployedAtBlock": 302,
         "decoys": 8
       },
       {
         "denomination": 5000000,
-        "address": "0x81c1e2c619ba4cd27f2a19c1e406f67c1eb753bc",
-        "verifier": "0xe17de623cdf29d20a505f710e5fd830fece00735",
-        "deployedAtBlock": 407060,
+        "address": "0x03f0e048d1d0b5dd8248a397848965f6736cce86",
+        "verifier": "0x2855dc68a05c85789b8608acb065b88c5bb73cac",
+        "deployedAtBlock": 304,
         "decoys": 8
       },
       {
         "denomination": 10000000,
-        "address": "0x71fa5f3204f29ee8f35b89515f9c584d6e6b81f2",
-        "verifier": "0x243e787a260651aa1bb2cdd7a90050276cc0b48d",
-        "deployedAtBlock": 407067,
+        "address": "0xefb254d1c3d7bb8d97f63bd8be48519fb047237e",
+        "verifier": "0x296e7e88029565c656efd8e779c8ffabb90e5119",
+        "deployedAtBlock": 306,
         "decoys": 8
       },
       {
         "denomination": 20000000,
-        "address": "0xb9348e7c5f9f117a5670f0c0efd26b7fc2f6602a",
-        "verifier": "0x09106d05f15e9c344103a7e4c8322329a244a06b",
-        "deployedAtBlock": 407072,
+        "address": "0xf70e20e802373d5277bfff1446dbe95565984256",
+        "verifier": "0x08489f350048af685f0a3012d791db421da34efb",
+        "deployedAtBlock": 309,
         "decoys": 8
       },
       {
         "denomination": 50000000,
-        "address": "0x67aa90a753cd6df7178931cbb904d3007bedae67",
-        "verifier": "0xc17fa92fb59c80241aa95f514309760ddbdd0cf4",
-        "deployedAtBlock": 407077,
+        "address": "0x0ae9bd8123044824c29397ac569ace077420e146",
+        "verifier": "0xf66c9d31953ded58f000a9855870e465b8fc38b1",
+        "deployedAtBlock": 311,
         "decoys": 8
       },
       {
         "denomination": 100000000,
-        "address": "0x97f73fd419b06ee64e6d370d3229e55b8cda6143",
-        "verifier": "0xa640f4b4b49eaf40d5360ba67234fba0dc8abb2b",
-        "deployedAtBlock": 407082,
+        "address": "0xea39e0ee09cfe6e32973f1646c0cea009e696e17",
+        "verifier": "0xede1e1e19fbfaf96ca8f90c22378fa2557e69024",
+        "deployedAtBlock": 314,
         "decoys": 8
       }
     ],
-    "createDeployer": "0x90b1c7710016638010d1049352165f3ff3b60be1",
+    "createDeployer": "0xf1f901cb86b4d10532031ae2538af93a4b21da29",
     "token": {
-      "address": "0xd131ae02a41fbc1a77bbd99251c02fb06a250dc4",
+      "address": "0xcd4b05a82c3e9a74d1f99bb688c359b8bea66037",
       "symbol": "pqUSDC",
       "decimals": 6,
-      "deployedAtBlock": 407042
+      "deployedAtBlock": 291
     },
     "pqKeyRegistry": {
       "address": "0xbd9e98b96748f9a8083239d7ece0e9671483038f",
-      "deployedAtBlock": 407050
+      "deployedAtBlock": 294
     },
-    "attester": "0x8444ebe17f40cd4ea3d6a99c4976a286b531d6f8",
-    "faucet": "0x462437c867120d7b0b009243f6a71e484d7c4751"
+    "attester": "0x058fc5752b063765946af729311bae7ce032e3a2",
+    "faucet": "0x786d0107d731e06a1c84f178a099a8b3e94c359f"
   },
   "mesh": {
     "genesis": 1793914557,
