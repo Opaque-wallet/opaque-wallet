@@ -32,7 +32,7 @@ mkdirSync(join(DIST, 'icons'), { recursive: true });
 // too. A new chain adds its page here. Their storage names differ
 // (storage-name.ts, and XRPL's are opaque:xrpl…), so one extension holds every
 // wallet and none shares a key. xrpl-connect.html is the window dapps open.
-const PAGES = ['app.html', 'testnet/app.html', 'testnet/xrpl.html', 'testnet/xrpl-connect.html', 'testnet/devnet.html', 'sepolia/app.html'];
+const PAGES = ['app.html', 'testnet/app.html', 'testnet/xrpl.html', 'testnet/xrpl-connect.html', 'testnet/devnet.html', 'sepolia/app.html', 'sepolia/eth-connect.html'];
 let fileCount = 0;
 for (const page of PAGES) {
   const SRC = join(BUILT, dirname(page));

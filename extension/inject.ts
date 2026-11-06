@@ -11,6 +11,7 @@
 // mainnet wallet, when those exist.
 
 import { OpaqueAdapter } from '../frontend/src/lib/opaque-adapter.ts';
+import { announceOpaque, OpaqueEthProvider } from '../frontend/src/lib/opaque-eth-provider.ts';
 
 interface Account { address: string; publicKey?: string; network: { id: string; name: string; wss: string } }
 type Tx = Record<string, unknown>;
@@ -126,3 +127,15 @@ window.addEventListener('message', (event) => {
   const reply = (data: unknown) => window.postMessage({ type: 'response', request: d, response: { type: 'response', id: d.id, data } }, location.origin);
   crossmark(d.command, d.data ?? {}).then(reply, (e: Error) => reply({ meta: rejected(e) ? { isRejected: true } : { isError: true }, error: e.message }));
 });
+
+// ── Ethereum (EIP-6963): "Opaque" in a dapp's wallet list, beside MetaMask ──
+//
+// Announced, never set as window.ethereum: whatever wallet a page already uses keeps it.
+// The account is the wallet's Sepolia account, post-quantum (FORS+C over ERC-4337), and
+// every transaction asks in the extension's own window (sepolia/eth-connect.html).
+const ETH_HOSTED = 'https://www.opaque.credit/sepolia/eth-connect';
+const ethWalletUrl = (): string => {
+  const named = document.documentElement.dataset['opaqueEthWallet'] ?? '';
+  return /^chrome-extension:\/\/[a-p]{32}\/sepolia\/eth-connect\.html$/.test(named) ? named : ETH_HOSTED;
+};
+announceOpaque(new OpaqueEthProvider({ walletUrl: ethWalletUrl }));

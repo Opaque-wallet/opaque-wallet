@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>opaque — connect</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0b090c">
+  <link rel="stylesheet" href="wallet.css">
+</head>
+<body>
+<main class="app approve">
+  <header class="bar">
+    <span class="brand-mark"><span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><g fill="#070608"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg></span><img src="media/logo.png" alt="opaque" width="942" height="200"></span>
+    <div class="bar-right"><span class="pill">Sepolia</span></div>
+  </header>
+  <a id="to-wallet" href="app.html" hidden>← Wallet</a>
+  <section class="view" id="idle">
+    <p class="origin" id="idle-title">Starting…</p>
+    <p class="status" id="idle-status" role="status">Verifying the relay directory and connecting through the mesh.</p>
+  </section>
+  <section class="view" id="request" hidden>
+    <div class="site-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
+      <p class="eyebrow">Request from</p>
+      <p class="origin" id="request-origin"></p>
+      <p class="pill" id="request-account"></p>
+    </div>
+    <h2 id="request-title"></h2>
+    <p id="request-summary"></p>
+    <dl class="facts" id="request-facts"></dl>
+    <ul class="perms" id="request-perms" hidden>
+      <li class="yes">See this account's address and what it holds on chain</li>
+      <li class="yes">Ask you to approve transactions</li>
+      <li class="no">See your private notes or your other accounts</li>
+      <li class="no">Move funds without your approval</li>
+    </ul>
+    <div id="request-raw" hidden>
+      <div class="raw-head"><span class="eyebrow">Call data</span></div>
+      <pre id="request-details"></pre>
+    </div>
+    <p class="send-progress-log" id="progress" role="status" aria-live="polite" hidden></p>
+    <div class="decide"><div class="dialog-actions"><button class="secondary" id="reject" type="button">Reject</button><button class="primary" id="approve" type="button">Approve</button></div></div>
+  </section>
+  <p class="fine-print">This account signs with a post-quantum FORS+C key: a quantum computer that breaks ECDSA can't forge its transactions.</p>
+</main>
+<script type="module" src="/src/ethereum/connect.ts"></script>
+</body>
+</html>

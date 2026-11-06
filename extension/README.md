@@ -1,6 +1,6 @@
 # Extension: The Wallet in the Side Panel
 
-> **Chrome Manifest V3, version 0.7.0. Chrome, Brave and Edge. Arc mainnet, Arc testnet and XRPL testnet.**
+> **Chrome Manifest V3, version 0.9.0. Chrome, Brave and Edge. Arc mainnet, Arc testnet, XRPL testnet and Ethereum Sepolia.**
 
 **One Opaque extension for every chain.** The side panel shows the same wallet pages served at opaque.credit, from the same Vite build: `app.html` (Arc mainnet), `testnet/app.html` (Arc testnet) and `testnet/xrpl.html` (XRPL testnet). The header's network picker moves between them, and the panel reopens on the network used last. Each network keeps its own keys and notes. A new chain is a new page in `PAGES` (build.mjs) and an entry in the picker (`frontend/src/lib/network-picker.ts`), never a second extension. The side panel stays open while a deposit or payment runs, where a popup would close on the first click outside it.
 
@@ -83,6 +83,19 @@ A site that has connected once gets its address back without a popup after a rel
 - GemWallet's other helpers (`setTrustline`, `createOffer`, NFT helpers) are refused with a pointer to `submitTransaction`, which takes any transaction.
 
 Tested by `cd backend && npm run xrpl:e2e:extension`: Playwright's Chromium with the extension loaded, its XRPL wallet funded from the faucet, a dapp using the stock GemWallet and Crossmark adapters, and both Arc pages booting in the same extension.
+
+## Ethereum dapps
+
+Dapps on Sepolia find **Opaque** in their wallet list, beside MetaMask, through [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) (`rdns: credit.opaque`). Opaque never sets `window.ethereum`, so a wallet the page already uses keeps it. The account a dapp connects to is the wallet's Sepolia account: an ERC-4337 account whose every transaction is signed with its post-quantum FORS+C key.
+
+`inject.js` announces an EIP-1193 provider (`frontend/src/lib/opaque-eth-provider.ts`). It answers `eth_chainId` and `eth_accounts` itself and sends other reads to a public Sepolia RPC. Two requests open the extension's own window, `sepolia/eth-connect.html`: `eth_requestAccounts` and `eth_sendTransaction`. That window names the site from `event.origin`, shows the call, and on **Approve** sends it as one operation through Opaque's relays.
+
+Not supported yet:
+- `personal_sign` and typed-data signatures, which return 4200.
+- Contract deploys.
+- Chains other than Sepolia.
+
+The browser test is `backend/scripts/e2e-eth-connect.ts`. It finds the provider, connects, sends 0.001 ETH on Sepolia, and checks that a rejection returns 4001.
 
 ## Publish on the Chrome Web Store
 

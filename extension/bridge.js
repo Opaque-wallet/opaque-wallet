@@ -3,3 +3,4 @@
 // for inject.js (world MAIN, which cannot ask). Dapps open that window, and its
 // notes are the ones in this extension's wallet.
 document.documentElement.dataset.opaqueWallet = chrome.runtime.getURL('testnet/xrpl-connect.html');
+document.documentElement.dataset.opaqueEthWallet = chrome.runtime.getURL('sepolia/eth-connect.html');
