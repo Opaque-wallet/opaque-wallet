@@ -43,7 +43,7 @@ import { poolId } from '@opaque/protocol-types/codecs.js';
 import { attesterCommitment } from '../cre/attester-keys.ts';
 import { createNoteSecret, deriveCommitment } from '../zk/index.ts';
 import { accountOf, accountTx, ATTESTER_FIRST_GENERATION, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, forsKey, hasCode, keyNow, keyOf, MAX_USES, mined, nonceOf, seededKey, sendCalls, settled, STACK_FORS, txUrl, type Call } from './frame.ts';
-import { pqUSD, poolSetup, swapCalls, tokenBalance } from './uniswap.ts';
+import { pqHook, pqPoolSetup, pqUSD, poolSetup, quote, swapCalls, tokenBalance } from './uniswap.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIR = join(HERE, '..', '.stack', 'eth-devnet');
@@ -222,6 +222,57 @@ async function swap(): Promise<void> {
     : `swapped ${formatEther(-usd)} pqUSD for ETH (quoted ${formatEther(expected)} ETH), ${calls.length} frames in one atomic batch: ${hash}\n${txUrl(hash)}`);
 }
 
+/**
+ * The post-quantum pool: PQPoolHook (contracts/src/ethereum/uniswap/) deployed at
+ * an address carrying v4's permission bits, this account admitted, ETH/pqUSD
+ * initialized under the hook and given its first liquidity, in one atomic
+ * transaction the account signs with FORS+C. Then both sides of the rule: an
+ * ECDSA wallet's swap is refused, and this account's goes through.
+ */
+async function pqpool(): Promise<void> {
+  if (pqHook() !== undefined) throw new Error(`the post-quantum pool exists already: hook ${pqHook()}`);
+  const account = me();
+  const uni = devnet.uniswap as { poolManager: Address; positionManager: Address; universalRouter: Address; create2Deployer: Address };
+  const hookArtifact = opaqueArtifact('PQPoolHook');
+  const initCode = deployData(hookArtifact, [uni.poolManager, uni.positionManager, uni.universalRouter, devnet.contracts.factory]);
+  // v4 calls a hook only for the bits in its address: before add (11), remove (9), swap (7), donate (5), and no other.
+  const FLAGS = (1n << 11n) | (1n << 9n) | (1n << 7n) | (1n << 5n);
+  const bytecodeHash = keccak256(initCode);
+  let salt: Hex = '0x';
+  for (let i = 0n; ; i++) {
+    salt = toHex(i, { size: 32 });
+    if ((BigInt(getContractAddress({ opcode: 'CREATE2', from: uni.create2Deployer, salt, bytecodeHash })) & 0x3fffn) === FLAGS) break;
+  }
+  // The account's first key, which its address commits to: in the factory's Created event.
+  const created = await call('eth_getLogs', [{ address: devnet.contracts.factory, fromBlock: '0x0', toBlock: 'latest', topics: [null, `0x${account.slice(2).toLowerCase().padStart(64, '0')}`] }]) as { topics: Hex[] }[];
+  const firstKey = created[0]?.topics[2];
+  if (firstKey === undefined) throw new Error(`no Created event for ${account}`);
+  const { hook, calls } = await pqPoolSetup(account, firstKey, initCode, salt, parseEther('0.1'), 2000n);
+  const hash = await signed(calls, true);
+  await settled(hash);
+  console.log(`PQPoolHook ${hook}; ETH/pqUSD made under it and funded, ${calls.length} frames in one atomic batch: ${hash}\n${txUrl(hash)}`);
+  const file = JSON.parse(readFileSync(DEPLOYMENTS, 'utf8'));
+  file.uniswap.pqHook = hook;
+  writeFileSync(DEPLOYMENTS, `${JSON.stringify(file, null, 2)}\n`);
+  (devnet.uniswap as { pqHook?: Address }).pqHook = hook;
+  console.log('written to deployments/eth-devnet.json');
+
+  // An ECDSA wallet asks the router for the same swap: the hook refuses it.
+  const { calls: [routerCall] } = await swapCalls(parseEther('0.001'), true);
+  const eoa = deployer().address;
+  const refused = await call('eth_call', [{ from: eoa, to: routerCall!.to, value: toHex(routerCall!.value ?? 0n), data: routerCall!.data, gas: toHex(2_000_000n) }, 'latest']).then(() => undefined, (e: Error) => e.message);
+  if (refused === undefined) throw new Error('an ECDSA wallet swapped in the post-quantum pool');
+  console.log(`an ECDSA wallet's swap (${eoa}): refused, as it must be: ${refused.slice(0, 200)}`);
+
+  // This account's swap, through the same router, signed with FORS+C alone.
+  const before = await tokenBalance(account);
+  const expected = await quote(parseEther('0.001'));
+  const swap = await swapCalls(parseEther('0.001'), true);
+  const swapped = await signed(swap.calls, true);
+  await settled(swapped);
+  console.log(`this account swapped 0.001 ETH for ${formatEther((await tokenBalance(account)) - before)} pqUSD in the post-quantum pool (quoted ${formatEther(expected)}): ${swapped}\n${txUrl(swapped)}`);
+}
+
 // ── Opaque's privacy layer on the devnet (T11) ───────────────────────────
 /** The note sizes in pqUSDC's 6 decimals: Arc's ladder (contracts/src/opaque/pool/Denominations.sol). */
 const SIZES = [1n, 2n, 5n, 10n, 20n, 50n, 100n].map((n) => n * 1_000_000n);
@@ -352,7 +403,7 @@ async function privacy(): Promise<void> {
   console.log('privacy layer deployed; written to deployments/eth-devnet.json');
 }
 
-const commands: Record<string, () => Promise<void>> = { fund, factory, 'devnet-faucet': devnetFaucet, create, send, attack, rotate, pool, swap, privacy };
+const commands: Record<string, () => Promise<void>> = { fund, factory, 'devnet-faucet': devnetFaucet, create, send, attack, rotate, pool, swap, pqpool, privacy };
 const run = commands[process.argv[2] ?? ''];
 if (run === undefined) throw new Error(`usage: node ethereum/frame-tx.ts ${Object.keys(commands).join(' | ')}`);
 await run();

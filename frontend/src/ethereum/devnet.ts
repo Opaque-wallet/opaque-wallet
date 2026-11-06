@@ -8,7 +8,7 @@
 // frame.ts, uniswap.ts, contracts/frame/).
 
 import { accountOf, balanceOf, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyFor, keyOf, MAX_FEE, MAX_USES, nonceOf, parseEther, pqUSDCFaucet, sendCalls, settled, txUrl, type Call, type ForsKey } from '../../../backend/ethereum/frame.ts';
-import { quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswap.ts';
+import { pqHook, quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswap.ts';
 import { unlockGate } from '../lib/lock.ts';
 import { scoped } from '../lib/storage-name.ts';
 import { hasPrivacy, pqUSDC, startDevnetPrivacy, type DevnetPrivacy, type PrivateSend } from './devnet-private.ts';
@@ -393,7 +393,8 @@ el('swap-go').addEventListener('click', () => {
     el('swap-status').textContent = 'Getting a quote…';
     let calls: Awaited<ReturnType<typeof swapCalls>>['calls'];
     try {
-      const swap = await swapCalls(wei, dir);
+      // The post-quantum pool admits only FORS+C accounts; a first swap admits this one, in the same signature.
+      const swap = await swapCalls(wei, dir, { account, firstKey: keyOf(keyAt(0)) });
       calls = swap.calls;
       el('swap-status').textContent = '';
       if (!(await confirmSign('Confirm swap', [
@@ -401,6 +402,8 @@ el('swap-go').addEventListener('click', () => {
         ['You get', `about ${amount(swap.expected)} ${getOut}`],
         ['You get at least', `${amount((swap.expected * 99n) / 100n)} ${getOut}`],
         ...(dir ? [] : [['Approves', `exactly ${formatEther(wei)} pqUSD, to Permit2 and the router, for this transaction only`] as const]),
+        ...(pqHook() === undefined ? [] : [['Pool', 'post-quantum: its hook lets only FORS+C accounts trade'] as const]),
+        ...(swap.registers ? [['First, once', 'registers this account with the post-quantum pool'] as const] : []),
         ['Interacting with', 'Uniswap v4 Universal Router'],
         ['Contract', short(calls.at(-1)!.to)],
       ]))) { el('swap-status').textContent = 'Rejected. Nothing was signed.'; return; }
@@ -414,7 +417,7 @@ el('swap-go').addEventListener('click', () => {
       const got = (dir ? await tokenBalance(account) : (await balanceOf(account)) + BigInt(r.gasUsed) * BigInt(r.effectiveGasPrice)) - before;
       logged(hash, `Swapped ${formatEther(wei)} ${payIn} for ${amount(got)} ${getOut}`);
       void quoteSwap().catch(() => undefined);
-      return `Swapped on Uniswap v4: ${amount(got)} ${getOut}. The only signature in it is FORS+C.`;
+      return `Swapped on Uniswap v4${pqHook() === undefined ? '' : ', in the post-quantum pool'}: ${amount(got)} ${getOut}. The only signature in it is FORS+C.`;
     });
   })();
 });

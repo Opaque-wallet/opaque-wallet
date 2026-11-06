@@ -5,7 +5,9 @@
 // Command and action bytes are Uniswap's (universal-router Commands.sol,
 // v4-periphery Actions.sol); every selector used here was found in the
 // devnet's own bytecode. The pool is ETH/pqUSD, fee 0.30%, tick spacing 60,
-// no hooks, made and funded by our account: deployments/eth-devnet.json.
+// made and funded by our account: deployments/eth-devnet.json. Once `pqHook`
+// is set there, swaps use the post-quantum pool: the same pair under
+// PQPoolHook (contracts/src/ethereum/uniswap/), where only FORS+C accounts trade.
 
 import { concat, encodeAbiParameters, encodeFunctionData, getContractAddress, keccak256, parseAbi, parseAbiParameters, type Address, type Hex } from 'viem';
 
@@ -13,7 +15,7 @@ import { call, devnet, type Call } from './frame.ts';
 
 const UNI = devnet.uniswap as {
   poolManager: Address; positionManager: Address; universalRouter: Address; permit2: Address;
-  create2Deployer: Address; pqUSD: Address | null;
+  create2Deployer: Address; pqUSD: Address | null; pqHook?: Address | null;
 };
 const ETH: Address = '0x0000000000000000000000000000000000000000';
 const V4_SWAP = '0x10';
@@ -37,7 +39,17 @@ export const pqUSD = (): Address => {
   if (UNI.pqUSD === null) throw new Error('no pqUSD pool on the devnet yet: node ethereum/frame-tx.ts pool');
   return UNI.pqUSD;
 };
-const poolKey = (token: Address) => ({ currency0: ETH, currency1: token, fee: 3000, tickSpacing: 60, hooks: ETH });
+const poolKey = (token: Address, hooks: Address = UNI.pqHook ?? ETH) => ({ currency0: ETH, currency1: token, fee: 3000, tickSpacing: 60, hooks });
+const HOOK_ABI = parseAbi(['function register(bytes32 firstKey) returns (address)', 'function isPostQuantum(address) view returns (bool)']);
+/** The post-quantum pool's hook, if the devnet has one. */
+export const pqHook = (): Address | undefined => UNI.pqHook ?? undefined;
+/** Whether the hook admits `account` already. */
+export async function isPostQuantum(account: Address, hook: Address = pqHook()!): Promise<boolean> {
+  return BigInt(await call('eth_call', [{ to: hook, data: encodeFunctionData({ abi: HOOK_ABI, functionName: 'isPostQuantum', args: [account] }) }, 'latest'])) === 1n;
+}
+/** The frame that admits the account `firstKey` made: anyone's to send, here the account's own. */
+export const registerCall = (firstKey: Hex, hook: Address = pqHook()!): Call =>
+  ({ to: hook, data: encodeFunctionData({ abi: HOOK_ABI, functionName: 'register', args: [firstKey] }), gas: 100_000n, state: 200_000n });
 
 /** A deadline an hour past the devnet's own clock, which need not be ours. */
 async function deadline(): Promise<bigint> {
@@ -87,6 +99,40 @@ export async function poolSetup(account: Address, tokenInitCode: Hex, eth: bigin
       { to: UNI.create2Deployer, data: concat([salt, tokenInitCode]), gas: 1_500_000n, state: 4_000_000n },
       { to: token, data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [UNI.permit2, MAX_UINT] }), gas: 100_000n, state: 200_000n },
       { to: UNI.permit2, data: encodeFunctionData({ abi: PERMIT2_ABI, functionName: 'approve', args: [token, UNI.positionManager, (1n << 160n) - 1n, (1 << 30) * 2] }), gas: 100_000n, state: 200_000n },
+      { to: UNI.positionManager, data: encodeFunctionData({ abi: POSM_ABI, functionName: 'initializePool', args: [key, sqrtPriceX96] }), gas: 500_000n, state: 1_000_000n },
+      { to: UNI.positionManager, value: (eth * 11n) / 10n, data: encodeFunctionData({ abi: POSM_ABI, functionName: 'modifyLiquidities', args: [unlock, await deadline()] }), gas: 1_500_000n, state: 2_000_000n },
+    ],
+  };
+}
+
+/**
+ * The SENDER frames that make the post-quantum pool: deploy PQPoolHook through
+ * the CREATE2 deployer at `salt` (mined so its address carries v4's permission
+ * bits), admit `account` (made for `firstKey`), initialize ETH/pqUSD under the
+ * hook at `price`, and add `eth` of full-range liquidity. pqUSD's approvals to
+ * Permit2 and the PositionManager are the first pool's, still in force.
+ */
+export async function pqPoolSetup(account: Address, firstKey: Hex, hookInitCode: Hex, salt: Hex, eth: bigint, price: bigint): Promise<{ hook: Address; calls: Call[] }> {
+  const hook = getContractAddress({ opcode: 'CREATE2', from: UNI.create2Deployer, salt, bytecode: hookInitCode });
+  const token = pqUSD();
+  const key = poolKey(token, hook);
+  const sqrtPriceX96 = isqrt(price << 192n);
+  const liquidity = (eth * sqrtPriceX96) >> 96n;
+  const unlock = encodeAbiParameters(parseAbiParameters('bytes, bytes[]'), [
+    actions(A.MINT_POSITION, A.SETTLE_PAIR, A.SWEEP),
+    [
+      encodeAbiParameters(parseAbiParameters(`${POOL_KEY}, int24, int24, uint256, uint128, uint128, address, bytes`),
+        [key, -TICK, TICK, liquidity, (eth * 11n) / 10n, (eth * price * 11n) / 10n, account, '0x']),
+      encodeAbiParameters(parseAbiParameters('address, address'), [ETH, token]),
+      encodeAbiParameters(parseAbiParameters('address, address'), [ETH, account]),
+    ],
+  ]);
+  return {
+    hook,
+    calls: [
+      // Its code costs state gas (EIP-8037: (120 + bytes) x 1,530).
+      { to: UNI.create2Deployer, data: concat([salt, hookInitCode]), gas: 1_500_000n, state: 6_000_000n },
+      registerCall(firstKey, hook),
       { to: UNI.positionManager, data: encodeFunctionData({ abi: POSM_ABI, functionName: 'initializePool', args: [key, sqrtPriceX96] }), gas: 500_000n, state: 1_000_000n },
       { to: UNI.positionManager, value: (eth * 11n) / 10n, data: encodeFunctionData({ abi: POSM_ABI, functionName: 'modifyLiquidities', args: [unlock, await deadline()] }), gas: 1_500_000n, state: 2_000_000n },
     ],
@@ -148,15 +194,20 @@ async function swapData(amountIn: bigint, minOut: bigint, ethIn: boolean): Promi
  * to the router until this block ends (Permit2 reads expiration 0 as now).
  * Send them as one atomic batch: one signature, all or nothing.
  */
-export async function swapCalls(amountIn: bigint, ethIn = true): Promise<{ calls: Call[]; expected: bigint }> {
+export async function swapCalls(amountIn: bigint, ethIn = true, as?: { readonly account: Address; readonly firstKey: Hex }): Promise<{ calls: Call[]; expected: bigint; registers: boolean }> {
   const expected = await quote(amountIn, ethIn);
   const data = await swapData(amountIn, (expected * 99n) / 100n, ethIn);
   // The pqUSD balance the swap creates is a new storage slot: state gas.
   const swap: Call = { to: UNI.universalRouter, value: ethIn ? amountIn : 0n, data, gas: 800_000n, state: 300_000n };
-  if (ethIn) return { calls: [swap], expected };
+  // The post-quantum pool admits the account first, in the same transaction, once.
+  const registers = pqHook() !== undefined && as !== undefined && !(await isPostQuantum(as.account));
+  const first = registers ? [registerCall(as!.firstKey)] : [];
+  if (ethIn) return { calls: [...first, swap], expected, registers };
   const token = pqUSD();
   return {
+    registers,
     calls: [
+      ...first,
       { to: token, data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [UNI.permit2, amountIn] }), gas: 100_000n, state: 200_000n },
       { to: UNI.permit2, data: encodeFunctionData({ abi: PERMIT2_ABI, functionName: 'approve', args: [token, UNI.universalRouter, amountIn, 0] }), gas: 100_000n, state: 200_000n },
       swap,

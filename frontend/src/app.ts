@@ -1010,8 +1010,9 @@ function setupSubname(): void {
 let refreshStealth = async (): Promise<void> => undefined;
 function setupStealth(): void {
   const s = rt.stealth;
-  if (s === undefined || opaqueAddress === '') return;
-  const me = opaqueAddress as `0x${string}`;
+  if (s === undefined) return;
+  // The account's address arrives after the runtime does: read it on each look, not once here.
+  const me = () => opaqueAddress as `0x${string}`;
   el('stealth-card').hidden = false;
   let on = false;
   let sweeping = false;
@@ -1032,7 +1033,8 @@ function setupStealth(): void {
     el('stealth-list').replaceChildren(...rows);
   };
   refreshStealth = async () => {
-    on = await s.isOn(me).catch(() => on);
+    if (opaqueAddress === '') return;
+    on = await s.isOn(me()).catch(() => on);
     el('stealth-on').hidden = on;
     el('stealth-copy').textContent = on
       ? 'On. Every payment to this wallet or its name lands at a one-time address only this wallet can find, then moves into your notes by itself. Nobody reading the chain can tell those payments are yours, even with a quantum computer.'
@@ -1062,8 +1064,9 @@ function setupStealth(): void {
   el('stealth-on').addEventListener('click', () => void (async () => {
     setStatus('stealth-status', 'Publishing this wallet\'s post-quantum stealth key: its FORS+C key signs it…');
     try {
-      const tx = await rt.execute(me, [s.turnOnCall]);
-      for (let tries = 0; tries < 20 && !(await s.isOn(me).catch(() => false)); tries++) await new Promise((r) => setTimeout(r, 3_000));
+      if (opaqueAddress === '') { setStatus('stealth-status', 'Opaque is still starting.'); return; }
+      const tx = await rt.execute(me(), [s.turnOnCall]);
+      for (let tries = 0; tries < 20 && !(await s.isOn(me()).catch(() => false)); tries++) await new Promise((r) => setTimeout(r, 3_000));
       setStatus('stealth-status', `On: ${tx}`);
       await refreshStealth();
     } catch (error) { setStatus('stealth-status', `Not turned on: ${gasWhy(error)}`); }

@@ -190,6 +190,12 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - the wallet swaps on Sepolia;
 - removing liquidity without the PQ signature reverts.
 
+**Built (devnet, 6 November): the post-quantum pool.** `PQPoolHook` (`contracts/src/ethereum/uniswap/`, 7 tests) runs before add, remove, swap and donate, and admits only FramePQAccounts: `register(firstKey)` checks the factory's CREATE2 address, so a rotated key stays admitted and nothing else gets in. The real caller is read through Uniswap's own PositionManager and router (`msgSender()`); any other router counts as itself. So a cracked ECDSA key can't trade, provide or withdraw, and a position handed to an ECDSA wallet freezes.
+- Hook `0x3B288a191c20c0333c06E90b386b611d2AC3caa0` (salt mined for bits 0xaa0), made by `node ethereum/frame-tx.ts pqpool` in one atomic FORS-signed transaction: deploy, register, initialize ETH/pqUSD under the hook, 0.1 ETH of liquidity (`0x64034d55…f6f4`).
+- An ECDSA wallet's swap through the router reverts with `NotPostQuantum(wallet)`; the account's swap bought 1.974316 pqUSD for 0.001 ETH, the exact quote (`0x6dbf99f3…2e4b`).
+- The devnet page's Swap trades in this pool and registers the account in the same signature on its first swap.
+- Still open: the Sepolia version (ERC-4337 PQ accounts: admit by the PQAccount clone and PQKeyRegistry) and the FORS-signed `hookData` second factor for ECDSA LPs.
+
 ### T9. The EIP-8141 transaction (devnet)
 
 **Steps 1–4 are done (5 November).** A frame transaction signed only with FORS+C runs on the devnet: no ECDSA key in it anywhere, and no bundler or paymaster. The account pays for itself.
