@@ -245,8 +245,9 @@ export interface RuntimeHost {
 
 export async function startWallet(config?: StackConfig, account: AccountKeys | 'browser' = 'browser', host: RuntimeHost = {}): Promise<WalletRuntime> {
   const cfg = config ?? (await loadStack());
+  // USDC's pools; ETH's (WETH) are kept apart, so no note of one is ever counted as the other.
   const scopes: readonly PoolScope[] = deployment.pools
-    .filter((p) => p.proofMode === 'RING_8')
+    .filter((p) => p.proofMode === 'RING_8' && p.asset !== 'eth')
     .sort((a, b) => b.denomination - a.denomination)
     .map((p) => ({
       chainId: BigInt(deployment.network.chainId) as PoolScope['chainId'],

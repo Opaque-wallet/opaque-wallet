@@ -229,40 +229,43 @@ try {
   // opaque.eth, claimed on the page with the stack's claim code.
   const held = await nameState();
   const k = Array.from({ length: 62 }, (_, i) => i).find((g) => commitmentOf(stackKey(g)) === held.pkCommitment.toLowerCase());
-  if (k === undefined) throw new Error('opaque.eth is not the stack\'s to give: a wallet claimed it already');
-  writeFileSync(NAME_FILE, JSON.stringify({ phrase, to: k + 2 }), { mode: 0o600 });
-  // Only this wallet's own first name key may be sent: one the test could not hand back never leaves the page.
-  const ours = commitmentOf(nameKeys(phrase)(0));
-  await page.route('**/v1/ens/claim', (route: any) => (JSON.parse(route.request().postData()).pk === ours ? route.continue() : route.abort()));
-  await page.click('#tab-names'); await page.click('#names-advanced summary');
-  await page.click('#name-owner');
-  await page.waitForSelector('#name-claim', { state: 'visible', timeout: 60_000 });
-  await page.fill('#name-code', readFileSync(new URL('ens-claim-code', STACK), 'utf8').trim());
-  await page.click('#name-claim');
-  await page.waitForFunction(() => /^(Claimed|Not claimed)/.test(document.getElementById('name-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
-  const claimed = (await page.textContent('#name-status')) ?? '';
-  check(claimed.startsWith('Claimed'), `opaque.eth claimed from the page: ${claimed}`);
-  await settled((x) => x.pkCommitment.toLowerCase() === ours, 'the wallet\'s key');
-  check(true, 'PQKeyRegistry: opaque.eth\'s controller answers to the wallet\'s first name key');
-  await page.waitForSelector('#name-point', { state: 'visible', timeout: 120_000 });
-  await page.click('#name-point');
-  await page.waitForFunction(() => /now resolves to this wallet|^Not changed/.test(document.getElementById('name-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
-  check((await page.textContent('#name-status'))?.includes('now resolves'), `the wallet's FORS+C key set its records: ${await page.textContent('#name-status')}`);
-  // Public RPCs are load-balanced: one a block behind still reads the old record for a few seconds.
-  await until('ENS to name the wallet', async () => { const r = await resolveName('opaque.eth', ETHEREUM_COIN); return r.address.toLowerCase() === account.toLowerCase() && r.pq; }, 120_000);
-  check(true, `ENSv2's UniversalResolver: opaque.eth → ${account}, a name a FORS+C key holds`);
+  // A wallet holds opaque.eth (the owner claimed it with the code, as it is for): nothing here to claim.
+  if (k === undefined) console.log('skip opaque.eth: a wallet holds it, not the stack (claimed with the code), so its claim is not tested this run');
+  else {
+    writeFileSync(NAME_FILE, JSON.stringify({ phrase, to: k + 2 }), { mode: 0o600 });
+    // Only this wallet's own first name key may be sent: one the test could not hand back never leaves the page.
+    const ours = commitmentOf(nameKeys(phrase)(0));
+    await page.route('**/v1/ens/claim', (route: any) => (JSON.parse(route.request().postData()).pk === ours ? route.continue() : route.abort()));
+    await page.click('#tab-names'); await page.click('#names-advanced summary');
+    await page.click('#name-owner');
+    await page.waitForSelector('#name-claim', { state: 'visible', timeout: 60_000 });
+    await page.fill('#name-code', readFileSync(new URL('ens-claim-code', STACK), 'utf8').trim());
+    await page.click('#name-claim');
+    await page.waitForFunction(() => /^(Claimed|Not claimed)/.test(document.getElementById('name-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
+    const claimed = (await page.textContent('#name-status')) ?? '';
+    check(claimed.startsWith('Claimed'), `opaque.eth claimed from the page: ${claimed}`);
+    await settled((x) => x.pkCommitment.toLowerCase() === ours, 'the wallet\'s key');
+    check(true, 'PQKeyRegistry: opaque.eth\'s controller answers to the wallet\'s first name key');
+    await page.waitForSelector('#name-point', { state: 'visible', timeout: 120_000 });
+    await page.click('#name-point');
+    await page.waitForFunction(() => /now resolves to this wallet|^Not changed/.test(document.getElementById('name-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
+    check((await page.textContent('#name-status'))?.includes('now resolves'), `the wallet's FORS+C key set its records: ${await page.textContent('#name-status')}`);
+    // Public RPCs are load-balanced: one a block behind still reads the old record for a few seconds.
+    await until('ENS to name the wallet', async () => { const r = await resolveName('opaque.eth', ETHEREUM_COIN); return r.address.toLowerCase() === account.toLowerCase() && r.pq; }, 120_000);
+    check(true, `ENSv2's UniversalResolver: opaque.eth → ${account}, a name a FORS+C key holds`);
 
-  // Paid by name: the wallet looks opaque.eth up, and the wallet it names receives privately
-  // (turned on with its subname), so the pool pays a one-time address, not the one ENS names.
-  const from = await pub.getBlockNumber();
-  await page.click('#tab-send');
-  await page.fill('#recipient', 'opaque.eth');
-  await page.fill('#send-amount', '5');
-  await page.click('#arm');
-  let oneTime5: `0x${string}` | undefined;
-  await until('opaque.eth to be paid at a one-time address', async () => (oneTime5 = await paidAtOneTimeAddress(5_000_000n, from)) !== undefined, 600_000)
-    .catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
-  check(oneTime5 !== account.toLowerCase(), `paid opaque.eth by name: ENS names this wallet, which receives privately, so the pool paid 5 tUSDC to a one-time address, ${oneTime5}`);
+    // Paid by name: the wallet looks opaque.eth up, and the wallet it names receives privately
+    // (turned on with its subname), so the pool pays a one-time address, not the one ENS names.
+    const from = await pub.getBlockNumber();
+    await page.click('#tab-send');
+    await page.fill('#recipient', 'opaque.eth');
+    await page.fill('#send-amount', '5');
+    await page.click('#arm');
+    let oneTime5: `0x${string}` | undefined;
+    await until('opaque.eth to be paid at a one-time address', async () => (oneTime5 = await paidAtOneTimeAddress(5_000_000n, from)) !== undefined, 600_000)
+      .catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
+    check(oneTime5 !== account.toLowerCase(), `paid opaque.eth by name: ENS names this wallet, which receives privately, so the pool paid 5 tUSDC to a one-time address, ${oneTime5}`);
+  }
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 
   // ── anon-rpc: the wallet's reads and operations through EF's mixnet, not our relays ──

@@ -64,6 +64,9 @@ export interface PoolDeployment {
   readonly proofMode: 'RING_8' | 'SINGLE_NOTE_PQ' | 'ATTESTED_OFFCHAIN';
   readonly verifier: ContractName;
   readonly deployedAtBlock: number;
+  /** What the pool holds: the network's USDC unless "eth" (WETH: deployments/*.json tokens.weth). */
+  readonly asset?: 'eth';
+  readonly token?: Address;
 }
 
 export interface Deployment {

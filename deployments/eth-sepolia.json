@@ -21,6 +21,11 @@
       "$comment": "tUSDC, Opaque's 6-decimal test dollar (contracts/frame/TestToken.sol), in place of Circle's Sepolia USDC: the pools' decoys alone take 1,504, and the stack's faucet gives it to new wallets. No value.",
       "address": "0x0bb803acb0172ba18e849c7f6194c124897cc948",
       "decimals": 6
+    },
+    "weth": {
+      "$comment": "Sepolia's WETH9 (Uniswap's): what the ETH pools hold, so ETH can be private. No value.",
+      "address": "0xfff9976782d46cc05630d1f6ebab18b2324d6b14",
+      "decimals": 18
     }
   },
   "contracts": {
@@ -79,6 +84,18 @@
     "pqAccountValidator": {
       "address": "0x939428875c7d61d559e5b81ae0df513804f87ba6",
       "deployedAtBlock": 12072924
+    },
+    "attestedRingVerifierEth0_0005": {
+      "address": "0x2d82bc26f799c19a8908adfacea19351c07151f2",
+      "deployedAtBlock": 12075954
+    },
+    "attestedRingVerifierEth0_001": {
+      "address": "0xf0680d2a8692b3be15470e425d8ceeade0cc1185",
+      "deployedAtBlock": 12075958
+    },
+    "attestedRingVerifierEth0_005": {
+      "address": "0x1f6b2a1b64fe39e248d23f00fb296e6f643e3e77",
+      "deployedAtBlock": 12075961
     }
   },
   "accounts": {
@@ -167,6 +184,48 @@
       "decoys": 8,
       "exit": {
         "attested": "0x11976f09aa7fecb7b82e3c0c765f7b9f5d030397",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0x68c22d3c8f50f72c51bce410d5a658a3c50c9919",
+      "denomination": 500000000000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifierEth0_0005",
+      "deployedAtBlock": 12075955,
+      "decoys": 8,
+      "asset": "eth",
+      "token": "0xfff9976782d46cc05630d1f6ebab18b2324d6b14",
+      "exit": {
+        "attested": "0x36c5958df715e0262def9b3191b8aed8a4af29cc",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0x04d4fb05dc905163ea28b6d7a5d869ab11b480dd",
+      "denomination": 1000000000000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifierEth0_001",
+      "deployedAtBlock": 12075959,
+      "decoys": 8,
+      "asset": "eth",
+      "token": "0xfff9976782d46cc05630d1f6ebab18b2324d6b14",
+      "exit": {
+        "attested": "0xdcad083167c5ec85e813323f02df471ed270b9b3",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0xed9ad8f64a4656427d28dd0b864058d5267bf0dc",
+      "denomination": 5000000000000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifierEth0_005",
+      "deployedAtBlock": 12075962,
+      "decoys": 8,
+      "asset": "eth",
+      "token": "0xfff9976782d46cc05630d1f6ebab18b2324d6b14",
+      "exit": {
+        "attested": "0xffe30050448acc6409f5b41b5692272d8fde35ce",
         "delaySeconds": 300
       }
     }
