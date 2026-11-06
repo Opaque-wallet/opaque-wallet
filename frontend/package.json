@@ -15,7 +15,9 @@
     "test": "node --test 'src/**/*.test.ts'",
     "preview": "vite preview",
     "ext": "npm run build:site && node ../extension/build.mjs",
-    "api": "node --watch ../backend/server.js"
+    "api": "node --watch ../backend/server.js",
+    "demo:on": "VITE_DEMO=1 npm run deploy",
+    "demo:off": "npm run deploy"
   },
   "comment": [
     "`npm install && npm run dev` is the whole setup. Vite serves app.html",

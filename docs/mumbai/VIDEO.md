@@ -77,26 +77,27 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **Say this, as one paragraph:**
 
-> On the devnet, a deposit. Frame zero verifies the FORS+C signature in 76,430 gas, under the 100,000 cap, and the account pays its own gas. Now, Q-Day itself. This wallet holds money, a protocol, a vault and stealth payments. I press Q-Day. The page plays the quantum computer: from the public key on chain, it recovers the private key. With that key, the attacker takes the wallet and the protocol it owned, and unmasks the old stealth payment. Everything behind Opaque is refused by the chain. Then the owner signs with the FORS+C key alone, and moves the vault and runs the protocol from a new wallet. I pay five dollars privately; the proof is built in my browser. It crosses three relays and arrives still sealed. Our attester verifies it and signs with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. On Uniswap's own v4, an ordinary wallet's swap into our pool reverts. One signature claims a real ENSv2 name; paying it pays a fresh one-time account. I block every Opaque server. The wallet still finds my notes through anon-rpc. It announces the exit, waits, reveals the note, and AES-128 on chain recomputes it. No permission needed, not even ours.
+> Nothing here is mocked: a script types into the real wallet on Sepolia. Twelve words make the wallet and its FORS+C keys. The faucet funds it, and the deposit is one ERC-4337 operation its FORS+C key signs. I pay five dollars privately; the proof is built in my browser. It crosses three relays and arrives still sealed. Our attester verifies it and signs with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. Then a swap in Uniswap v4's post-quantum pool. Its hook lets in only accounts that sign with FORS+C. One signature claims a real ENSv2 name, and the wallet takes it as its own. Paying the name pays a one-time address; the wallet finds it with its ML-KEM key. Then the EIP-8141 devnet, where the account itself is FORS+C only. Frame zero verifies its signature on chain. Now every Opaque server is blocked. The wallet still finds my notes through anon-rpc and announces the exit. The delay is over: withdrawn, with no one's permission, not even ours. Last, Q-Day. A quantum computer recovers this wallet's private key from its public key. The attacker takes the wallet and the protocol it owned. Everything behind Opaque, the chain refuses. And the owner moves it all with the FORS+C key alone.
 
 **On screen:**
 
 | Time | Show |
 |---|---|
-| 2:36 | opaque.credit/testnet/devnet → Activity → a Deposit transaction → Explorer ↗ (frames view) |
-| 2:47 | opaque.credit/sepolia/q-day (set up before recording): the board, Without Opaque and With Opaque |
-| 2:54 | Press Run Q-Day: the public key, then the private key scrolling in |
-| 3:02 | The attack log filling in: TAKEN, TAKEN, LINKED; REFUSED with BadSignature and OwnableUnauthorizedAccount; open one refused transaction on Etherscan |
-| 3:12 | Press Move it all with the guard key: the vault withdrawals and the fee change land |
-| 3:20 | Split screen. Left: opaque.credit/sepolia/app → Send 5 tUSDC. Right: railway logs --service opaque-sepolia |
-| 3:25 | Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" |
-| 3:30 | Right: "settler … ring proof verified in 2.0 s; attested with the attester's FORS+C key…" |
-| 3:35 | Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…". Click the link. |
-| 3:40 | The terminal output of uniswap-sepolia.ts: "an ECDSA wallet's swap … reverts with NotPostQuantum" |
-| 3:47 | Sepolia wallet → Names → claim yourname.opaque.eth → Send → type the name |
-| 3:55 | DevTools → Network → block *opaque* and *railway.app* → reload |
-| 3:58 | Privacy → Leave without Opaque → Find my notes, without Opaque |
-| 4:03 | The withdrawal step (cut the 300-second wait in the edit) |
+| 2:36 | The autopilot (opaque.credit/sepolia/app?demo, in an Incognito window): Create a wallet, the 12 words, three typed back, a password |
+| 2:45 | Get test funds; the balance turns into 100 tUSDC of notes (cut the wait) |
+| 2:51 | Split screen. Left: Send 5 tUSDC typed in. Right: railway logs --service opaque-sepolia |
+| 2:56 | Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" |
+| 3:01 | Right: "settler … ring proof verified; attested with the attester's FORS+C key…" |
+| 3:06 | Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…" |
+| 3:11 | Swap: 0.001 ETH quoted, then Swapped on Uniswap v4 |
+| 3:18 | Names: the label typed, claimed; after a reload the header reads the name |
+| 3:25 | Send 2 tUSDC to the name; Home: the payment found and swept into the notes |
+| 3:31 | opaque.credit/testnet/devnet: funded, created by its factory, a send through its signature request, a v4 swap |
+| 3:40 | Back on Sepolia with every Opaque server blocked: the exit card, Find my notes, the exit announced |
+| 3:48 | The delay is over (cut the five minutes): Withdrawn |
+| 3:53 | opaque.credit/sepolia/q-day: Set up the victim (cut the wait), then Run Q-Day, the private key scrolling in |
+| 3:59 | The attack log: TAKEN, TAKEN, LINKED, then REFUSED with BadSignature and OwnableUnauthorizedAccount |
+| 4:07 | Move it all with the guard key: Done |
 
 ## 4. The close (4:13–4:30)
 
@@ -112,37 +113,19 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 ## Before you record
 
-- **Accounts and funds**
-  - **Sepolia wallet:**
-    - made, with tUSDC notes (**Get test funds**, auto-deposit on) and some Sepolia ETH;
-    - keep about 0.004 ETH spare, because Pimlico's bundler prices gas at about 1.15 gwei.
-  - **Devnet account:**
-    - created already;
-    - devnet ETH from **Get devnet ETH**;
-    - pqUSDC deposited, so a Deposit transaction with eight frames is in Activity for 3.1.
-  - **The Q-Day simulator, for 3.2:** open `/sepolia/q-day` and press **Set up the victim** a few minutes before recording. It needs nothing from you: the page makes its own wallets, and Opaque's faucet funds them. Record from the board; **Start over with a new victim** resets it for another take.
-  - **A name:** claim it before recording, or have a fresh label ready to claim on camera.
-- **The exit.** It waits 300 s between announcing and withdrawing:
-  - either announce the exit before recording and show the withdrawal;
-  - or record straight through and cut the wait.
-- **Uniswap terminal output.** For 3.4, run `OPAQUE_NETWORK=sepolia node --use-system-ca ethereum/uniswap/uniswap-sepolia.ts` (in `backend/`) beforehand and keep the output on screen.
-- **Tabs, open in order:**
-  1. the Mumbai page;
-  2. the README on GitHub;
-  3. the devnet wallet;
-  4. the devnet explorer;
-  5. `/sepolia/q-day`, set up;
-  6. `diagrams/uniswap.svg` and the terminal;
-  9. the Sepolia wallet;
-  10. Sepolia Etherscan.
-- **The backend's logs, for 3.3.**
-  - Deploy the services first, so they print one line per payment step (the user's step, below).
-  - Then, in a terminal beside the browser: `railway logs --service opaque-sepolia`. Or open the Railway dashboard → the `opaque-sepolia` service → **Logs**.
+- **The autopilot plays the demo, in the real site.**
+  - Turn it on: `cd frontend && npm run demo:on` (the site, deployed with the autopilot in it).
+  - Open an Incognito window, so the wallet is a fresh one, and go to `opaque.credit/sepolia/app?demo=swarnim` (it claims `swarnim.opaque.eth`; `?demo` alone claims `mumbai-<4 hex>`).
+  - Start the screen recording, then press **Play** on the caption. It types and clicks through 3.1 to 3.7 in the real wallet, with a cursor and a caption, across the Sepolia wallet, the devnet and the Q-Day page; every transaction is real, and Opaque's faucet funds the new wallets.
+  - While the chain works, a **Waiting · cut** tag shows in the corner: cut those stretches in the edit. The deposit and the name claim take 2 to 3 minutes each, the exit's delay 5 minutes, and the Q-Day victim's setup a few more.
+  - **Esc** or **Stop** ends a run. If a step fails, the caption says why; reload the page to try that step again.
+  - When the video is done: `cd frontend && npm run demo:off`. The site is deployed again with no demo code in it.
+- **The backend's logs, for 3.2.**
+  - In a terminal beside the browser: `railway logs --service opaque-sepolia`. Or open the Railway dashboard → the `opaque-sepolia` service → **Logs**.
   - Make the font large. The lines to look for start with `mesh exit`, `settler`, `egress` and `chain`.
-  - The devnet's stack prints the same lines: `railway logs --service opaque-eth-devnet`.
-- **DevTools request blocking** set up in advance for 3.6, but switched off until that beat.
-- **Make sure each page loads:** the devnet stack at `opaque-eth-devnet-production.up.railway.app`, the Sepolia stack at `opaque-sepolia-production.up.railway.app`.
-- **Screen:** browser zoom at 110–125%, notifications off, and a clean profile with no wallet extensions on screen except MetaMask and Opaque.
+- **Tabs for the rest of the video:** the Mumbai page, the README on GitHub, `diagrams/opaque.svg`.
+- **Make sure each stack answers:** `opaque-sepolia-production.up.railway.app` and `opaque-eth-devnet-production.up.railway.app`.
+- **Screen:** an Incognito window (no extensions, a fresh wallet); notifications off.
 
 ## If something breaks live
 
@@ -157,6 +140,8 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 | A page says the account can't pay, or a script says "insufficient funds" | The deployer that funds tests (`0x9cdb…40aA`) or your MetaMask is out of Sepolia ETH: send it some. |
 | A private payment is slow to settle | Check Activity: it shows each note as it lands. Usually seconds. |
 | anon-rpc reads are slow | They take about a second each. Say so, or cut. |
+| The autopilot stops | The caption says why. Reload to try that step again, or finish it by hand; a new Incognito window starts a fresh run. |
+| A payment says "MESH_UNAVAILABLE" | The autopilot presses Send again, up to three times; nothing was spent. |
 | Anything else | Show the recorded browser-test output: `scripts/e2e-sepolia.ts` (33 checks, including the exit with Opaque blocked), `e2e-devnet-private.ts`, `e2e-vault.ts`, `e2e-eth-connect.ts`. |
 
 Never claim more than the page shows. The honest lines stay in, because judges trust them:

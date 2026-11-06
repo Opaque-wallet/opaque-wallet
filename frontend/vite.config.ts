@@ -6,7 +6,23 @@ import { defineConfig } from 'vite';
 // No node: imports here on purpose — it keeps @types/node off the dependency
 // list, so `tsc --noEmit` runs against the DOM lib alone and this config stays
 // type-checked with everything else.
+// The demo's autopilot (src/demo/), in front of the three pages it plays, only in a build made
+// with VITE_DEMO=1 (npm run demo:on); any other build has no trace of it. Read the way
+// deployments/index.ts reads OPAQUE_NETWORK, so this config needs no Node types.
+const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+const DEMO_PAGES: Record<string, RegExp> = { sepolia: /src\/(app|qday\/qday)\.ts/, testnet: /src\/ethereum\/devnet\.ts/ };
+const demo = {
+  name: 'opaque-demo',
+  transformIndexHtml: {
+    order: 'pre' as const,
+    handler: (html: string) => env['VITE_DEMO'] === '1' && DEMO_PAGES[env['VITE_NETWORK'] ?? '']?.test(html) === true
+      ? html.replace('<script type="module"', '<script type="module" src="/src/demo/boot.ts"></script>\n<script type="module"')
+      : html,
+  },
+};
+
 export default defineConfig({
+  plugins: [demo],
   // Relative asset URLs, not root-absolute. The extension loads app.html from
   // a chrome-extension:// origin where a leading "/" means the extension root,
   // which happens to work — but only by luck, and it breaks the moment the
