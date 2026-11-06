@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.26;
 
 /// What backend/scripts/e2e-arc-contracts.ts deploys from an Opaque account:

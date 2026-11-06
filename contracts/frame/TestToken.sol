@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.26;
 
 /// @notice A plain ERC-20 for the devnet: pqUSD for the Uniswap v4 pool (18

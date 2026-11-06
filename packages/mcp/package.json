@@ -2,7 +2,7 @@
   "name": "@opaque/mcp",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Opaque for AI agents: an MCP server, run locally, that pays privately from an account of the agent's own, within limits you set.",
   "engines": {

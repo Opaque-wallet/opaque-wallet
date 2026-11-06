@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.28;
 
 /// @notice Deploys init code with CREATE, for its owner only, so each address

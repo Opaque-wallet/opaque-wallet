@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.26;
 
 /// @notice The slice of ERC-4337 v0.7 and ERC-7579 this repo uses, declared

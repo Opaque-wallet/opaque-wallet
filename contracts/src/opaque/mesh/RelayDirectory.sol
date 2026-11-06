@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.26;
 
 /// @title RelayDirectory (§8.2) — relay liveness and aggregate health, on chain

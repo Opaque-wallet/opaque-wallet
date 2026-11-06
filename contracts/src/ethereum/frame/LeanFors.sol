@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.26;
 
 /// @notice ForsVerifier.recoverCommitment for a signature held in memory, with

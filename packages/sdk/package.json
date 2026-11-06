@@ -2,7 +2,7 @@
   "name": "@opaque/sdk",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Opaque's private, post-quantum payments from Node: Arc and XRPL, the keys and proofs on the caller's machine.",
   "engines": {

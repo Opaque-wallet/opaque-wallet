@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "dependencies": {
     "@chainlink/cre-sdk": "1.18.0",
     "viem": "2.34.0",
