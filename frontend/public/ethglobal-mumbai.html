@@ -56,6 +56,8 @@
           <a class="menu__link" href="/testnet/devnet"><strong>On your phone</strong><span>Add it to your home screen</span></a>
           <a class="menu__link" href="/testnet/xrpl-connect"><strong>Connect to an app</strong><span>Scan a WalletConnect QR code</span></a>
           <a class="menu__link" href="/opaque-extension.zip" download><strong>Browser extension</strong><span>A wallet in Chrome's side panel</span></a>
+          <a class="menu__link" href="/sepolia/vault"><strong>Keep MetaMask <span class="badge">New</span></strong><span>The Q-Day vault: only a post-quantum key takes funds out</span></a>
+          <a class="menu__link" href="/connect-opaque"><strong>Opaque beside MetaMask</strong><span>Connect any Ethereum dapp to a post-quantum account</span></a>
         </div>
         <div class="menu__popular"><p class="menu__label">Popular</p>
           <a class="menu__card menu__card--dark" href="/testnet/devnet"><strong>Try it on testnet →</strong><span>Free test tokens, straight into notes</span></a>
@@ -106,7 +108,7 @@
   </section>
 
   <nav class="chapters wrap" aria-label="On this page">
-    <a href="#unseen">Unseen</a><a href="#stealth">Stealth addresses</a><a href="#names">ENSv2 names</a><a href="#swap">Uniswap v4</a><a href="#guard">Liquidity guard</a><a href="#now">Available now</a>
+    <a href="#unseen">Unseen</a><a href="#stealth">Stealth addresses</a><a href="#names">ENSv2 names</a><a href="#swap">Uniswap v4</a><a href="#guard">Liquidity guard</a><a href="#metamask">MetaMask</a><a href="#now">Available now</a>
   </nav>
 
   <section class="hero hero--chapter wrap" id="unseen" aria-labelledby="unseen-title">
@@ -501,6 +503,26 @@
       <div class="ens__attack trio__r2"><span class="ens__who">Front-runner · your signature, their recipient</span><code>decreaseLiquidity(#41441, sig, to: 0xbad…)</code><span class="ens__stamp">BadSignature</span></div>
       <div class="ens__ok trio__r3"><span class="ens__who">Your FORS+C signature</span><code>decreaseLiquidity(#41441, sig, to: 0x78de…)</code><span class="ens__stamp ens__stamp--ok">paid</span><span class="trio__then">0.002 ETH + 3.999999 tUSDC to the recipient it signed · the caller: 0</span></div>
     </div>
+  </section>
+
+  <section class="wrap keep" id="metamask" aria-labelledby="metamask-title">
+    <p class="eyebrow">Keep MetaMask</p>
+    <h2 class="display" id="metamask-title" style="font-size: clamp(36px, 5vw, 72px)">Already on MetaMask? <em>Stay.</em></h2>
+    <p>Two ways to go post-quantum without leaving it, both live on Sepolia.</p>
+  </section>
+  <section class="duo" aria-label="Keep MetaMask">
+    <article class="duo__card duo__card--orange" data-reveal>
+      <span class="duo__art" data-dots="#070608"></span>
+      <h2 class="display">The Q&#8209;Day vault.</h2>
+      <p>Keep MetaMask, and protect what's in it. ETH and tokens you put in the vault come out only with a FORS+C signature, so whoever cracks the ECDSA key finds nothing to move.</p>
+      <a class="btn btn--dark" href="/sepolia/vault">Open the vault</a>
+    </article>
+    <article class="duo__card duo__card--dark" data-reveal style="--d: 1">
+      <span class="duo__art" data-dots="#ff7a18"></span>
+      <h2 class="display">Opaque beside MetaMask.</h2>
+      <p>With the Opaque extension, any dapp's wallet list shows Opaque next to MetaMask (EIP-6963). Connect, and each transaction is approved in Opaque and signed by a post-quantum account.</p>
+      <a class="btn btn--primary" href="/connect-opaque">Try it on a dapp</a>
+    </article>
   </section>
 
   <section class="wrap" id="now" aria-labelledby="now-title">

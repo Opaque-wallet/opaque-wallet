@@ -49,16 +49,15 @@ try {
   await page.goto(`${SITE}/${DEVNET}`);
   await page.waitForFunction(() => (document.getElementById('account-short')?.textContent ?? '').startsWith('0x'), undefined, { timeout: 120_000 });
   const account = (await page.textContent('#address-x'))!.trim().toLowerCase();
-  await page.click('#promo-fund-go');
-  await statusIs('home-status', 'Funded');
+  // No "Get devnet ETH" first: a new account has none, and the steps below get it their gas.
   await page.click('#promo-create-go');
   await statusIs('home-status', 'Created');
   check(true, `an account, created by its factory: ${account}`);
 
   check((await page.textContent('.hero-label')) === 'Private balance', 'Home shows the private balance first, as Arc does');
   await page.click('#usdc-faucet');
-  await statusIs('deposit-status', 'Got 100 test pqUSDC');
-  check(true, 'the pqUSDC faucet paid for its own transaction');
+  const got = await statusIs('deposit-status', 'Got 100 test pqUSDC');
+  check(got.includes('and devnet ETH for gas'), `the pqUSDC faucet also gave the empty account its gas: ${got}`);
 
   await page.fill('#deposit-amount', '10');
   await page.click('#deposit');

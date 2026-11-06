@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Connect with Opaque</title>
+<meta name="description" content="A dapp, to try it on: Opaque shows up beside MetaMask in any Ethereum dapp's wallet list (EIP-6963), and every transaction is signed by a post-quantum FORS+C account.">
+<meta name="theme-color" content="#070608">
+<link rel="icon" href="/logo.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&family=Quicksand:wght@700&display=swap">
+<style>
+  :root {
+    --ink: #070608; --surface: #0d0b0f; --raised: #151117; --cream: #f4efe9; --muted: #aaa19b; --faint: #746b66;
+    --line: rgba(244, 239, 233, 0.12); --orange: #ff7a18; --soft: #ffa052; --tint: rgba(255, 122, 24, 0.12);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--ink); color: var(--cream); font: 400 16px/1.6 "Poppins", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--soft); }
+  .wrap { width: min(100%, 980px); margin: 0 auto; padding: 0 max(18px, env(safe-area-inset-right, 0px)) 0 max(18px, env(safe-area-inset-left, 0px)); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; border-bottom: 1px solid var(--line); }
+  header img { height: 28px; width: auto; display: block; }
+  header span { color: var(--muted); font-size: 14px; padding-left: 12px; border-left: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .hero { padding-block: 56px 28px; display: grid; gap: 16px; }
+  .eyebrow { margin: 0; color: var(--orange); font: 700 12px/1 "Quicksand", system-ui; letter-spacing: 0.16em; text-transform: uppercase; }
+  h1 { margin: 0; font: 800 clamp(40px, 6.4vw, 80px)/0.95 "Poppins", system-ui; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; }
+  h1 em { color: var(--orange); font-style: normal; }
+  .lede { margin: 0; max-width: 44em; color: var(--muted); font-size: 17px; }
+  .steps { display: grid; gap: 16px; padding-block: 12px 72px; }
+  .step { display: grid; gap: 14px; padding: 24px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); min-width: 0; }
+  .step.locked { opacity: 0.5; pointer-events: none; }
+  .step h2 { margin: 0; display: flex; align-items: center; gap: 12px; font: 600 20px/1.2 "Poppins", system-ui; }
+  .step h2 i { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--raised); color: var(--orange); font: 700 13px "Quicksand", system-ui; font-style: normal; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .wallets { display: grid; gap: 10px; }
+  .wallet { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--ink); min-width: 0; }
+  .wallet.pq { border-color: rgba(255, 122, 24, 0.55); background: linear-gradient(90deg, var(--tint), transparent 70%), var(--ink); }
+  .wallet img { width: 36px; height: 36px; border-radius: 9px; flex: none; }
+  .wallet div { flex: 1; min-width: 0; }
+  .wallet b { display: block; font-weight: 600; }
+  .wallet small { color: var(--faint); font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+  .badge { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px; background: var(--orange); color: var(--ink); font: 700 10px/1.6 "Quicksand", system-ui; letter-spacing: 0.1em; text-transform: uppercase; vertical-align: middle; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: 600 15px "Poppins", system-ui; border-radius: 999px; padding: 0 22px; min-height: 44px; cursor: pointer; border: 1px solid var(--line); background: var(--raised); color: var(--cream); flex: none; }
+  button.primary { background: var(--orange); border-color: var(--orange); color: var(--ink); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  input { min-height: 48px; padding: 0 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); color: var(--cream); font: 500 15px var(--mono); min-width: 0; flex: 1 1 260px; }
+  input:focus { outline: none; border-color: var(--orange); }
+  .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; font-size: 15px; }
+  .kv dt { color: var(--faint); } .kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+  .status { min-height: 1.4em; margin: 0; color: var(--soft); font-size: 14px; overflow-wrap: anywhere; }
+  .note { padding: 14px 16px; border-radius: 14px; background: var(--tint); color: var(--cream); font-size: 14px; }
+  .note ol { margin: 6px 0 0; padding-left: 20px; }
+  @media (max-width: 480px) { header span { display: none; } }
+  footer { padding-block: 28px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
+</style>
+</head>
+<body>
+<header class="wrap"><a class="brand" href="/" aria-label="opaque, home"><img src="/logo.png" alt="opaque" width="942" height="200"><span>Connect with Opaque</span></a><a href="/ethglobal-mumbai">What's this?</a></header>
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">A dapp, to try it on · Sepolia</p>
+    <h1>Opaque, right <em>beside MetaMask.</em></h1>
+    <p class="lede">Any Ethereum dapp that lists wallets the standard way (EIP-6963, as wagmi, RainbowKit and Uniswap do) shows Opaque next to MetaMask. Pick it, and the account the dapp sees is a post-quantum one: every transaction it asks for is shown in Opaque's own window and signed with a FORS+C key. This page is such a dapp.</p>
+  </section>
+
+  <section class="steps">
+    <article class="step" id="s-find">
+      <h2><i>1</i>Wallets in this browser</h2>
+      <p>What this page found, as any dapp would: every wallet that answered its EIP-6963 request.</p>
+      <div class="wallets" id="wallets"></div>
+      <div class="note" id="no-opaque" hidden>Opaque isn't in this browser yet. To add it:
+        <ol>
+          <li><a href="/opaque-extension.zip">Download the Opaque extension</a> (0.9 or newer) and unzip it.</li>
+          <li>Open <code>chrome://extensions</code>, turn on Developer mode, choose Load unpacked and pick the unzipped folder.</li>
+          <li>In the extension, make a wallet, open Sepolia and give the account some test ETH (its faucet button). Then reload this page.</li>
+        </ol>
+      </div>
+    </article>
+
+    <article class="step locked" id="s-connected">
+      <h2><i>2</i>Connected</h2>
+      <dl class="kv"><dt>Wallet</dt><dd id="c-wallet">—</dd><dt>Account</dt><dd id="c-account">—</dd><dt>Chain</dt><dd id="c-chain">—</dd></dl>
+      <p class="status" id="connect-status" role="status"></p>
+    </article>
+
+    <article class="step locked" id="s-send">
+      <h2><i>3</i>Ask for a transaction</h2>
+      <p>0.0001 Sepolia ETH, to yourself unless you change it. With Opaque, its window shows this site and the call, and on Approve the account's FORS+C key signs it as one ERC-4337 operation.</p>
+      <div class="row"><input id="send-to" type="text" spellcheck="false" autocomplete="off" placeholder="to: 0x… (your own account if empty)"><button class="primary" id="send-go" type="button">Send 0.0001 ETH</button></div>
+      <p class="status" id="send-status" role="status"></p>
+    </article>
+
+    <p class="note">Testnet: Sepolia ETH has no value. Opaque only answers on Sepolia for now, and does not yet make personal_sign or typed-data signatures. The provider is frontend/src/lib/opaque-eth-provider.ts in Opaque's repository.</p>
+  </section>
+</main>
+<footer class="wrap">Opaque · Apache-2.0 · <a href="/sepolia/vault">The Q-Day vault</a> · <a href="/sepolia/app">The Opaque wallet</a></footer>
+<script>
+  const SEPOLIA = '0xaa36a7';
+  const $ = (id) => document.getElementById(id);
+  const wallets = new Map();
+  let chosen = null, account = null;
+  const say = (id, text) => { $(id).textContent = text; };
+  const why = (e) => `${e?.message ?? e}${e?.code === undefined ? '' : ` (code ${e.code})`}`;
+
+  function render() {
+    const list = [...wallets.values()].sort((a, b) => (b.info.rdns === 'credit.opaque') - (a.info.rdns === 'credit.opaque'));
+    $('wallets').replaceChildren(...(list.length === 0 ? [Object.assign(document.createElement('p'), { textContent: 'No wallet answered: this browser has none installed.' })] : list.map((w) => {
+      const row = document.createElement('div');
+      const pq = w.info.rdns === 'credit.opaque';
+      row.className = `wallet${pq ? ' pq' : ''}`;
+      const icon = document.createElement('img');
+      // EIP-6963 icons are data: URIs; anything else is not loaded.
+      if (/^data:image\//.test(w.info.icon)) icon.src = w.info.icon;
+      icon.alt = '';
+      const text = document.createElement('div');
+      const name = Object.assign(document.createElement('b'), { textContent: w.info.name });
+      if (pq) name.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: 'Post-quantum' }));
+      text.append(name, Object.assign(document.createElement('small'), { textContent: w.info.rdns }));
+      const go = Object.assign(document.createElement('button'), { type: 'button', textContent: chosen === w ? 'Connected' : 'Connect', className: pq ? 'primary' : '' });
+      go.disabled = chosen === w;
+      go.addEventListener('click', () => connect(w));
+      row.append(icon, text, go);
+      return row;
+    })));
+    $('no-opaque').hidden = list.some((w) => w.info.rdns === 'credit.opaque');
+  }
+
+  async function connect(w) {
+    $('s-connected').classList.remove('locked');
+    say('connect-status', `Asking ${w.info.name}…${w.info.rdns === 'credit.opaque' ? ' Approve it in the Opaque window.' : ''}`);
+    try {
+      const [first] = await w.provider.request({ method: 'eth_requestAccounts' });
+      let chain = await w.provider.request({ method: 'eth_chainId' });
+      if (chain !== SEPOLIA) {
+        await w.provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: SEPOLIA }] });
+        chain = await w.provider.request({ method: 'eth_chainId' });
+      }
+      chosen = w; account = first;
+      say('c-wallet', w.info.name); say('c-account', first); say('c-chain', chain === SEPOLIA ? 'Sepolia (11155111)' : chain);
+      say('connect-status', w.info.rdns === 'credit.opaque' ? 'Connected to a post-quantum account: an ERC-4337 contract whose only key is FORS+C.' : 'Connected.');
+      $('s-send').classList.remove('locked');
+      render();
+    } catch (e) {
+      say('connect-status', `Not connected: ${why(e)}`);
+    }
+  }
+
+  $('send-go').addEventListener('click', async () => {
+    if (chosen === null) return;
+    const to = $('send-to').value.trim() || account;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(to)) { say('send-status', 'Enter a 0x address of 40 hex characters.'); return; }
+    $('send-go').disabled = true;
+    say('send-status', chosen.info.rdns === 'credit.opaque' ? 'Approve it in the Opaque window: it signs with the post-quantum key and sends it through the relays…' : `Approve it in ${chosen.info.name}…`);
+    try {
+      const hash = await chosen.provider.request({ method: 'eth_sendTransaction', params: [{ from: account, to, value: '0x5af3107a4000' }] });
+      $('send-status').replaceChildren('Sent: ', Object.assign(document.createElement('a'), { href: `https://sepolia.etherscan.io/tx/${hash}`, target: '_blank', rel: 'noopener', textContent: hash }));
+    } catch (e) {
+      say('send-status', `Not sent: ${why(e)}`);
+    } finally {
+      $('send-go').disabled = false;
+    }
+  });
+
+  addEventListener('eip6963:announceProvider', (e) => { wallets.set(e.detail.info.uuid, e.detail); render(); });
+  dispatchEvent(new Event('eip6963:requestProvider'));
+  render();
+</script>
+</body>
+</html>

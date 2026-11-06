@@ -5,8 +5,8 @@
 // Approve the account's FORS+C key signs it as an ERC-4337 operation. Then a rejection,
 // which the dapp sees as EIP-1193's 4001.
 //
-//   (cd ../frontend && npm run ext)
-//   node --use-system-ca scripts/e2e-eth-connect.ts
+//   (cd ../frontend && npm run ext)   and serve the site: npx vite preview --outDir dist --port 5174
+//   node --use-system-ca scripts/e2e-eth-connect.ts          SITE=http://localhost:5174 by default
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -25,6 +25,7 @@ const pub = createPublicClient({ chain: sepolia, transport: http(d.network.rpcUr
 const funder = createWalletClient({ account: privateKeyToAccount(readFileSync(new URL('../.stack/eth-sepolia/deployer.key', import.meta.url), 'utf8').trim() as Hex), chain: sepolia, transport: http(d.network.rpcUrl) });
 const EXTENSION = new URL('../../extension/dist', import.meta.url).pathname;
 const DAPP = 'https://dapp.example';
+const SITE = process.env['SITE'] ?? 'http://localhost:5174';
 const check = (ok: unknown, what: string) => { if (!ok) throw new Error(what); console.log(`ok  ${what}`); };
 const until = async (what: string, test: () => Promise<boolean>, ms = 180_000) => {
   for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 3_000))) if (await test().catch(() => false)) return;
@@ -118,6 +119,25 @@ try {
   await popup.click('#reject');
   const refused = await result();
   check(refused.code === 4001, `rejected in the window: the dapp gets EIP-1193's 4001 (${refused.message})`);
+  // The page a person tries it on: /connect-opaque, a dapp that lists every wallet the browser has.
+  const demo = await context.newPage();
+  demo.on('pageerror', (e: Error) => errors.push(`connect-opaque: ${e.message}`));
+  await demo.goto(`${SITE}/connect-opaque.html`);
+  await demo.waitForSelector('.wallet.pq', { timeout: 30_000 });
+  check((await demo.textContent('.wallet.pq b')) === 'OpaquePost-quantum', 'connect-opaque lists Opaque, marked post-quantum');
+  const [win] = await Promise.all([context.waitForEvent('page'), demo.click('.wallet.pq button')]);
+  await unlockIfAsked(win);
+  await win.waitForFunction(() => !(document.getElementById('approve') as HTMLButtonElement | null)?.disabled && !document.getElementById('request')!.hidden, undefined, { timeout: 180_000 });
+  check((await win.textContent('#request-origin')) === new URL(SITE).origin, `Opaque's window names the page: ${await win.textContent('#request-origin')}`);
+  await win.click('#approve');
+  await demo.waitForFunction((a: string) => document.getElementById('c-account')?.textContent === a, account, { timeout: 60_000 });
+  check(true, `connect-opaque connected: ${await demo.textContent('#connect-status')}`);
+  await demo.click('#send-go');
+  await win.waitForFunction(() => document.getElementById('request-title')?.textContent === 'Send a transaction' && !(document.getElementById('approve') as HTMLButtonElement).disabled, undefined, { timeout: 120_000 });
+  await win.click('#approve');
+  await demo.waitForSelector('#send-status a', { timeout: 300_000 });
+  const demoHash = (await demo.textContent('#send-status a')) as Hex;
+  check((await pub.waitForTransactionReceipt({ hash: demoHash })).status === 'success', `its 0.0001 ETH transaction, approved in Opaque, mined: https://sepolia.etherscan.io/tx/${demoHash}`);
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 } finally {
   await context.close();

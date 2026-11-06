@@ -732,3 +732,9 @@ section[id] { scroll-margin-top: calc(var(--nav-h) + 64px); }
 @media (max-width: 1180px) { .go__note, .go__phone { display: none; } }
 @media (max-width: 960px) { .duo { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) { .duo__card { min-height: 460px; } }
+
+/* Keep MetaMask: the heading over its two cards. */
+.keep { display: grid; gap: 14px; padding-block: clamp(48px, 8vw, 96px) 8px; }
+.keep p { margin: 0; color: var(--muted); max-width: 40em; }
+.keep .eyebrow { color: var(--orange); }
+.keep h2 em { color: var(--orange); font-style: normal; }

@@ -21,7 +21,7 @@
   a { color: var(--soft); }
   .wrap { width: min(100%, 980px); margin: 0 auto; padding: 0 max(18px, env(safe-area-inset-left, 0px)) 0 max(18px, env(safe-area-inset-right, 0px)); }
   header { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; border-bottom: 1px solid var(--line); }
-  header img { height: 28px; display: block; }
+  header img { height: 28px; width: auto; display: block; }
   header span { color: var(--muted); font-size: 14px; padding-left: 12px; border-left: 1px solid var(--line); }
   .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
   .hero { padding-block: 56px 28px; display: grid; gap: 16px; }
@@ -55,6 +55,7 @@
   .bal b { display: block; font: 700 24px "Poppins", system-ui; } .bal small { color: var(--muted); }
   .note { padding: 14px 16px; border-radius: 14px; background: var(--tint); color: var(--cream); font-size: 14px; }
   .attack { border-style: dashed; }
+  @media (max-width: 480px) { header span { display: none; } }
   footer { padding-block: 28px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
 </style>
 </head>

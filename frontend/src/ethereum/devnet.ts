@@ -103,7 +103,18 @@ async function syncKey(): Promise<void> {
 }
 
 /** Signs and sends with the key of the moment. Its last signature also hands the account to the next key. */
+/** Below this the account can't pay a transaction's gas (a deposit's maximum is about 0.0011 ETH). */
+const GAS_FLOOR = parseEther('0.002');
+/** Devnet ETH for gas when the account has none: test ETH, from the devnet's faucet or Opaque's. */
+async function gasIfNone(): Promise<boolean> {
+  if ((await balanceOf(account)) >= GAS_FLOOR) return false;
+  logged(await faucet(account), 'Devnet ETH for gas received');
+  return true;
+}
+
 async function signed(calls: readonly Call[], atomic = false): Promise<`0x${string}`> {
+  // Every transaction the account signs pays its own gas: an empty account is topped up first.
+  await gasIfNone();
   if (left === 1n) handedTo = { key: keyAt(keyIndex + 1), i: keyIndex + 1 };
   return sendCalls(account, key, calls, atomic, left === 1n ? keyOf(handedTo!.key) : undefined);
 }
@@ -492,7 +503,9 @@ async function refreshPrivate(): Promise<void> {
 
 const getUsdc = (statusId: string) => () => void step(statusId, 'Asking the pqUSDC faucet…', async () => {
   logged(await pqUSDCFaucet(account), 'Test pqUSDC received');
-  return 'Got 100 test pqUSDC at your address. Deposit it to make it private.';
+  // And the gas to deposit it, as Sepolia's faucet gives both.
+  const gas = await gasIfNone();
+  return `Got 100 test pqUSDC${gas ? ' and devnet ETH for gas' : ''} at your address. Deposit it to make it private.`;
 });
 el('usdc-faucet').addEventListener('click', getUsdc('deposit-status'));
 el('address-usdc').addEventListener('click', getUsdc('address-status'));
