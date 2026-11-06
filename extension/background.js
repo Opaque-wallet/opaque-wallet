@@ -5,5 +5,5 @@
 if (chrome.sidePanel?.setPanelBehavior) {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 } else {
-  chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: 'testnet/xrpl.html' }));
+  chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: 'testnet/devnet.html' }));
 }

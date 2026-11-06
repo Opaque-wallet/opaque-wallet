@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Opaque",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "A private, post-quantum wallet for Arc, XRPL and Ethereum: payments through a relay mesh, and a separate account for every app.",
   "action": {
     "default_title": "Open Opaque"
   },
   "side_panel": {
-    "default_path": "testnet/xrpl.html"
+    "default_path": "testnet/devnet.html"
   },
   "background": {
     "service_worker": "background.js"

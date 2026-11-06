@@ -393,11 +393,20 @@ function startDraft(): void {
 }
 
 /** A wallet was just made or brought in: offer the passkey backup once, then open it. */
+/**
+ * The wallet, open: this page again, or the one that sent its visitor here to make a wallet
+ * (devnet.html's "Open Opaque" adds ?next=devnet). Only that name: never a URL from the query.
+ */
+const openWallet = (): void => {
+  if (new URLSearchParams(location.search).get('next') === 'devnet') location.href = 'devnet.html';
+  else location.reload();
+};
+
 /** A wallet was just made or brought in: a password first, then the passkey backup offered once, then it opens. */
 async function opened(): Promise<void> {
   if (!hasPassword()) { obStep('ob-password'); el<HTMLInputElement>('ob-pass').focus(); return; }
   if (backupState() === null && await passkeySupported()) { obStep('ob-passkey'); return; }
-  location.reload();
+  openWallet();
 }
 
 function setupOnboarding(): void {
@@ -418,12 +427,12 @@ function setupOnboarding(): void {
   el('ob-passkey-go').addEventListener('click', () => void (async () => {
     el<HTMLButtonElement>('ob-passkey-go').disabled = true;
     setStatus('ob-passkey-status', 'Follow your browser\'s passkey prompt…');
-    try { await createBackup(page.backup); location.reload(); } catch (error) {
+    try { await createBackup(page.backup); openWallet(); } catch (error) {
       setStatus('ob-passkey-status', `Not backed up: ${(error as Error).message} You can try again from Accounts.`);
       el<HTMLButtonElement>('ob-passkey-go').disabled = false;
     }
   })());
-  el('ob-passkey-skip').addEventListener('click', () => location.reload());
+  el('ob-passkey-skip').addEventListener('click', openWallet);
   el('ob-password').addEventListener('submit', (e) => void (async () => {
     e.preventDefault();
     const [pass, again] = [el<HTMLInputElement>('ob-pass').value, el<HTMLInputElement>('ob-pass2').value];

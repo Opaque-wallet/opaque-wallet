@@ -310,7 +310,8 @@ el('promo-fund-go').addEventListener('click', fund('home-status'));
 el('address-faucet').addEventListener('click', fund('address-status'));
 el('promo-create-go').addEventListener('click', create('home-status'));
 el('address-create').addEventListener('click', create('address-status'));
-el('to-wallet').addEventListener('click', () => { location.href = 'xrpl.html'; });
+// Wallets are made on the XRPL page (the same phrase holds every chain); it sends its visitor back here.
+el('to-wallet').addEventListener('click', () => { location.href = 'xrpl.html?next=devnet'; });
 
 /** Private pqUSDC (the default) or public ETH: the asset at the top says which, and the form follows. */
 function setSendMode(priv: boolean): void {
