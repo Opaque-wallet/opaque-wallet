@@ -725,3 +725,32 @@ input[role="switch"]:checked { border-color: var(--orange); background: var(--or
 input[role="switch"]:checked::after { transform: translateX(20px); background: #070608; }
 input[role="switch"]:disabled { opacity: 0.55; cursor: progress; }
 input[role="switch"]:focus-visible { outline: 2px solid var(--soft); outline-offset: 3px; }
+
+/* Names: the claim of a post-quantum ENS name is the whole screen's point */
+.name-hero { display: grid; gap: 16px; padding: clamp(24px, 4vw, 40px); margin-top: 8px; }
+.name-hero .eyebrow { margin: 0; }
+.name-hero__title { margin: 0; font: 700 clamp(28px, 3.6vw, 44px)/1.1 var(--display); letter-spacing: -0.02em; text-wrap: balance; }
+.name-hero__copy { margin: 0; max-width: 46em; color: var(--muted); font-size: 16px; line-height: 1.55; }
+.name-hero__claim { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
+.name-hero__field { flex: 1 1 320px; display: flex; align-items: center; gap: 4px; min-width: 0; padding: 0 22px; border: 1px solid var(--line); border-radius: 18px; background: var(--raised); transition: border-color 0.2s; }
+.name-hero__field:focus-within { border-color: var(--orange); }
+.name-hero__field input { flex: 1; min-width: 0; height: 68px; border: 0; background: none; color: var(--text); font: 700 clamp(22px, 2.6vw, 30px) var(--display); outline: none; }
+.name-hero__field span { color: var(--muted); font: 600 clamp(18px, 2vw, 24px) var(--display); white-space: nowrap; }
+.name-hero__claim .primary { min-width: 160px; min-height: 68px; border-radius: 18px; font-size: 18px; }
+.name-hero__held { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 20px; }
+.name-hero__held b { font: 700 clamp(26px, 3.4vw, 42px)/1.15 var(--display); color: var(--orange); overflow-wrap: anywhere; }
+.name-hero__facts { display: grid; gap: 10px; margin: 6px 0 0; padding: 0; list-style: none; }
+.name-hero__facts li { padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--muted); font-size: 14px; line-height: 1.5; }
+.name-hero__facts b { color: var(--text); }
+@media (min-width: 900px) { .name-hero__facts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* The claim card: wide enough on a desktop for its three facts, and shrinkable on a phone. */
+@media (min-width: 1000px) { #view-names.view:not(#view-home) { width: min(100%, 980px); } }
+.name-hero { grid-template-columns: minmax(0, 1fr); }
+.name-hero > * { min-width: 0; }
+.name-hero__field input { width: 100%; }
+@media (max-width: 520px) {
+  .name-hero__field { flex-basis: 100%; padding: 0 16px; }
+  .name-hero__field input { height: 58px; font-size: 21px; }
+  .name-hero__field span { font-size: 16px; }
+  .name-hero__claim .primary { flex: 1; min-height: 58px; }
+}

@@ -255,17 +255,23 @@
 
   <section class="view" id="view-names" aria-labelledby="tab-names" hidden>
     <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Names</h1><span></span></div>
-    <p class="lede">A name on ENSv2 for this wallet, held by its post-quantum key. Anyone can pay it by name, and with Receive privately on (Privacy), those payments land at one-time addresses only this wallet can find.</p>
-    <div class="deposit-card" id="sub-card" hidden>
-      <div class="deposit-copy"><p class="eyebrow">Your ENS name</p><p id="sub-copy">A name under opaque.eth for this wallet: anyone can pay it by name, and only this wallet's post-quantum key holds it.</p></div>
-      <div class="deposit-row" id="sub-claim-row">
-        <label class="deposit-amount" for="sub-label"><input id="sub-label" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="yourname" maxlength="32"><span>.opaque.eth</span></label>
+    <div class="deposit-card name-hero" id="sub-card" hidden>
+      <p class="eyebrow">ENSv2 · Sepolia</p>
+      <h2 class="name-hero__title" id="sub-title">Claim a post-quantum ENS name</h2>
+      <p class="name-hero__copy" id="sub-copy">A name under opaque.eth for this wallet: anyone can pay it by name, and only this wallet's post-quantum key holds it.</p>
+      <div class="name-hero__claim" id="sub-claim-row">
+        <label class="name-hero__field" for="sub-label"><input id="sub-label" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="yourname" maxlength="32"><span>.opaque.eth</span></label>
         <button class="primary" id="sub-claim" type="button">Claim</button>
       </div>
-      <div class="deposit-row" id="sub-held" hidden><b class="mono" id="sub-name"></b><button class="link" id="sub-release" type="button">Release</button></div>
+      <div class="name-hero__held" id="sub-held" hidden><b class="mono" id="sub-name"></b><button class="link" id="sub-release" type="button">Release</button></div>
+      <ul class="name-hero__facts">
+        <li><b>Post-quantum.</b> Held by this wallet's FORS+C key: only a hash-based signature can move it.</li>
+        <li><b>Payable by name.</b> Anyone pays it through ENSv2's UniversalResolver.</li>
+        <li><b>Private if you want.</b> With Receive privately on, payments land at one-time addresses only you can find.</li>
+      </ul>
       <p class="status" id="sub-status" role="status"></p>
     </div>
-    <details class="advanced" id="names-advanced">
+    <details class="advanced" id="names-advanced" hidden>
       <summary>Advanced: hold opaque.eth itself</summary>
       <p class="fine-print">opaque.eth is the parent of every name here. A controller holds it and acts only on a FORS+C signature. The claim code hands that control to one wallet, so the team can show a top-level ENS name run by a post-quantum key. You don't need it for your own name.</p>
       <p class="fine-print"><button class="link" id="name-owner" type="button">Claim opaque.eth with the code</button></p>

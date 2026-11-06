@@ -124,7 +124,7 @@ const until = async (what: string, test: () => Promise<boolean>, ms = 300_000) =
 };
 
 try {
-  await page.goto(`${SITE}/sepolia/app`);
+  await page.goto(`${SITE}/sepolia/app?owner`); // ?owner: the claim of opaque.eth itself is shown
   const phrase = await createWallet(page, 180_000, ARC_READY);
   check((await page.textContent('#network-switch'))?.includes('Sepolia'), 'a wallet made on the Sepolia page');
   check((await page.textContent('.hero .shield')) === 'Shielded on Sepolia', 'the page names its chain, not Arc');

@@ -911,7 +911,9 @@ function setupNameCard(keys: AccountKeys): void {
     const s = await state();
     mine = [0, 1, 2].find((g) => commitmentOf(nameKey(g)) === s.pkCommitment.toLowerCase());
     const ours = mine !== undefined;
-    if (ours) { el('name-card').hidden = false; el('name-owner').hidden = true; }
+    // Only the wallet that holds opaque.eth, or one opened with ?owner, sees the parent name at all.
+    if (ours || OWNER_VIEW) el('names-advanced').hidden = false;
+    if (ours) { el('names-advanced').setAttribute('open', ''); el('name-card').hidden = false; el('name-owner').hidden = true; }
     el('name-claim-row').hidden = ours;
     el('name-point').hidden = !ours;
     el('name-copy').textContent = ours
@@ -960,6 +962,8 @@ function setupNameCard(keys: AccountKeys): void {
 
 const NAMES_ABI = parseAbi(['function claim(string label)', 'function release()']);
 let refreshSubname = async (): Promise<void> => undefined;
+/** ?owner in the address: the project's own view, with the claim of opaque.eth itself. */
+const OWNER_VIEW = new URLSearchParams(location.search).has('owner');
 
 function setupSubname(): void {
   const names = ENS.names;
@@ -972,6 +976,7 @@ function setupSubname(): void {
     el('sub-claim-row').hidden = held !== '';
     el('sub-held').hidden = held === '';
     el('sub-name').textContent = held === '' ? '' : `${held}.opaque.eth`;
+    el('sub-title').textContent = held === '' ? 'Claim a post-quantum ENS name' : 'Your post-quantum ENS name';
     el('sub-copy').textContent = held === ''
       ? 'A name under opaque.eth for this wallet: anyone can pay it by name, and only this wallet\'s post-quantum key holds it.'
       : `This wallet's name. Anyone can pay ${held}.opaque.eth: it resolves to this wallet's address, and only its post-quantum key holds the name.`;
