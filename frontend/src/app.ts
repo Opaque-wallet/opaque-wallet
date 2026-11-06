@@ -75,7 +75,8 @@ const ARC_NAME = deployment.network.displayName;
  * margin over the ~0.03 a one-note operation costs; what it leaves over stays
  * in the account and pays for the next one.
  */
-const DEPOSIT_GAS_USDC = 0.2;
+const GAS_IN_USDC = deployment.network.nativeCurrency.symbol === 'USDC';
+const DEPOSIT_GAS_USDC = GAS_IN_USDC ? 0.2 : 0; // Sepolia pays gas in ETH
 /** A payment waiting for privacy settles when the mesh reaches this score. */
 const MIN_FRESHNESS = 70;
 /**
@@ -403,7 +404,7 @@ function renderBalance(): void {
   const depositable = Math.floor(accountUsdc - DEPOSIT_GAS_USDC);
   if (depositable >= 1) parts.push(`${depositable} USDC at your address, ready to deposit`);
   // Notes are whole USDC: what a deposit leaves at the address is not lost, it pays gas and joins the next one.
-  else if (accountUsdc >= 0.01) parts.push(`${accountUsdc.toFixed(2)} USDC at your address pays for gas and joins your next deposit`);
+  else if (accountUsdc >= 0.01) parts.push(`${accountUsdc.toFixed(2)} USDC at your address ${GAS_IN_USDC ? 'pays for gas and ' : ''}joins your next deposit`);
   el('balance').textContent = `${total}.00`;
   if (account !== null && runtimeReady) saveArcState({ balances: { ...arcState().balances, [idOf(account)]: total } });
   el('note-count').textContent = parts.join(' · ');
@@ -437,7 +438,8 @@ function renderDepositSplit(): void {
 const AUTO_KEY = scoped('opaque:auto-deposit');
 /** On by default; switched off on Home, to keep USDC at the address for a swap. */
 const autoOn = (): boolean => {
-  if (NETWORK !== 'testnet') return false;
+  // Test networks only: real USDC is deposited when its owner says so.
+  if (NETWORK === 'mainnet') return false;
   try { return localStorage.getItem(AUTO_KEY) !== 'off'; } catch { return true; }
 };
 let depositing = false;
@@ -570,6 +572,8 @@ async function onDeposit(auto = false): Promise<boolean> {
 // before anything is signed.
 
 const SWAP_TOKENS = deployment.swap.tokens;
+/** A network LI.FI does not serve (Sepolia: no testnets there) has no swaps, and no Swap tab. */
+const SWAPS = SWAP_TOKENS.length > 1;
 const tokenOf = (symbol: string): SwapToken => SWAP_TOKENS.find((t) => t.symbol === symbol)!;
 const isUsdc = (t: SwapToken) => t.address.toLowerCase() === deployment.tokens.usdc.address.toLowerCase();
 /** Each swap token at the address, in its smallest units. */
@@ -607,7 +611,7 @@ const spendable = (t: SwapToken): bigint => {
 async function refreshTokens(): Promise<void> {
   if (!runtimeReady || !opaqueAddress) return;
   tokenHeld = await rt.tokenBalances(opaqueAddress as `0x${string}`);
-  renderSwapSides();
+  if (SWAPS) renderSwapSides();
   renderTokenAssets();
 }
 
@@ -874,7 +878,7 @@ function setupNameCard(keys: AccountKeys): void {
   el('name-card').hidden = false;
   const post = async (path: string, body: unknown) => {
     const res = await fetch(`${stackUrl}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) });
-    const out = await res.json().catch(() => ({})) as { message?: string; hash?: string; hashes?: string[] };
+    const out = await res.json().catch(() => ({})) as { message?: string; hash?: string; hashes?: string[]; ok?: boolean };
     if (!res.ok) throw new Error(out.message ?? `the stack answered ${res.status}`);
     return out;
   };
@@ -900,7 +904,8 @@ function setupNameCard(keys: AccountKeys): void {
     try {
       const out = await post('/v1/ens/claim', { code, pk: commitmentOf(nameKey(0)), next: commitmentOf(nameKey(1)) });
       setStatus('name-status', `Claimed: ${NAME} now answers to this wallet's key (${out.hashes?.length ?? 0} rotations).`);
-      await show();
+      // A public RPC a block behind still shows the stack's key for a few seconds.
+      for (let tries = 0; tries < 20 && (await show(), mine === undefined); tries++) await new Promise((r) => setTimeout(r, 3_000));
     } catch (error) { setStatus('name-status', `Not claimed: ${(error as Error).message}`); }
   })());
   el('name-point').addEventListener('click', () => void (async () => {
@@ -916,8 +921,11 @@ function setupNameCard(keys: AccountKeys): void {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
       const signature = signExecute(nameKey(mine), BigInt(deployment.network.chainId), ENS.controller, s.useCount, ENS.resolver, data, deadline);
       const out = await post('/v1/ens/execute', { target: ENS.resolver, data, deadline, signature });
+      if (out.ok !== true) throw new Error(`the call reverted: ${out.hash}`);
       setStatus('name-status', `${NAME} now resolves to this wallet: ${out.hash}`);
       await show();
+      // A public RPC a block behind still reads the old record; the call above succeeded, so this is the record.
+      el('name-records').textContent = `Resolves to ${opaqueAddress}`;
     } catch (error) { setStatus('name-status', `Not changed: ${(error as Error).message}`); }
   })());
   void show().catch((error: Error) => setStatus('name-status', error.message));
@@ -1327,7 +1335,8 @@ async function init(): Promise<void> {
   el('tile-activity').addEventListener('click', () => el('tab-activity').click());
   el('tile-swap').addEventListener('click', () => showView('swap'));
   el('tab-swap').addEventListener('click', () => showView('swap'));
-  setupSwap();
+  if (SWAPS) setupSwap();
+  else for (const id of ['tile-swap', 'tab-swap']) el(id).hidden = true;
   // The balance card catches the light where the pointer is.
   el('hero').addEventListener('pointermove', (e) => {
     const r = el('hero').getBoundingClientRect();
@@ -1425,6 +1434,7 @@ async function init(): Promise<void> {
   }
   if (NETWORK === 'sepolia') {
     el<HTMLInputElement>('recipient').placeholder = '0x… or an ENS name, like opaque.eth';
+    el('recipient').nextElementSibling!.textContent = 'A Sepolia address or an ENS name.';
     if (account !== 'browser') setupNameCard(account);
   }
   loadSent(arcStorageOf(account, keyStoreName()).sent);

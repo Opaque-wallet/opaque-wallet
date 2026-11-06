@@ -162,7 +162,7 @@ try {
   await wallet.click('#network-switch');
   await wallet.click('#network-dialog [data-network="mainnet"]');
   await wallet.waitForURL(`${WALLET}/app.html`, { timeout: 30_000 });
-  for (const [path, name] of [['app.html', 'Arc Mainnet'], ['testnet/app.html', 'Arc Testnet']]) {
+  for (const [path, name] of [['app.html', 'Arc Mainnet'], ['testnet/app.html', 'Arc Testnet'], ['sepolia/app.html', 'Sepolia']]) {
     const arc = path === 'app.html' ? wallet : await context.newPage();
     if (arc !== wallet) await arc.goto(`${WALLET}/${path}`);
     const started = await arc.waitForFunction(() => (globalThis as any).opaque !== undefined, undefined, { timeout: 120_000 }).then(() => true, () => false);

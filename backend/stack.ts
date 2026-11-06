@@ -414,10 +414,19 @@ async function claimName(pk: `0x${string}`, next: `0x${string}`): Promise<`0x${s
   const master = fromHex(ENS_MASTER as `0x${string}`);
   const keyAt = (g: number) => masterKey(master, 'opaque/v1/ens/controller', g);
   const hashes: `0x${string}`[] = [];
+  const read = () => publicClient.readContract({ address: ENS!.pqKeyRegistry, abi: NAME_REGISTRY_ABI, functionName: 'stateOf', args: [ENS!.controller] });
+  let was: string | undefined;
   for (let step = 0; step < 3; step++) {
-    const s = await publicClient.readContract({ address: ENS!.pqKeyRegistry, abi: NAME_REGISTRY_ABI, functionName: 'stateOf', args: [ENS!.controller] });
+    // Public RPCs are load-balanced: after a rotation, a node a block behind still
+    // shows the key before it. Signing that stale state would spend a signature on a
+    // rotation that reverts, so wait until the read shows the rotation.
+    let s = await read();
+    for (let tries = 0; was !== undefined && s.pkCommitment === was && tries < 40; tries++) { await new Promise((r) => setTimeout(r, 3_000)); s = await read(); }
+    if (s.pkCommitment === was) throw new Error('the rotation landed, but the RPC never showed it: try again in a minute');
+    was = s.pkCommitment;
     if (s.pkCommitment.toLowerCase() === pk.toLowerCase()) return hashes;
-    const g = [0, 1, 2, 3, 4, 5, 6, 7].find((i) => commitmentOf(keyAt(i)) === s.pkCommitment.toLowerCase());
+    // Each claim and each e2e hand-back moves two generations on; keys are drawn only up to the match.
+    const g = Array.from({ length: 64 }, (_, i) => i).find((i) => commitmentOf(keyAt(i)) === s.pkCommitment.toLowerCase());
     if (g === undefined) throw new Error('the name answers to a key this stack does not hold: it was claimed already');
     // The key in force commits the wallet's key next; once that is committed, the wallet's own next key.
     const after = s.nextCommitment.toLowerCase() === pk.toLowerCase() ? next : pk;
@@ -463,8 +472,10 @@ const namesHandler = (url: string, req: Parameters<RequestListener>[0], res: Par
 // for settlements: so a wallet on Sepolia needs no faucet of anyone else's.
 // Once an hour per address, and at most 60 an hour in all.
 const FAUCET = process.env['FAUCET'] === '1';
-const FAUCET_ETH = parseEther(process.env['FAUCET_ETH'] ?? '0.003');
+// A new account's first operation deploys it too: 0.01 ETH covers that and many after.
+const FAUCET_ETH = parseEther(process.env['FAUCET_ETH'] ?? '0.01');
 const FAUCET_USDC = 100n * 10n ** BigInt(deployment.tokens.usdc.decimals);
+const FAUCET_FLOOR = parseEther('0.1');
 const dripped = new Map<string, number>();
 let dripsThisHour: { hour: number; n: number } = { hour: 0, n: 0 };
 const faucetHandler: RequestListener = (req, res) => {
@@ -482,15 +493,24 @@ const faucetHandler: RequestListener = (req, res) => {
     if (dripsThisHour.hour !== hour) dripsThisHour = { hour, n: 0 };
     if (Date.now() - (dripped.get(address) ?? 0) < 3_600_000) return reply(429, { message: 'once an hour per address' });
     if (dripsThisHour.n >= 60) return reply(429, { message: 'the faucet is resting: try again within the hour' });
+    // The egress pays settlements too: random addresses must not drain what private payments need.
+    if (await publicClient.getBalance({ address: egressAccount.address }) < FAUCET_ETH + FAUCET_FLOOR) return reply(503, { message: 'the faucet is dry for now: try again later' });
+    // Held while it pays, so a second click waits; forgotten if paying fails, so the wallet can ask again.
     dripped.set(address, Date.now());
     dripsThisHour.n++;
     const w = createWalletClient({ account: egressAccount, chain: ARC, transport: rpcTransport() });
-    const [eth, usdc] = await writeInTurn(egressAccount.address, async () => [
-      await w.sendTransaction({ to: address as `0x${string}`, value: FAUCET_ETH }),
-      await w.writeContract({ address: deployment.tokens.usdc.address, abi: parseAbi(['function transfer(address to, uint256 value) returns (bool)']), functionName: 'transfer', args: [address as `0x${string}`, FAUCET_USDC] }),
-    ] as const);
-    reply(200, { eth, usdc });
-  })().catch((e: Error) => reply(500, { message: e.message.split('\n')[0] })));
+    try {
+      const [eth, usdc] = await writeInTurn(egressAccount.address, async () => [
+        await w.sendTransaction({ to: address as `0x${string}`, value: FAUCET_ETH }),
+        await w.writeContract({ address: deployment.tokens.usdc.address, abi: parseAbi(['function transfer(address to, uint256 value) returns (bool)']), functionName: 'transfer', args: [address as `0x${string}`, FAUCET_USDC] }),
+      ] as const);
+      reply(200, { eth, usdc });
+    } catch (error) {
+      dripped.delete(address);
+      dripsThisHour.n--;
+      throw error;
+    }
+  })().catch((e: Error & { shortMessage?: string }) => reply(500, { message: (e.shortMessage ?? e.message).split('\n')[0] })));
 };
 await new Promise<void>((r) => credentials.listen(PORTS.credentials, LOOPBACK, r));
 
@@ -546,7 +566,7 @@ for (const [pool, s] of graph === undefined ? [] : ringSources) {
 }
 void (async () => { for (const s of ringSources.values()) await s.backfill(); })();
 
-log('opaque local stack — against the REAL Arc pools');
+log(`opaque stack — against the REAL ${deployment.network.displayName} pools`);
 for (const p of ringPools) {
   // A banner, not a gate: Arc rate-limits a boot's burst of reads, and a
   // refused scan here crash-looped the service.

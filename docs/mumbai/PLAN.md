@@ -133,41 +133,34 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 
 **Done when:** a 0.01 ETH note deposits and pays on Sepolia.
 
-### T4. Deploy to Sepolia (the user signs; the deployer key goes in at forge's hidden prompt)
+### T4. Deploy to Sepolia. Done
 
-1. **Decide the exit verifier first (T10a).** A pool's verifier is immutable, so it is fixed the moment `DeployRingPool` runs.
-2. **Funding:**
-   - About 1.3 Sepolia ETH for the deployer. 1 ETH of that is the factory's EntryPoint stake: confirm Pimlico's Sepolia minimum before sending it.
-   - A new attester address with enough ETH for its one registration transaction.
-   - New FORS commitments for the attester. Never reuse Arc's keys: they are few-time.
-3. **Deploy:**
-   - `DEPLOYMENTS=eth-sepolia.json forge script script/DeployPQStack.s.sol --rpc-url <sepolia> --broadcast --interactives 1 --sender 0x…`, then record the addresses;
-   - then `DeployRingPool.s.sol` for sizes 1 and 10 to start, then record those.
-4. **Seed the rings.** Each pool needs 8 notes before the first private payment: `chain/fill-pools.ts` with Sepolia USDC from faucet.circle.com. That's 8×1 + 8×10 = 88 USDC; check the faucet's amount per request.
+- **Deployed** by `backend/ethereum/sepolia-deploy.ts` (resumable; deployer `.stack/eth-sepolia/deployer.key`), addresses in `deployments/eth-sepolia.json`:
+  - tUSDC (6 decimals, ours: Circle's Sepolia USDC faucet is rate-limited);
+  - the PQ stack on the ENS PQKeyRegistry;
+  - an attester registered by FORS commitments of its own;
+  - seven pools (1, 2, 5, 10, 20, 50 and 100 tUSDC), each seeded with 8 decoys made by `deriveCommitment`.
+- **The factory's EntryPoint stake was not needed.** Pimlico's Sepolia bundler deploys PQ accounts through the unstaked PQAccountFactory: the e2e's account was created by its own first UserOperation.
 
-**Done when:** `deployments.test.ts` passes on Sepolia and both pools hold at least 8 notes.
+### T5. Backend for Sepolia. Done
 
-### T5. Backend for Sepolia (Railway and The Graph need the user's go)
+- **Railway service** `opaque-sepolia` at https://opaque-sepolia-production.up.railway.app:
+  - built from `backend/deploy/sepolia.Dockerfile`, with a volume at /app/backend/.stack;
+  - secrets set over stdin;
+  - its masters' only other copies are `backend/.stack/eth-sepolia/*`. Never delete them.
+- **No subgraph.** The stack runs without The Graph (`services.graphUrl` unset): rings are read from pool logs.
+- **Faucet** (`FAUCET=1`) at `/v1/faucet`:
+  - pays 0.01 ETH and 100 tUSDC, once an hour per address and 60 an hour in all;
+  - the egress pays it, and settlements too: keep it above about 0.1 ETH.
+- **Names:** `/v1/ens/claim` (with `ENS_CLAIM_CODE`) hands opaque.eth's key to a wallet, and `/v1/ens/execute` relays FORS-signed controller calls.
 
-- **Railway:** a new service from `backend/deploy/stack.Dockerfile` with `OPAQUE_NETWORK=sepolia` and its own secrets:
-  - mesh master, attester, egress;
-  - an executor address funded with Sepolia ETH (it submits spends).
-  - Set secrets with `railway variable set KEY --stdin`, never on argv.
-- **Subgraph:** `graph/scripts/render-manifest.ts` for network `sepolia`, deployed to The Graph Studio, then set `services.graphUrl`.
-- **Wallet RPC allowlist** (`backend/chain/wallet-rpc.ts`, `pq-wallet-chain.ts`): add Sepolia's chain id. `pq-wallet-chain.ts` only accepts LI.FI swaps today; T8 adds v4.
+### T6. Wallet and extension on Sepolia. Done
 
-**Done when:** `scripts/smoke-network.ts` passes against the Sepolia service.
-
-### T6. Wallet and extension on Sepolia
-
-- **Build:** in `frontend/package.json`, `build:site` gains `VITE_NETWORK=sepolia vite build --outDir dist/sepolia`.
-- **Picker:** add `sepolia` to `networks` in `deployments/index.ts` with a `chain` field, and replace the hand-written Sepolia "Soon" row in `network-picker.ts`.
-- **Extension:** `extension/build.mjs` gains `sepolia/app.html` in `PAGES`.
-- **Copy:** text that names Arc becomes the network's `displayName`, for example "Enter an Arc address" in `src/app.ts`.
-- **e2e:** run `backend/scripts/e2e-arc-contracts.ts` as the template, with `OPAQUE_NETWORK=sepolia`.
-- **Deploy:** the site (user's go), which ships T1 as well.
-
-**Done when:** a private payment goes through in the browser on Sepolia, with the settlement on sepolia.etherscan.io.
+- https://www.opaque.credit/sepolia/app is Arc's wallet code, built with `VITE_NETWORK=sepolia`. Gas is Sepolia ETH, so no tUSDC is kept back for it.
+- **Funding:** a "Get test funds" button calls the stack's faucet, and auto-deposit makes the tUSDC into notes. Private sends go through the mesh; the pool pays.
+- **Names:** Send takes ENS names (coin 60, through UniversalResolverV2). The opaque.eth card claims the name with the claim code, then points it at the wallet by a FORS+C signature.
+- **Extension:** `extension/build.mjs` bundles `sepolia/app.html` and `testnet/devnet.html`.
+- **e2e:** `backend/scripts/e2e-sepolia.ts`. It runs wallet → faucet → deposit → private payment → claim opaque.eth → point it → pay opaque.eth by name, then hands the name back to the stack's key so the claim code keeps working (`HAND_BACK=1` finishes an interrupted hand-back).
 
 ### T7. ENSv2 with post-quantum authority (Sepolia)
 
@@ -179,7 +172,7 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - Commands: `backend/ethereum/ens-sepolia.ts` (deploy, adopt, records, status). Tests: `contracts/test/PQNameController.t.sol`, signatures from packages/pq-wallet.
 - ENS's repo records three Sepolia address sets; we use docs.ens.domains', the ENS app's.
 
-**Left:** the wallet pays a name ("Pay opaque.eth" resolves through UniversalResolverV2, then pays privately on the devnet).
+**Done since:** the devnet page and the Sepolia wallet pay names (UniversalResolverV2; devnet coin 0x80000539, Ethereum coin 60). The Sepolia wallet claims opaque.eth with the stack's claim code and points it at itself (T6).
 
 ### T8. Uniswap v4
 
