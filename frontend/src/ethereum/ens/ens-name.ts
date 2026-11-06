@@ -30,11 +30,18 @@ export function dnsEncode(name: string): `0x${string}` {
 }
 
 const IN_BROWSER = typeof window !== 'undefined' && typeof document !== 'undefined';
+/** A call the chain ran and reverted (it carries revert data, or says so), not one that never got an answer. */
+const reverted = (error: unknown): boolean => (error as { data?: unknown }).data !== undefined || /revert/i.test(String((error as Error).message));
 
 export async function ethCall(to: `0x${string}`, data: `0x${string}`): Promise<`0x${string}`> {
   if (IN_BROWSER) {
     const { anonRpc } = await import('../../lib/anon-rpc.ts');
-    return anonRpc<`0x${string}`>(RPCS[0]!, 'eth_call', [{ to, data }, 'latest']);
+    // The mixnet drops a request now and then: tried again, but never a revert, which is the call's answer.
+    for (let attempt = 1; ; attempt++) {
+      try { return await anonRpc<`0x${string}`>(RPCS[0]!, 'eth_call', [{ to, data }, 'latest']); } catch (error) {
+        if (attempt >= 3 || reverted(error)) throw error;
+      }
+    }
   }
   let last: unknown;
   for (const url of RPCS) {
@@ -56,7 +63,10 @@ export async function resolveName(name: string, coin = DEVNET_COIN): Promise<{ a
   const out = await ethCall(ENS.universalResolverV2, encodeFunctionData({
     abi: UR, functionName: 'resolve',
     args: [dnsEncode(n), encodeFunctionData({ abi: PROFILE, functionName: 'addr', args: [namehash(n), coin] })],
-  })).catch(() => { throw new Error(`${n} has no ENS records`); });
+  })).catch((error: unknown) => {
+    // A revert is ENS's answer; anything else is the way there failing, and must not read as "no such name".
+    throw new Error(reverted(error) ? `${n} has no ENS records` : `could not look ${n} up just now (${(error as Error).message}): try again`);
+  });
   const [record] = decodeFunctionResult({ abi: UR, functionName: 'resolve', data: out });
   const bytes = decodeFunctionResult({ abi: PROFILE, functionName: 'addr', data: record });
   if (bytes.length !== 42) throw new Error(`${n} has no address ${coin === DEVNET_COIN ? 'on the devnet' : 'for this chain'}`);
