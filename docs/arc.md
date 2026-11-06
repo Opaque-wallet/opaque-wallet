@@ -205,8 +205,8 @@ diagrams/                  architecture diagrams used throughout this README
 Opaque uses **Bun** for package installation, scripts, and tests.
 
 ~~~bash
-git clone https://github.com/minrawsjar/Opaque.git
-cd Opaque
+git clone https://github.com/Opaque-wallet/opaque-wallet.git
+cd opaque-wallet
 
 for dir in packages/protocol-types packages/pq-wallet packages/ring-client graph backend frontend; do
   (cd "$dir" && bun install)

@@ -16,7 +16,9 @@
 
 It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumbai.
 
-[**Open the wallet**](https://www.opaque.credit/testnet/devnet) · [What we built](https://www.opaque.credit/ethglobal-mumbai) · [Sepolia wallet](https://www.opaque.credit/sepolia/app) · [Keep MetaMask](https://www.opaque.credit/sepolia/vault) · [Opaque beside MetaMask](https://www.opaque.credit/connect-opaque) · [Partner evidence](partner-docs/README.md)
+[**Open the wallet**](https://www.opaque.credit/testnet/devnet) · [**ETHGlobal Mumbai submission**](docs/mumbai/README.md) · [What we built](https://www.opaque.credit/ethglobal-mumbai) · [Sepolia wallet](https://www.opaque.credit/sepolia/app) · [Keep MetaMask](https://www.opaque.credit/sepolia/vault) · [Opaque beside MetaMask](https://www.opaque.credit/connect-opaque) · [Partner evidence](partner-docs/README.md)
+
+![Opaque on Ethereum: the wallet, its two transaction paths (EIP-8141 frame transactions on the devnet, ERC-4337 on Sepolia), the privacy layer, and the PQ auth core under all of it](diagrams/ethereum.svg)
 
 </div>
 
