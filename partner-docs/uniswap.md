@@ -44,14 +44,29 @@ A v4 hook decides who may add, remove, swap and donate. So a hook can make a poo
 - **Devnet:** `register(firstKey)` checks the frame-account factory's CREATE2 address. An account stays admitted after it rotates its key, and nothing else gets in.
 - **Positions handed to an ECDSA wallet freeze.** They don't move.
 
-## What a judge can check
+## Deployment addresses
 
-**Sepolia, at Uniswap's own v4.** PoolManager is `0xE03A…3543`, PositionManager `0x429b…09b4` and Universal Router `0x3A9D…f98b`. All are listed in [`deployments/eth-sepolia.json`](../deployments/eth-sepolia.json) under `uniswap`.
+| Contract | Network | Address |
+|---|---|---|
+| `PQGuardHook` | Sepolia | [`0xd0cfd61eb5ef783f6d70ea83b58d2c87fc034b01`](https://sepolia.etherscan.io/address/0xd0cfd61eb5ef783f6d70ea83b58d2c87fc034b01) |
+| `PQAccountPoolHook` | Sepolia | [`0xa68b63f17fe7926812d8591247b5a718a7244aa0`](https://sepolia.etherscan.io/address/0xa68b63f17fe7926812d8591247b5a718a7244aa0) |
+| `PQKeyRegistry` (the guard keys) | Sepolia | [`0x8b47560d32bcda788ab5233ab2bda55204cacca3`](https://sepolia.etherscan.io/address/0x8b47560d32bcda788ab5233ab2bda55204cacca3) |
+| Guarded position | Sepolia | PositionManager token **#41441** |
+| Uniswap v4 PoolManager | Sepolia | [`0xe03a1074c86cfedd5c142c4f04f1a1536e203543`](https://sepolia.etherscan.io/address/0xe03a1074c86cfedd5c142c4f04f1a1536e203543) |
+| Uniswap v4 PositionManager | Sepolia | [`0x429ba70129df741b2ca2a85bc3a2a3328e5c09b4`](https://sepolia.etherscan.io/address/0x429ba70129df741b2ca2a85bc3a2a3328e5c09b4) |
+| Uniswap v4 Universal Router | Sepolia | [`0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b`](https://sepolia.etherscan.io/address/0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b) |
+| `PQPoolHook` | EIP-8141 devnet | `0x3B288a191c20c0333c06E90b386b611d2AC3caa0` |
+| Uniswap v4 PoolManager / PositionManager / Universal Router | EIP-8141 devnet | `0x6bF9Aa9c04fd001385742d61f6818C3236429848` / `0x5bF24B2CD6f4cc0057F4BeD53264d591620Af57B` / `0x5e2250a42608a5cc9f62e23ab24824ee25b5e2be` |
+
+Full maps: [`deployments/eth-sepolia.json`](../deployments/eth-sepolia.json) and [`deployments/eth-devnet.json`](../deployments/eth-devnet.json), under `uniswap`. Devnet explorer: [altmempoolexplorer.forshtat.com](https://altmempoolexplorer.forshtat.com).
+
+## What it shows on chain
+
+**Sepolia, at Uniswap's own v4:**
 
 - A PQ account's first UserOperation deployed the account and funded the post-quantum pool. Its swap bought exactly the quoted amount.
 - An ECDSA wallet's swap in that pool reverts with `NotPostQuantum(wallet)`.
-- The guard demo:
-  - position **#41441**, opened by an ordinary ECDSA wallet with a registered guard key;
+- The guard, on position #41441, opened by an ordinary ECDSA wallet with a registered guard key:
   - another key's signature and a replayed signature are both refused;
   - the signed removal paid 0.002 ETH and 3.999999 tUSDC to the recipient it named, and 0 to the caller.
 - **The wallet swaps here.** The Swap tab at [opaque.credit/sepolia/app](https://www.opaque.credit/sepolia/app) quotes from the pool's own storage, read across Opaque's relay mesh (the exit allows only `PoolManager.extsload`). One UserOperation, signed by the account's FORS+C key, makes the swap.

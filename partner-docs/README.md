@@ -12,7 +12,7 @@
 
 ## ETHGlobal Mumbai: Opaque on Ethereum
 
-| Partner | The role it plays in Opaque | Judge-ready evidence |
+| Partner | The role it plays in Opaque | Deployed, and what it shows |
 |---|---|---|
 | **[Uniswap v4](uniswap.md)** | Hooks that put pool authority behind a hash-based key: a FORS+C second factor for any LP (MetaMask included), and pools only post-quantum accounts can trade in. | Three hooks live at Uniswap's own Sepolia v4 and on the EIP-8141 devnet, on-chain refusals of a cracked ECDSA key, 15 forge tests, the wallet's Swap tab. |
 | **[ENS](ens.md)** | opaque.eth on ENSv2 owned by a contract that acts only on a FORS+C signature; name.opaque.eth claimable only by post-quantum accounts, with post-quantum stealth payments to the name. | Controller and subregistry on Sepolia, the FORS-signed adoption and records, UniversalResolverV2 resolution, 13 forge tests, the e2e that claims, pays and sweeps. |
@@ -20,7 +20,7 @@
 
 ## Earlier: Opaque on Arc
 
-| Partner | The role it plays in Opaque | Judge-ready evidence |
+| Partner | The role it plays in Opaque | Deployed, and what it shows |
 |---|---|---|
 | **[Arc + Circle](arc.md)** | Settlement chain, USDC money and gas, ERC-4337 accounts, denomination pools, CCTP V2 onboarding. | Live Arc addresses, USDC flow, CCTP transaction, deployment and source map. |
 | **[Chainlink CRE](chainlink.md)** | Confidential authority for sealed privacy thresholds, deadlines, and payment-release decisions. | Active AWS Nitro workflow, Vault DON secrets, release flow, deployment evidence. |
@@ -33,7 +33,7 @@ Each page answers the same four questions:
 ~~~text
 What did Opaque build with this partner?
 Why is it load-bearing rather than decorative?
-What can a judge inspect live or in source?
+Where is it deployed, and what does it show on chain?
 What privacy boundary does the integration preserve?
 ~~~
 

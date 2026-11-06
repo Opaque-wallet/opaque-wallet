@@ -45,15 +45,21 @@ ENSv2 gives every role over a name to whoever holds its ERC-1155 token, and move
   - every lookup goes through EF's anon-rpc, so the RPC never learns who asked;
   - a name held by a FORS+C key is marked as such in Send.
 
-## What a judge can check
+## Deployment addresses
 
-| What | Sepolia address |
+| Contract | Sepolia address |
 |---|---|
 | `PQNameController` (holds opaque.eth) | [`0x4d4df91933bb30640908f5cd4a42e2cac546c131`](https://sepolia.etherscan.io/address/0x4d4df91933bb30640908f5cd4a42e2cac546c131) |
 | Its PermissionedResolver | [`0x9320d93186255e122214bd22270d168d5d8f676f`](https://sepolia.etherscan.io/address/0x9320d93186255e122214bd22270d168d5d8f676f) |
 | `OpaqueNames` (name.opaque.eth) | [`0x01f3419d2c8747f6b72032caf21a02fd0db44a28`](https://sepolia.etherscan.io/address/0x01f3419d2c8747f6b72032caf21a02fd0db44a28) |
 | `PQKeyRegistry` (the FORS+C keys) | [`0x8b47560d32bcda788ab5233ab2bda55204cacca3`](https://sepolia.etherscan.io/address/0x8b47560d32bcda788ab5233ab2bda55204cacca3) |
-| ENSv2 ETHRegistry / UniversalResolverV2 | `0xd4eb…a8b4` / `0x24e1…2d72` |
+| ENSv2 ETHRegistry (ENS's) | [`0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4`](https://sepolia.etherscan.io/address/0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4) |
+| ENSv2 UniversalResolverV2 (ENS's) | [`0x24e1d8e068620b647ca097f961a61055f4f42d72`](https://sepolia.etherscan.io/address/0x24e1d8e068620b647ca097f961a61055f4f42d72) |
+| ERC-6538 stealth meta-address registry (where a claim publishes the ML-KEM key) | [`0x6538e6bf4b0ebd30a8ea093027ac2422ce5d6538`](https://sepolia.etherscan.io/address/0x6538e6bf4b0ebd30a8ea093027ac2422ce5d6538) |
+
+Full map: [`deployments/eth-sepolia.json`](../deployments/eth-sepolia.json), under `ens`. Adoption transactions: resolver set in `0x621bfed795254d0d0baa3c5e1177e2537637f64f1b8aaeb77f25db2c2d80a3b1`, records in `0x23aa1a10f6da26c8555066a4ee53ccb9de11f13293b530824a7daed7c5e61791`.
+
+## Try it and test it
 
 - **Try it:** open [opaque.credit/sepolia/app](https://www.opaque.credit/sepolia/app), make a wallet, get test funds, then open **Names** and claim a name. Pay it from another wallet by typing `yourname.opaque.eth`.
 - **The end-to-end test, [`e2e-sepolia.ts`](../backend/scripts/e2e-sepolia.ts):**
