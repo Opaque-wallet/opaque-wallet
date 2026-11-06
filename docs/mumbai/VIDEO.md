@@ -113,13 +113,13 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **Say this, as one paragraph:**
 
-> Opaque: the post-quantum security layer for Ethereum. Live on Sepolia and the EIP-8141 devnet, with 154 contract tests, 396 backend tests and eight browser suites. One operator today; multiple independent operators before mainnet.
+> Q-Day won't come with a warning, and every key that moves later has to be moved by the key that's breaking. With Opaque, you move today: your money, your name, your liquidity, your protocol. This is Opaque. Thanks for watching.
 
 **On screen:**
 
 | Time | Show |
 |---|---|
-| 4:13 | The GitHub README's top: logo, badges, diagram |
+| 4:13 | The ETHGlobal Mumbai page's last section, Go post-quantum, then the Opaque logo |
 
 ## Before you record
 
