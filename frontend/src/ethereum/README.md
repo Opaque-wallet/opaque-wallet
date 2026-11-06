@@ -2,12 +2,14 @@
 
 The Sepolia wallet is the shared EVM wallet (`frontend/app.html`, `src/app.ts`), built with `VITE_NETWORK=sepolia`. This folder holds what only Ethereum has.
 
+## Index
+
 | File | What it does |
 |---|---|
 | [`devnet.ts`](devnet.ts) | "Ethereum Devnet (Fully post-quantum)" at [/testnet/devnet](https://www.opaque.credit/testnet/devnet): the EIP-8141 wallet. Private pqUSDC by default, with Deposit, Send, Swap (the post-quantum v4 pool), Privacy, Receive and Activity tabs and an Accounts picker. Every transaction is a FORS+C frame transaction, and gas is topped up from the faucet when the account has none. |
 | [`devnet-private.ts`](devnet-private.ts) | The devnet's privacy layer in the page: notes in seven pools, ring proofs built in a worker, sealed and carried by three relays. |
 | [`connect.ts`](connect.ts) | "Connect with Opaque": the window a dapp opens through [`lib/opaque-eth-provider.ts`](../lib/opaque-eth-provider.ts). It names the site from `event.origin`, shows each call, and sends it as one ERC-4337 operation the account's FORS+C key signs. |
-| [`ens-name.ts`](ens-name.ts) | ENS names in Send: UniversalResolverV2 on Sepolia, coin 60 or ENSIP-11 for the devnet, every lookup through EF's anon-rpc, and whether a FORS+C key holds the name. |
+| [`ens/ens-name.ts`](ens/ens-name.ts) | ENS names in Send: UniversalResolverV2 on Sepolia, coin 60 or ENSIP-11 for the devnet, every lookup through EF's anon-rpc, and whether a FORS+C key holds the name. |
 
 ## Related, in `src/lib/`
 

@@ -11,7 +11,7 @@
 
 import { encodeAbiParameters, encodeFunctionData, keccak256, parseAbi, parseAbiParameters, type Address, type Hex } from 'viem';
 
-import { deployment } from '../../deployments/index.ts';
+import { deployment } from '../../../deployments/index.ts';
 
 export interface V4Pool { readonly hook: Address; readonly fee: number; readonly tickSpacing: number }
 export interface V4Deployment {

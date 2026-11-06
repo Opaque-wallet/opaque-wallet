@@ -4,7 +4,7 @@
 // guard key, made from 12 words of its own, and signs every withdrawal with it.
 
 import { decodeFunctionResult, encodeFunctionData, formatEther, isAddress, parseAbi, parseEther } from '../../../backend/ethereum/frame.ts';
-import { commitmentOf, masterKey, REGISTRY_ABI, signAction, signRotation, type RegistryKey } from '../../../backend/ethereum/ens.ts';
+import { commitmentOf, masterKey, REGISTRY_ABI, signAction, signRotation, type RegistryKey } from '../../../backend/ethereum/ens/ens.ts';
 import { deployment, requireContract } from '../../../deployments/index.ts';
 import { accountKeys, isPhrase, newPhrase, normalizePhrase, stream } from '../lib/wallet-keys.ts';
 

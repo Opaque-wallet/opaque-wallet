@@ -4,9 +4,9 @@
 
 ### Ethereum, private and post-quantum. Today, not on a roadmap.
 
-[![Uniswap v4](https://img.shields.io/badge/Uniswap%20v4-post--quantum%20hooks-FF007A?style=flat-square)](partner-docs/uniswap.md)
-[![ENSv2](https://img.shields.io/badge/ENSv2-names%20held%20by%20FORS%2BC-0080BC?style=flat-square)](partner-docs/ens.md)
-[![EF](https://img.shields.io/badge/Ethereum%20Foundation-CROPS%20·%20anon--rpc%20·%20EIP--8141-627EEA?style=flat-square)](partner-docs/ethereum-foundation.md)
+[![Uniswap v4](https://img.shields.io/badge/Uniswap%20v4-post--quantum%20hooks-FF007A?style=flat-square)](partner-docs/ethglobal-mumbai/uniswap.md)
+[![ENSv2](https://img.shields.io/badge/ENSv2-names%20held%20by%20FORS%2BC-0080BC?style=flat-square)](partner-docs/ethglobal-mumbai/ens.md)
+[![EF](https://img.shields.io/badge/Ethereum%20Foundation-CROPS%20·%20anon--rpc%20·%20EIP--8141-627EEA?style=flat-square)](partner-docs/ethglobal-mumbai/ethereum-foundation.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-FF7A18?style=flat-square)](LICENSE)
 
 **Opaque is a wallet in which everything an Ethereum user does is authorized by a hash-based, post-quantum key, and private by default:**
@@ -49,12 +49,12 @@ It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumb
 |---|---|---|
 | **Pay privately** (USDC and ETH) | Pools of fixed-size notes. A hash-based ring proof shows you own one of 8 without saying which, sealed and carried by a three-hop relay mesh. ETH goes in as WETH notes. | Sepolia, devnet |
 | **Be paid privately** | **Post-quantum stealth addresses**: an ML-KEM-768 meta-address in [ERC-6538](https://eips.ethereum.org/EIPS/eip-6538)'s registry, announcements on [ERC-5564](https://eips.ethereum.org/EIPS/eip-5564)'s Announcer. Each payment lands at a fresh FORS+C account only you can find, and the wallet sweeps it into your notes. | Sepolia |
-| **Own a name** | **ENSv2**: opaque.eth is held by `PQNameController`, which acts only on a FORS+C signature. `name.opaque.eth` can be claimed only by post-quantum accounts, and then labels your account. → [ENS](partner-docs/ens.md) | Sepolia |
-| **Swap and provide liquidity** | **Uniswap v4 hooks**: pools only post-quantum accounts can use, and `PQGuardHook`, a FORS+C second factor that protects *any* LP's position, MetaMask's included. → [Uniswap](partner-docs/uniswap.md) | Sepolia (Uniswap's v4), devnet |
+| **Own a name** | **ENSv2**: opaque.eth is held by `PQNameController`, which acts only on a FORS+C signature. `name.opaque.eth` can be claimed only by post-quantum accounts, and then labels your account. → [ENS](partner-docs/ethglobal-mumbai/ens.md) | Sepolia |
+| **Swap and provide liquidity** | **Uniswap v4 hooks**: pools only post-quantum accounts can use, and `PQGuardHook`, a FORS+C second factor that protects *any* LP's position, MetaMask's included. → [Uniswap](partner-docs/ethglobal-mumbai/uniswap.md) | Sepolia (Uniswap's v4), devnet |
 | **Keep MetaMask** | **The Q-Day vault**: your ECDSA key puts money in, and only your FORS+C key takes it out. | [Sepolia](https://www.opaque.credit/sepolia/vault) |
 | **Use any dapp** | **Connect with Opaque**: an EIP-6963 provider, so dapps list Opaque beside MetaMask. Every transaction is approved in Opaque and signed by the post-quantum account. | [Sepolia](https://www.opaque.credit/connect-opaque) |
 | **Read without being watched** | EF's **anon-rpc** (the Nox mixnet), always for ENS, and for the whole account with one switch. | Sepolia |
-| **Leave without us** | **Exitable pools**: every note can leave its pool with every Opaque server down, through anon-rpc and a public bundler. → [EF](partner-docs/ethereum-foundation.md) | Sepolia |
+| **Leave without us** | **Exitable pools**: every note can leave its pool with every Opaque server down, through anon-rpc and a public bundler. → [EF](partner-docs/ethglobal-mumbai/ethereum-foundation.md) | Sepolia |
 | **Sign with nothing but a hash-based key** | **EIP-8141 frame transactions**: the account validates with FORS+C in its VERIFY frame and pays for itself, at 76,430 gas, under the public mempool's 100k budget. No bundler, no paymaster. | [Devnet](https://www.opaque.credit/testnet/devnet) |
 
 On Sepolia, each action is a UserOperation signed by the account's FORS+C key, and a bundler only carries it. On the EIP-8141 devnet, the transaction itself is post-quantum.
@@ -80,9 +80,9 @@ flowchart LR
 
 | | Track | Evidence |
 |---|---|---|
-| <img src="https://img.shields.io/badge/-Uniswap-FF007A?style=flat-square" alt=""> | v4 hooks: post-quantum liquidity | [partner-docs/uniswap.md](partner-docs/uniswap.md) |
-| <img src="https://img.shields.io/badge/-ENS-0080BC?style=flat-square" alt=""> | ENSv2: names held by a post-quantum key | [partner-docs/ens.md](partner-docs/ens.md) |
-| <img src="https://img.shields.io/badge/-EF-627EEA?style=flat-square" alt=""> | CROPS, anon-rpc and EIP-8141 | [partner-docs/ethereum-foundation.md](partner-docs/ethereum-foundation.md) |
+| <img src="https://img.shields.io/badge/-Uniswap-FF007A?style=flat-square" alt=""> | v4 hooks: post-quantum liquidity | [partner-docs/ethglobal-mumbai/uniswap.md](partner-docs/ethglobal-mumbai/uniswap.md) |
+| <img src="https://img.shields.io/badge/-ENS-0080BC?style=flat-square" alt=""> | ENSv2: names held by a post-quantum key | [partner-docs/ethglobal-mumbai/ens.md](partner-docs/ethglobal-mumbai/ens.md) |
+| <img src="https://img.shields.io/badge/-EF-627EEA?style=flat-square" alt=""> | CROPS, anon-rpc and EIP-8141 | [partner-docs/ethglobal-mumbai/ethereum-foundation.md](partner-docs/ethglobal-mumbai/ethereum-foundation.md) |
 
 ## Live evidence
 
@@ -140,20 +140,24 @@ flowchart LR
 
 ## Repository map: Ethereum
 
+Each partner's code is in folders of its own, one per layer. [partner-docs/ethglobal-mumbai/](partner-docs/ethglobal-mumbai/README.md) has the full index.
+
+| Partner | Contracts | Tests | Backend | Wallet |
+|---|---|---|---|---|
+| **Uniswap** | [`contracts/src/ethereum/uniswap/`](contracts/src/ethereum/uniswap/README.md) | [`contracts/test/uniswap/`](contracts/test/uniswap/README.md) | [`backend/ethereum/uniswap/`](backend/ethereum/uniswap/README.md) | the Swap tabs in [`frontend/src/app.ts`](frontend/src/app.ts) and [`devnet.ts`](frontend/src/ethereum/devnet.ts) |
+| **ENS** | [`contracts/src/ethereum/ens/`](contracts/src/ethereum/ens/README.md) | [`contracts/test/ens/`](contracts/test/ens/README.md) | [`backend/ethereum/ens/`](backend/ethereum/ens/README.md) | [`frontend/src/ethereum/ens/`](frontend/src/ethereum/ens/README.md), the Names tab in [`frontend/src/app.ts`](frontend/src/app.ts) |
+| **Ethereum Foundation** | [`contracts/frame/`](contracts/frame/README.md), [`contracts/src/ethereum/frame/`](contracts/src/ethereum/frame/README.md), [`ExitableRingVerifier`](contracts/src/opaque/pool/ExitableRingVerifier.sol) | `LeanFors.t.sol`, `ExitableRingVerifier.t.sol` in [`contracts/test/`](contracts/test/) | [`backend/ethereum/`](backend/ethereum/README.md) (`frame.ts`, `frame-tx.ts`, `devnet-stack.ts`), [`backend/chain/stealth.ts`](backend/chain/stealth.ts) | [`anon-rpc.ts`](frontend/src/lib/anon-rpc.ts), [`without-opaque.ts`](frontend/src/lib/without-opaque.ts), [`stealth.ts`](frontend/src/lib/stealth.ts) |
+
 | Folder | What | README |
 |---|---|---|
-| [`contracts/src/ethereum/uniswap/`](contracts/src/ethereum/uniswap/) | The three v4 hooks | [README](contracts/src/ethereum/uniswap/README.md) |
-| [`contracts/src/ethereum/ens/`](contracts/src/ethereum/ens/) | `PQNameController`, `OpaqueNames` | [README](contracts/src/ethereum/ens/README.md) |
-| [`contracts/src/ethereum/vault/`](contracts/src/ethereum/vault/) | The Q-Day vault | [README](contracts/src/ethereum/vault/README.md) |
-| [`contracts/src/ethereum/frame/`](contracts/src/ethereum/frame/) | `LeanFors`, FORS+C verification at 53.6k gas | [README](contracts/src/ethereum/frame/README.md) |
-| [`contracts/frame/`](contracts/frame/) | The EIP-8141 account, its factory and the devnet faucets | [README](contracts/frame/README.md) |
+| [`contracts/src/ethereum/`](contracts/src/ethereum/) | Every Ethereum-only contract: uniswap, ens, vault, frame | [README](contracts/src/ethereum/README.md) |
 | [`contracts/src/opaque/`](contracts/src/opaque/) | Shared with Arc: pools, `ExitableRingVerifier`, `AES128`, `PQAccount`, `PQKeyRegistry` | [README](contracts/README.md) |
 | [`backend/ethereum/`](backend/ethereum/) | Deploys, on-chain demos, the devnet's frame transactions and stack | [README](backend/ethereum/README.md) |
-| [`backend/chain/`](backend/chain/) | Shared EVM backend: the wallet's RPC through the mesh, stealth, v4 reads, the exit | [README](backend/README.md) |
+| [`backend/chain/`](backend/chain/) | Shared EVM backend: the wallet's RPC through the mesh, stealth, the exit | [README](backend/README.md) |
 | [`frontend/src/ethereum/`](frontend/src/ethereum/) | The devnet wallet, the dapp approval window, ENS in Send | [README](frontend/src/ethereum/README.md) |
 | [`extension/`](extension/) | One extension for every chain, with Connect with Opaque (EIP-6963) | [README](extension/README.md) |
-| [`partner-docs/`](partner-docs/) | Uniswap, ENS and EF evidence (and Arc's) | [README](partner-docs/README.md) |
-| [`docs/mumbai/`](docs/mumbai/) | The build plan, the anon-rpc adopter entry, the exitable-pools ERC draft | [PLAN](docs/mumbai/PLAN.md) |
+| [`partner-docs/ethglobal-mumbai/`](partner-docs/ethglobal-mumbai/) | Uniswap, ENS and EF, in detail | [README](partner-docs/ethglobal-mumbai/README.md) |
+| [`docs/mumbai/`](docs/mumbai/) | The ETHGlobal Mumbai submission, the build plan, the ERC and anon-rpc drafts | [README](docs/mumbai/README.md) |
 
 ## Opaque on other chains
 

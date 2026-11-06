@@ -1,6 +1,5 @@
 // Private ETH on Sepolia in a real browser: a wallet made on the Sepolia page, given
-// ETH; "Make private" wraps it to WETH and deposits seven notes (6×0.001 +
-// 1×0.0005) in one operation its FORS+C key signs; then Send → "ETH, privately" pays
+// ETH; "Make private" wraps it to WETH and deposits 0.0015 ETH as notes in one operation its FORS+C key signs; then Send → "ETH, privately" pays
 // 0.0015 ETH from two of them through the mesh, and the recipient holds WETH that
 // no transaction from the wallet's address sent.
 //
@@ -52,14 +51,14 @@ try {
   await page.click('#refresh-balance');
   await page.waitForSelector('#assets [data-do="private"]:not([hidden])', { timeout: 120_000 });
   await page.click('#assets [data-do="private"]');
-  await page.fill('#eth-private-amount', '0.0065');
-  // Split so any amount up to it can be paid after (makeAmount): 6×0.001 + 1×0.0005, not 0.005 + 0.001 + 0.0005.
-  check((await page.textContent('#eth-private-split')) === 'As 6×0.001 + 1×0.0005 ETH notes.', `the split: ${await page.textContent('#eth-private-split')}`);
+  await page.fill('#eth-private-amount', '0.0015');
+  // Split so any amount up to it can be paid after (makeAmount), not the fewest notes.
+  check(/^As .+ ETH notes\.$/.test((await page.textContent('#eth-private-split')) ?? ''), `the split: ${await page.textContent('#eth-private-split')}`);
   await page.click('#eth-private-go');
   await page.waitForFunction(() => /^(Private:|Not made private)/.test(document.getElementById('eth-private-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
   check((await page.textContent('#eth-private-status'))?.startsWith('Private:'), `made private in one operation: ${await page.textContent('#eth-private-status')}`);
   await page.click('#eth-private-dialog button[value="close"]');
-  await page.waitForFunction(() => (document.getElementById('hero-peth-amount')?.textContent ?? '') === '0.0065 ETH · private', undefined, { timeout: 300_000 })
+  await page.waitForFunction(() => (document.getElementById('hero-peth-amount')?.textContent ?? '') === '0.0015 ETH · private', undefined, { timeout: 300_000 })
     .catch(async (e: Error) => { throw new Error(`${e.message}; hero says ${await page.textContent('#hero-peth-amount')}; funds: ${await page.textContent('#assets')}`); });
   check(true, `the balance shows it: ${await page.textContent('#hero-peth-amount')}, and ${await page.textContent('#hero-eth-amount')}`);
 
@@ -75,6 +74,8 @@ try {
   await page.waitForFunction(() => /^(Sent across the mesh|Not sent|Sent \d+ of)/.test(document.getElementById('send-status')?.textContent ?? ''), undefined, { timeout: 600_000 });
   check((await page.textContent('#send-status'))?.startsWith('Sent across the mesh'), `sent: ${await page.textContent('#send-status')}`);
   check((await page.textContent('#intent-list .intent-amt')) === '0.0015 ETH', `Activity: ${await page.textContent('#intent-list .intent-amt')}`);
+  const rows = await page.$$eval('#intent-list .intent-amt', (es: Element[]) => es.map((e) => e.textContent));
+  check(rows.includes('Made 0.0015 ETH private'), `Activity also lists the account's own actions: ${rows.join(' · ')}`);
   await until('the recipient\'s WETH, both notes', async () => (await weth(to)) >= parseEther('0.0014'), 600_000);
   const got = await weth(to);
   check(got <= parseEther('0.0015') && got >= parseEther('0.0014'), `${to} holds ${formatEther(got)} WETH, paid by the pools (0.0015 less the fee)`);

@@ -8,8 +8,8 @@
 // `ens`): a name only a FORS+C signature can change, records included; or that it
 // is a name.opaque.eth, which OpaqueNames lets only an Opaque PQ account hold.
 
-import { decodeFunctionResult, devnet, encodeFunctionData, labelhash, namehash, parseAbi } from '../../../backend/ethereum/frame.ts';
-import sepolia from '../../../deployments/eth-sepolia.json' with { type: 'json' };
+import { decodeFunctionResult, devnet, encodeFunctionData, labelhash, namehash, parseAbi } from '../../../../backend/ethereum/frame.ts';
+import sepolia from '../../../../deployments/eth-sepolia.json' with { type: 'json' };
 
 export const ENS = sepolia.ens as { ethRegistry: `0x${string}`; universalResolverV2: `0x${string}`; controller: `0x${string}`; resolver: `0x${string}`; pqKeyRegistry: `0x${string}`; names?: `0x${string}` };
 const RPCS = [sepolia.network.rpcUrl, ...sepolia.network.rpcFallbacks];
@@ -33,7 +33,7 @@ const IN_BROWSER = typeof window !== 'undefined' && typeof document !== 'undefin
 
 export async function ethCall(to: `0x${string}`, data: `0x${string}`): Promise<`0x${string}`> {
   if (IN_BROWSER) {
-    const { anonRpc } = await import('../lib/anon-rpc.ts');
+    const { anonRpc } = await import('../../lib/anon-rpc.ts');
     return anonRpc<`0x${string}`>(RPCS[0]!, 'eth_call', [{ to, data }, 'latest']);
   }
   let last: unknown;
@@ -76,6 +76,21 @@ const NAMES = parseAbi(['function nameOf(address) view returns (string)', 'funct
 /** The label `account` holds under opaque.eth ('' for none). */
 export const opaqueNameOf = async (account: `0x${string}`): Promise<string> =>
   ENS.names === undefined ? '' : decodeFunctionResult({ abi: NAMES, functionName: 'nameOf', data: await ethCall(ENS.names, encodeFunctionData({ abi: NAMES, functionName: 'nameOf', args: [account] })) });
+/**
+ * The transaction in which `account` claimed its name, and when: OpaqueNames' `Claimed` event,
+ * read through anon-rpc like every lookup here. For an Activity that began after the claim.
+ */
+export async function opaqueClaimOf(account: `0x${string}`): Promise<{ tx: `0x${string}`; at: number } | undefined> {
+  if (ENS.names === undefined || !IN_BROWSER) return undefined;
+  const { anonRpc } = await import('../../lib/anon-rpc.ts');
+  // labelhash is keccak256 of the string, which is what an event's topic 0 is.
+  const topics = [labelhash('Claimed(string,address)'), `0x${account.slice(2).toLowerCase().padStart(64, '0')}`];
+  const logs = await anonRpc<{ transactionHash: `0x${string}`; blockNumber: `0x${string}` }[]>(RPCS[0]!, 'eth_getLogs', [{ address: ENS.names, topics, fromBlock: '0xb83a00', toBlock: 'latest' }]);
+  const last = logs[logs.length - 1];
+  if (last === undefined) return undefined;
+  const block = await anonRpc<{ timestamp: `0x${string}` }>(RPCS[0]!, 'eth_getBlockByNumber', [last.blockNumber, false]);
+  return { tx: last.transactionHash, at: Number(BigInt(block.timestamp)) * 1000 };
+}
 /** Whether `label`.opaque.eth is free to claim. */
 export const opaqueNameFree = async (label: string): Promise<boolean> =>
   /^0x0{64}$/.test(await ethCall(ENS.names!, encodeFunctionData({ abi: NAMES, functionName: 'holderOf', args: [labelhash(label)] })));

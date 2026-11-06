@@ -14,7 +14,7 @@
 //      signature with their own recipient is refused; the signed removal pays only
 //      the recipient it names.
 //
-//   OPAQUE_NETWORK=sepolia node --use-system-ca ethereum/uniswap-sepolia.ts
+//   OPAQUE_NETWORK=sepolia node --use-system-ca ethereum/uniswap/uniswap-sepolia.ts
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -28,17 +28,18 @@ import { sepolia } from 'viem/chains';
 import { encodeSignature, forsSchemeId, pqDigest, sign } from '@opaque/pq-wallet';
 import type { Bytes32 } from '@opaque/protocol-types';
 
-import { deployment, requireContract } from '../../deployments/index.ts';
-import { MemorySignerStore } from '../../packages/pq-wallet/src/signer-state.ts';
-import { MemoryWalletStateStore } from '../../packages/pq-wallet/src/wallet-state.ts';
-import { adoptWallet, createPqWallet } from '../../packages/pq-wallet/src/wallet.ts';
-import { userActionPayload } from '../../packages/pq-wallet/src/registry.ts';
-import { ARC_AUTHORITY, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../chain/pq-wallet-chain.ts';
-import { decreaseCall, ERC20_ABI, keyOf, mintCalls, PM_ABI, POSM_ABI, quote, sqrtPriceOf, swapCalls, V4, type V4Pool } from '../chain/uniswap-v4.ts';
-import { createWalletRpcAnswerer } from '../chain/wallet-rpc.ts';
-import { commitmentOf, masterKey, REGISTRY_ABI } from './ens.ts';
+import { deployment, requireContract } from '../../../deployments/index.ts';
+import { MemorySignerStore } from '../../../packages/pq-wallet/src/signer-state.ts';
+import { MemoryWalletStateStore } from '../../../packages/pq-wallet/src/wallet-state.ts';
+import { adoptWallet, createPqWallet } from '../../../packages/pq-wallet/src/wallet.ts';
+import { userActionPayload } from '../../../packages/pq-wallet/src/registry.ts';
+import { ARC_AUTHORITY, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../chain/pq-wallet-chain.ts';
+import { decreaseCall, ERC20_ABI, keyOf, mintCalls, PM_ABI, POSM_ABI, quote, sqrtPriceOf, swapCalls, V4, type V4Pool } from './uniswap-v4.ts';
+import { createWalletRpcAnswerer } from '../../chain/wallet-rpc.ts';
+import { commitmentOf, masterKey, REGISTRY_ABI } from '../ens/ens.ts';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+// backend/ethereum, as before this file moved one folder down.
+const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = join(HERE, '..', '.stack', 'eth-sepolia');
 const FILE = join(HERE, '..', '..', 'deployments', 'eth-sepolia.json');
 const artifact = (name: string) => JSON.parse(readFileSync(join(HERE, '..', '..', 'contracts', 'out', `${name}.sol`, `${name}.json`), 'utf8')) as { abi: Abi; bytecode: { object: Hex } };

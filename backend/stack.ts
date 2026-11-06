@@ -55,7 +55,7 @@ import { credentialJson } from './cre/credential.ts';
 import { createExecutorServer } from './cre/executor-server.ts';
 import { generateIntentKeypair } from './cre/seal-client.ts';
 import { createSettler, type Settler, type SettlerOptions } from './cre/settler.ts';
-import { commitmentOf, CONTROLLER_ABI, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signRotation } from './ethereum/ens.ts';
+import { commitmentOf, CONTROLLER_ABI, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signRotation } from './ethereum/ens/ens.ts';
 import { createCreSimulator } from './cre/simulator.ts';
 import { createEgress, egressClient } from './mesh/egress.ts';
 import { backupFromEnv, backupHttpHandler } from './mesh/backup-store.ts';

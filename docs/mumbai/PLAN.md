@@ -8,7 +8,7 @@ Written for ETHGlobal Mumbai, checked on 5 November 2026. Work through the tasks
 - **Arc and Ethereum share one EVM codebase.** A network is a deployments file and a build path, never a copy of the code.
 - **The existing contracts deploy unchanged.** New behaviour goes in adapters under `contracts/src/ethereum/`.
 - **Never invent an address or an ABI.** Read it from the chain or the verified source, then write it down here.
-- **The EF entry is a CROPS upgrade.** The new property is no ECDSA anywhere in a user's transaction (EIP-8141), plus an exit that works without our attester (T10). Only one EF prize per project, and EF's judges pick which one.
+- **The EF entry is a CROPS upgrade.** The new property is a user's transaction signed by FORS+C alone (EIP-8141), plus an exit that works without our attester (T10). Only one EF prize per project, and EF's judges pick which one.
 
 ## Where things live
 
@@ -164,12 +164,12 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 
 ### T7. ENSv2 with post-quantum authority (Sepolia)
 
-**Live: opaque.eth is held by a FORS+C key.** Design, simpler than the custom registry first planned: ENSv2 hands a name's owner roles to whoever holds its ERC-1155 token, and moves them with it (`PermissionedRegistry._update`). So `contracts/src/ethereum/ens/PQNameController.sol` holds the name and is the only admin of its resolver, and calls out only on a signature from its key in our `PQKeyRegistry` (binding target, calldata, deadline, chain and use count). Anyone may submit; paying authorises nothing. No ECDSA key holds the name, so there is nothing to route around.
+**Live: opaque.eth is held by a FORS+C key.** Design, simpler than the custom registry first planned: ENSv2 hands a name's owner roles to whoever holds its ERC-1155 token, and moves them with it (`PermissionedRegistry._update`). So `contracts/src/ethereum/ens/PQNameController.sol` holds the name and is the only admin of its resolver, and calls out only on a signature from its key in our `PQKeyRegistry` (binding target, calldata, deadline, chain and use count). Anyone may submit; paying authorises nothing. The FORS+C key is the name's only authority, so there is nothing to route around.
 
 - Sepolia (deployments/eth-sepolia.json `ens`): PQKeyRegistry `0x8b47560d32bcda788ab5233ab2bda55204cacca3`, PQNameController `0x4d4df91933bb30640908f5cd4a42e2cac546c131`, its PermissionedResolver `0x9320d93186255e122214bd22270d168d5d8f676f` (the ENS app's VerifiableFactory and resolver build; that build is older than contracts-v2 main: name-based setters, `resolve()` reads).
 - opaque.eth: registered by the user, transferred to the controller; its every role has one holder, the controller. FORS-signed: resolver set (`0x621bfed795254d0d0baa3c5e1177e2537637f64f1b8aaeb77f25db2c2d80a3b1`), records in one signature (`0x23aa1a10f6da26c8555066a4ee53ccb9de11f13293b530824a7daed7c5e61791`): addr (ETH: the controller; the devnet, ENSIP-11 coin type 0x80000539: the user's FramePQAccount), text `pq-key`, `url`.
 - Checked: an ECDSA write to the resolver reverts; the old owner's `setResolver` reverts; UniversalResolverV2 resolves the devnet address through the controller's resolver.
-- Commands: `backend/ethereum/ens-sepolia.ts` (deploy, adopt, records, status). Tests: `contracts/test/PQNameController.t.sol`, signatures from packages/pq-wallet.
+- Commands: `backend/ethereum/ens/ens-sepolia.ts` (deploy, adopt, records, status). Tests: `contracts/test/ens/PQNameController.t.sol`, signatures from packages/pq-wallet.
 - ENS's repo records three Sepolia address sets; we use docs.ens.domains', the ENS app's.
 
 **Done since:** the devnet page and the Sepolia wallet pay names (UniversalResolverV2; devnet coin 0x80000539, Ethereum coin 60). The Sepolia wallet claims opaque.eth with the stack's claim code and points it at itself (T6).
@@ -195,7 +195,7 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - An ECDSA wallet's swap through the router reverts with `NotPostQuantum(wallet)`; the account's swap bought 1.974316 pqUSD for 0.001 ETH, the exact quote (`0x6dbf99f3…2e4b`).
 - The devnet page's Swap trades in this pool and registers the account in the same signature on its first swap.
 
-**Built (Sepolia, 6 November), at Uniswap's own v4 (`deployments/eth-sepolia.json` `uniswap`; `OPAQUE_NETWORK=sepolia node ethereum/uniswap-sepolia.ts`):**
+**Built (Sepolia, 6 November), at Uniswap's own v4 (`deployments/eth-sepolia.json` `uniswap`; `OPAQUE_NETWORK=sepolia node ethereum/uniswap/uniswap-sepolia.ts`):**
 - **`PQAccountPoolHook`** `0xa68b63f17fe7926812d8591247b5a718a7244aa0`: only PQ accounts (EIP-1167 clones of the PQAccount implementation, by code hash) trade or provide. A PQ account's first UserOperation deployed it and funded the pool (`0xe98d4bf7…`); its swap bought exactly the quote (`0xfbfec1bc…`); an ECDSA wallet's swap reverts with `NotPostQuantum(wallet)`.
 - **`PQGuardHook`** `0xd0cfd61eb5ef783f6d70ea83b58d2c87fc034b01`: a FORS+C second factor for any LP. The ECDSA deployer registered a guard key (`0x1c3d955b…`) and opened #41441. Another key's signature and the real one replayed to another recipient are both refused (`BadSignature`); the signed removal paid only its signed recipient (`0x4b2ec847…`).
 - **The wallet's swap card** (Sepolia Home): a quote from the pool's state across the mesh (the exit allows `PoolManager.extsload`), one UserOperation the account's FORS+C key signs.
@@ -203,7 +203,7 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 
 ### T9. The EIP-8141 transaction (devnet)
 
-**Steps 1–4 are done (5 November).** A frame transaction signed only with FORS+C runs on the devnet: no ECDSA key in it anywhere, and no bundler or paymaster. The account pays for itself.
+**Steps 1–4 are done (5 November).** A frame transaction signed only with FORS+C runs on the devnet, with no bundler or paymaster. The account pays for itself.
 
 **What we found:** the devnet caps validation at `MAX_VERIFY_GAS` = 100,000 for every sender, staked or not. It's a structural rule on the whole validation prefix: VERIFY frames' gas plus signature costs, in the sidecar's `validationPrefix.ts`. Staking doesn't raise it. `ForsVerifier` spends 167k on k=13, a=13, so it could never fit. **`LeanFors`** (`contracts/src/ethereum/frame/`) is the same verifier with its loop in assembly:
 
@@ -231,7 +231,7 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - **The attack:** a transaction signed by another FORS key is refused at admission with `BadSignature()`.
 - **Deploy gas:** contract code costs state gas here (EIP-8037: (120 + bytes) × 1,530), so deploying took more than 6M gas; the script sends 16M.
 
-**Creating an account needs no ECDSA either:**
+**Creating an account needs no signature at all:**
 - **`FramePQAccountFactory`** (`contracts/frame/`, at `0x5516c44Eb7cBCCC15b9E1dFf522b7F75452880ae`) is the sender of the creating transaction and pays for it. Its VERIFY approves only a transaction that is exactly one `create(key)` frame to itself.
 - **The address is CREATE2** with the key as salt, so a wallet knows it before the account exists, and the faucet funds it first.
 - **Proof:** `node ethereum/frame-tx.ts create` made `0xAeD8621f6Dd36539D004E545e8E7Dda7d06aabCe` in `0xf8de0e0b32adcd19566a2e3e053480e42923fededa0984325a2f528af968a7be`, a frame transaction with no signature at all. Its first FORS-signed transfer is `0x1cde7c5b683f24eca6c2d99911d390f8353a5461f0dfd5a76da4e50b909903f7`.
@@ -244,9 +244,9 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - It talks straight to the devnet gateway, which allows any origin; this devnet has no relay mesh.
 - `backend/scripts/e2e-devnet-page.ts` runs that whole life in Chromium against the live devnet.
 
-**Uniswap v4, signed with FORS+C (`backend/ethereum/uniswap.ts`):**
+**Uniswap v4, signed with FORS+C (`backend/ethereum/uniswap/uniswap.ts`):**
 - **Setup (`frame-tx.ts pool`):** one atomic FORS-signed transaction of 5 SENDER frames:
-  - deploy pqUSD (`contracts/frame/TestToken.sol`, through the CREATE2 deployer, so no ECDSA deploys it);
+  - deploy pqUSD (`contracts/frame/TestToken.sol`, through the CREATE2 deployer, from the FORS-signed account);
   - approve Permit2, and the PositionManager in Permit2;
   - initialize ETH/pqUSD (fee 0.30%, tick spacing 60, no hooks, 2,000 pqUSD per ETH);
   - add 0.1 ETH of full-range liquidity.
@@ -307,7 +307,7 @@ Found on the way:
 - **Fonts:** self-host them on `frontend/site/index.html`, `public/docs.html` and `developers.html`. Google Fonts is a third-party request.
 - **Video, 3 minutes at most.** Show the moment the property matters:
   - our attester is switched off, and the user still exits;
-  - the 8141 transaction has no ECDSA in it.
+  - the 8141 transaction is signed by FORS+C alone.
 
 **Done when:** the README and the video are linked in the submission.
 

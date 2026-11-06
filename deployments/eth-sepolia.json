@@ -272,7 +272,7 @@
     "names": "0x01f3419d2c8747f6b72032caf21a02fd0db44a28"
   },
   "uniswap": {
-    "$comment": "Uniswap v4 on Sepolia: Uniswap's own deployment (docs.uniswap.org, code read on chain), and our two hooked ETH/tUSDC pools (backend/chain/uniswap-v4.ts, made by backend/ethereum/uniswap-sepolia.ts).",
+    "$comment": "Uniswap v4 on Sepolia: Uniswap's own deployment (docs.uniswap.org, code read on chain), and our two hooked ETH/tUSDC pools (backend/ethereum/uniswap/uniswap-v4.ts, made by backend/ethereum/uniswap/uniswap-sepolia.ts).",
     "poolManager": "0xe03a1074c86cfedd5c142c4f04f1a1536e203543",
     "positionManager": "0x429ba70129df741b2ca2a85bc3a2a3328e5c09b4",
     "universalRouter": "0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b",

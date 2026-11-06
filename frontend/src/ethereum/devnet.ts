@@ -8,11 +8,11 @@
 // frame.ts, uniswap.ts, contracts/frame/).
 
 import { accountOf, balanceOf, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyFor, keyOf, MAX_FEE, MAX_USES, nonceOf, parseEther, pqUSDCFaucet, sendCalls, settled, txUrl, type Call, type ForsKey } from '../../../backend/ethereum/frame.ts';
-import { pqHook, quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswap.ts';
+import { pqHook, quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswap/uniswap.ts';
 import { unlockGate } from '../lib/lock.ts';
 import { scoped } from '../lib/storage-name.ts';
 import { hasPrivacy, pqUSDC, startDevnetPrivacy, type DevnetPrivacy, type PrivateSend } from './devnet-private.ts';
-import { isName, resolveName } from './ens-name.ts';
+import { isName, resolveName } from './ens/ens-name.ts';
 import { networkPicker } from '../lib/network-picker.ts';
 import { accountKeys, accountLabel, activeAccount, importedAccounts, saveWalletState, storedPhrase, stream, walletState, type AccountKeys } from '../lib/wallet-keys.ts';
 import { copy, markOf, termsAccepted } from '../lib/wallet-ui.ts';

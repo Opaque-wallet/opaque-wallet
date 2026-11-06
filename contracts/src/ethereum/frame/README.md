@@ -1,5 +1,13 @@
 # LeanFors: FORS+C verification that fits a public mempool
 
+## Index
+
+| File | What |
+|---|---|
+| [`LeanFors.sol`](LeanFors.sol) | The verifier. Its test is [`contracts/test/LeanFors.t.sol`](../../../test/LeanFors.t.sol); its user is [`contracts/frame/FramePQAccount.sol`](../../../frame/FramePQAccount.sol) |
+
+## Why it exists
+
 [`LeanFors.sol`](LeanFors.sol) is `ForsVerifier.recoverCommitment` with its hot loop in assembly, reading the signature from memory, where EIP-8141's `SIGDATACOPY` puts it.
 
 The EIP-8141 devnet caps validation at `MAX_VERIFY_GAS` = 100,000 gas for every sender, staked or not. The audited verifier can't fit under it:

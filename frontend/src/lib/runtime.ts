@@ -53,7 +53,7 @@ import { ARC_AUTHORITY, checkSwapCall, createPqAccountOps, livePqWalletOptions, 
 import { browserPayer, createBrowserPool, createMeshChainObserver, type DepositMany } from '../../../backend/chain/wallet-chain.ts';
 import { capabilitiesOf } from '../../../backend/chain/pool.ts';
 import { createWalletRpcAnswerer, ethBalance, readOne, readState, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
-import { extsloadCall } from '../../../backend/chain/uniswap-v4.ts';
+import { extsloadCall } from '../../../backend/ethereum/uniswap/uniswap-v4.ts';
 import { encodeFunctionData, parseAbi } from '../../../backend/ethereum/frame.ts';
 import { exitClient } from '../../../backend/chain/ring-exit.ts';
 import { anonFetch, anonReadsOn } from './anon-rpc.ts';

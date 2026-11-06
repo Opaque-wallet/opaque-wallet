@@ -2,9 +2,9 @@
 pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {IPQKeyRegistry} from "../src/opaque/interfaces/IPQKeyRegistry.sol";
-import {PQKeyRegistry} from "../src/opaque/wallet/PQKeyRegistry.sol";
-import {PQNameController} from "../src/ethereum/ens/PQNameController.sol";
+import {IPQKeyRegistry} from "../../src/opaque/interfaces/IPQKeyRegistry.sol";
+import {PQKeyRegistry} from "../../src/opaque/wallet/PQKeyRegistry.sol";
+import {PQNameController} from "../../src/ethereum/ens/PQNameController.sol";
 
 /// Stands in for an ENS resolver: records who set what.
 contract RecordKeeper {

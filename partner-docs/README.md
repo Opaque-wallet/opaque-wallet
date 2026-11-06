@@ -4,19 +4,21 @@
 
 ### Each integration is load-bearing, and each page shows the proof.
 
-[![Uniswap](https://img.shields.io/badge/Uniswap-v4%20post--quantum%20hooks-FF007A?style=flat-square)](uniswap.md)
-[![ENS](https://img.shields.io/badge/ENS-v2%20names%20held%20by%20FORS%2BC-0080BC?style=flat-square)](ens.md)
-[![Ethereum Foundation](https://img.shields.io/badge/Ethereum%20Foundation-CROPS%20·%20anon--rpc%20·%20EIP--8141-627EEA?style=flat-square)](ethereum-foundation.md)
+[![Uniswap](https://img.shields.io/badge/Uniswap-v4%20post--quantum%20hooks-FF007A?style=flat-square)](ethglobal-mumbai/uniswap.md)
+[![ENS](https://img.shields.io/badge/ENS-v2%20names%20held%20by%20FORS%2BC-0080BC?style=flat-square)](ethglobal-mumbai/ens.md)
+[![Ethereum Foundation](https://img.shields.io/badge/Ethereum%20Foundation-CROPS%20·%20anon--rpc%20·%20EIP--8141-627EEA?style=flat-square)](ethglobal-mumbai/ethereum-foundation.md)
 
 </div>
 
 ## ETHGlobal Mumbai: Opaque on Ethereum
 
+In [`ethglobal-mumbai/`](ethglobal-mumbai/README.md), with an index of where each partner's code is.
+
 | Partner | The role it plays in Opaque | Deployed, and what it shows |
 |---|---|---|
-| **[Uniswap v4](uniswap.md)** | Hooks that put pool authority behind a hash-based key: a FORS+C second factor for any LP (MetaMask included), and pools only post-quantum accounts can trade in. | Three hooks live at Uniswap's own Sepolia v4 and on the EIP-8141 devnet, on-chain refusals of a cracked ECDSA key, 15 forge tests, the wallet's Swap tab. |
-| **[ENS](ens.md)** | opaque.eth on ENSv2 owned by a contract that acts only on a FORS+C signature; name.opaque.eth claimable only by post-quantum accounts, with post-quantum stealth payments to the name. | Controller and subregistry on Sepolia, the FORS-signed adoption and records, UniversalResolverV2 resolution, 13 forge tests, the e2e that claims, pays and sweeps. |
-| **[Ethereum Foundation](ethereum-foundation.md)** | CROPS made real: an exit from every pool with every Opaque server down, ML-KEM-768 stealth payments on ERC-5564/6538, reads through anon-rpc, and FORS+C-only EIP-8141 transactions that fit the public mempool's 100k validation budget. | The exit e2e with Opaque blocked, 76,430-gas VERIFY frames on the devnet, LeanFors held to the audited verifier, drafts of an ERC and an anon-rpc adopter entry. |
+| **[Uniswap v4](ethglobal-mumbai/uniswap.md)** | Hooks that put pool authority behind a hash-based key: a FORS+C second factor for any LP (MetaMask included), and pools only post-quantum accounts can trade in. | Three hooks live at Uniswap's own Sepolia v4 and on the EIP-8141 devnet, on-chain refusals of a cracked ECDSA key, 15 forge tests, the wallet's Swap tab. |
+| **[ENS](ethglobal-mumbai/ens.md)** | opaque.eth on ENSv2 owned by a contract that acts only on a FORS+C signature; name.opaque.eth claimable only by post-quantum accounts, with post-quantum stealth payments to the name. | Controller and subregistry on Sepolia, the FORS-signed adoption and records, UniversalResolverV2 resolution, 13 forge tests, the e2e that claims, pays and sweeps. |
+| **[Ethereum Foundation](ethglobal-mumbai/ethereum-foundation.md)** | CROPS made real: an exit from every pool with every Opaque server down, ML-KEM-768 stealth payments on ERC-5564/6538, reads through anon-rpc, and FORS+C-only EIP-8141 transactions that fit the public mempool's 100k validation budget. | The exit e2e with Opaque blocked, 76,430-gas VERIFY frames on the devnet, LeanFors held to the audited verifier, drafts of an ERC and an anon-rpc adopter entry. |
 
 ## Earlier: Opaque on Arc
 

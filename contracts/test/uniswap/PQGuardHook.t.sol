@@ -2,10 +2,10 @@
 pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {IPQKeyRegistry} from "../src/opaque/interfaces/IPQKeyRegistry.sol";
-import {ModifyLiquidityParams, PoolKey, SwapParams} from "../src/ethereum/uniswap/PQPoolHook.sol";
-import {PQAccountPoolHook} from "../src/ethereum/uniswap/PQAccountPoolHook.sol";
-import {PQGuardHook} from "../src/ethereum/uniswap/PQGuardHook.sol";
+import {IPQKeyRegistry} from "../../src/opaque/interfaces/IPQKeyRegistry.sol";
+import {ModifyLiquidityParams, PoolKey, SwapParams} from "../../src/ethereum/uniswap/PQPoolHook.sol";
+import {PQAccountPoolHook} from "../../src/ethereum/uniswap/PQAccountPoolHook.sol";
+import {PQGuardHook} from "../../src/ethereum/uniswap/PQGuardHook.sol";
 
 /// The registry's two calls the guard makes: who holds a key, and one signature consumed.
 contract Registry {

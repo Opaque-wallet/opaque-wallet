@@ -16,8 +16,8 @@ import { join } from 'node:path';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { call, devnet, mined } from '../ethereum/frame.ts';
-import { tokenBalance } from '../ethereum/uniswap.ts';
-import { resolveName } from '../../frontend/src/ethereum/ens-name.ts';
+import { tokenBalance } from '../ethereum/uniswap/uniswap.ts';
+import { resolveName } from '../../frontend/src/ethereum/ens/ens-name.ts';
 import { createWallet } from './wallet-page.ts';
 
 const SITE = process.env['SITE'] ?? 'http://localhost:5173';

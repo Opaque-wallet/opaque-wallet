@@ -23,7 +23,7 @@ import { backupTransport, hasBrowserAccount, startWallet, type WalletRuntime } f
 import { addressOfKey, arcAddressOf, arcState, arcStorageOf, deployerKey, saveArcState } from './lib/arc-keys.ts';
 import { withoutOpaque, type WithoutOpaque } from './lib/without-opaque.ts';
 import { anonReadsOn, setAnonReads } from './lib/anon-rpc.ts';
-import { keyOf as v4Key, quote as v4Quote, swapCalls as v4SwapCalls, V4 } from '../../backend/chain/uniswap-v4.ts';
+import { keyOf as v4Key, quote as v4Quote, swapCalls as v4SwapCalls, V4 } from '../../backend/ethereum/uniswap/uniswap-v4.ts';
 import { exitablePools } from '../../backend/chain/ring-exit.ts';
 import { keyStoreName } from './lib/backup.ts';
 import { asHexBytes, CREATE2_FACTORY, deployment as deployOf, MAX_INITCODE, newSalt, riskOfCall } from './lib/contracts.ts';
@@ -33,8 +33,8 @@ import { deployment, NETWORK, requireService, type SwapToken } from '../../deplo
 import type { SwapQuote } from '../../backend/chain/wallet-rpc.ts';
 import { oneOperationAtATime } from '../../backend/chain/pq-wallet-chain.ts';
 import { networkPicker } from './lib/network-picker.ts';
-import { ENS, ETHEREUM_COIN, ethCall, dnsEncode, isName, opaqueNameFree, opaqueNameOf, resolveName } from './ethereum/ens-name.ts';
-import { commitmentOf, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signExecute } from '../../backend/ethereum/ens.ts';
+import { ENS, ETHEREUM_COIN, ethCall, dnsEncode, isName, opaqueClaimOf, opaqueNameFree, opaqueNameOf, resolveName } from './ethereum/ens/ens-name.ts';
+import { commitmentOf, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signExecute } from '../../backend/ethereum/ens/ens.ts';
 import { decodeFunctionResult, encodeFunctionData, formatEther, parseAbi, parseEther } from '../../backend/ethereum/frame.ts';
 import { stream } from './lib/wallet-keys.ts';
 import { scoped } from './lib/storage-name.ts';
@@ -131,6 +131,21 @@ let sent: SentPayment[] = [];
 function loadSent(key: string): void {
   sentKey = key;
   try { sent = JSON.parse(localStorage.getItem(sentKey) ?? '[]') as SentPayment[]; } catch { sent = []; }
+  try { actions = JSON.parse(localStorage.getItem(`${sentKey}:actions`) ?? '[]') as AccountAction[]; } catch { actions = []; }
+}
+
+/** Everything else the account did, for Activity: a name claimed, a swap, a deposit, a public send. */
+interface AccountAction {
+  readonly title: string;
+  readonly detail?: string;
+  readonly tx?: string;
+  readonly at: number;
+}
+let actions: AccountAction[] = [];
+function logAction(a: Omit<AccountAction, 'at'> & { at?: number }): void {
+  actions = [{ ...a, at: a.at ?? Date.now() }, ...actions].sort((x, y) => y.at - x.at).slice(0, 200);
+  try { localStorage.setItem(`${sentKey}:actions`, JSON.stringify(actions)); } catch { /* shown until the page closes */ }
+  renderActivity();
 }
 const saveSent = () => localStorage.setItem(sentKey, JSON.stringify(sent));
 const TERMINAL = new Set(['SETTLED', 'FAILED']);
@@ -576,6 +591,7 @@ async function onDeposit(auto = false): Promise<boolean> {
     status.textContent = waiting === 0
       ? `Deposited ${amount} USDC as ${describe(counts)}, on chain.${fillNote(counts.keys()) || ' Spendable now.'}`
       : `Deposit sent; ${waiting} of ${notes} still wait for the chain to confirm them.`;
+    logAction({ title: `Deposited ${amount} USDC`, detail: `Into private notes: ${describe(counts)}` });
     depositing = false;
     quietUntil = Date.now() + 30_000;
     await Promise.all([refreshNotes(), renderBudget().catch(() => undefined)]);
@@ -771,6 +787,7 @@ async function onSwap(): Promise<void> {
     await settle(async () => { await refreshTokens(); return (tokenHeld[to.symbol] ?? 0n) > before; });
     const got = (tokenHeld[to.symbol] ?? 0n) - before;
     progress.finish(`Swapped ${fromUnits(amount, from.decimals)} ${from.symbol} for ${fromUnits(got > 0n ? got : BigInt(quote.toAmount), to.decimals)} ${to.symbol} in ${shortAddress(tx)}.${isUsdc(to) && autoOn() ? ' It becomes private notes by itself.' : ''}`);
+    logAction({ title: `Swapped ${fromUnits(amount, from.decimals)} ${from.symbol} for ${to.symbol}`, detail: 'Through LI.FI, at your address', tx });
     el<HTMLInputElement>('swap-amount').value = '';
     void renderBudget().catch(() => undefined);
   } catch (error) {
@@ -1014,6 +1031,13 @@ function setupSubname(): void {
   refreshSubname = async () => {
     if (opaqueAddress === '') return;
     held = await opaqueNameOf(opaqueAddress as `0x${string}`).catch(() => held);
+    // Claimed before Activity kept a record of it: the claim, read from the chain once (through anon-rpc).
+    if (held !== '' && !actions.some((a) => a.title === `Claimed ${held}.opaque.eth`)) {
+      const label = held;
+      void opaqueClaimOf(opaqueAddress as `0x${string}`).then((c) => {
+        if (c !== undefined && !actions.some((a) => a.title === `Claimed ${label}.opaque.eth`)) logAction({ title: `Claimed ${label}.opaque.eth`, detail: 'ENSv2 · held by this account, which only its post-quantum key moves', tx: c.tx, at: c.at });
+      }).catch(() => undefined);
+    }
     // The name is the account's label: in the header, with its address under it, and in the account list.
     if (account !== null && account !== 'browser') {
       if ((arcState().names?.[account.id] ?? '') !== held) saveArcState({ names: { ...arcState().names, [account.id]: held } });
@@ -1029,7 +1053,7 @@ function setupSubname(): void {
       : `This wallet's name. Anyone can pay ${held}.opaque.eth: it resolves to this wallet's address, and only its post-quantum key holds the name.`;
   };
   /** One call from the account, signed by its key; then the read waits out a public RPC a block behind. */
-  const run = async (data: `0x${string}`, doing: string, done: (tx: string) => string, changed: () => boolean, also: readonly { to: `0x${string}`; data: `0x${string}` }[] = []) => {
+  const run = async (data: `0x${string}`, doing: string, done: (tx: string) => string, changed: () => boolean, activity: AccountAction['title'], also: readonly { to: `0x${string}`; data: `0x${string}` }[] = []) => {
     if (!runtimeReady || opaqueAddress === '') { setStatus('sub-status', 'Opaque is still starting.'); return; }
     setStatus('sub-status', doing);
     try {
@@ -1037,6 +1061,7 @@ function setupSubname(): void {
       if (also.length > 0) void refreshStealth();
       for (let tries = 0; tries < 20 && (await refreshSubname(), !changed()); tries++) await new Promise((r) => setTimeout(r, 3_000));
       setStatus('sub-status', done(tx));
+      logAction({ title: activity, detail: 'ENSv2 · held by this account, which only its post-quantum key moves', tx });
       void refreshTokens().catch(() => undefined);
       void renderBudget().catch(() => undefined);
     } catch (error) { setStatus('sub-status', `Not done: ${gasWhy(error)}`); }
@@ -1049,13 +1074,13 @@ function setupSubname(): void {
     const stealth = rt.stealth !== undefined && !(await rt.stealth.isOn(opaqueAddress as `0x${string}`).catch(() => true)) ? [rt.stealth.turnOnCall] : [];
     await run(encodeFunctionData({ abi: NAMES_ABI, functionName: 'claim', args: [label] }),
       `Claiming ${label}.opaque.eth: this wallet's post-quantum key signs it…`,
-      (tx) => `${label}.opaque.eth is yours${stealth.length > 0 ? ', and payments to it land at one-time addresses' : ''}: ${tx}`, () => held === label, stealth);
+      (tx) => `${label}.opaque.eth is yours${stealth.length > 0 ? ', and payments to it land at one-time addresses' : ''}: ${tx}`, () => held === label, `Claimed ${label}.opaque.eth`, stealth);
   })());
   el('sub-release').addEventListener('click', () => void (async () => {
     const was = held;
     if (!confirm(`Release ${was}.opaque.eth? Anyone can claim it after you.`)) return;
     await run(encodeFunctionData({ abi: NAMES_ABI, functionName: 'release' }),
-      `Releasing ${was}.opaque.eth…`, () => `${was}.opaque.eth is free again.`, () => held === '');
+      `Releasing ${was}.opaque.eth…`, () => `${was}.opaque.eth is free again.`, () => held === '', `Released ${was}.opaque.eth`);
   })());
 }
 
@@ -1112,6 +1137,7 @@ function setupStealth(): void {
         const tx = await s.sweep(p, (depositMany) => rt.depositFrom(depositMany, parts));
         lastHeld.set(p.stealthAddress, 0);
         setStatus('stealth-status', `${held} USDC paid to a one-time address is now in your notes: ${tx}`);
+        logAction({ title: `Received ${held} USDC privately`, detail: 'At a one-time address only this wallet could find; swept into your notes', tx });
         await refreshNotes();
       } catch (error) { setStatus('stealth-status', `Could not move a payment into your notes yet: ${gasWhy(error)}`); }
       finally { sweeping = false; }
@@ -1130,6 +1156,7 @@ function setupStealth(): void {
       const tx = await rt.execute(me(), [want ? s.turnOnCall : s.turnOffCall]);
       for (let tries = 0; tries < 20 && (await s.isOn(me()).catch(() => !want)) !== want; tries++) await new Promise((r) => setTimeout(r, 3_000));
       setStatus('stealth-status', `${want ? 'On' : 'Off'}: ${tx}`);
+      logAction({ title: want ? 'Turned on receiving privately' : 'Turned off receiving privately', detail: 'The ML-KEM-768 stealth key in ERC-6538\'s registry', tx });
       await refreshStealth();
     } catch (error) {
       toggle.checked = !want;
@@ -1141,7 +1168,7 @@ function setupStealth(): void {
 }
 
 // ── swap on Uniswap v4, in the post-quantum pool ──────────────────────────
-// backend/chain/uniswap-v4.ts. The pool's hook (PQAccountPoolHook) admits only PQ
+// backend/ethereum/uniswap/uniswap-v4.ts. The pool's hook (PQAccountPoolHook) admits only PQ
 // accounts; the quote is the pool's own state, read across the mesh, and the swap is
 // one UserOperation this account's FORS+C key signs.
 
@@ -1222,6 +1249,7 @@ function setupV4Swap(): void {
     try {
       const tx = await rt.execute(me, v4SwapCalls(key, a, (quoted * 99n) / 100n, ethIn) as never);
       setStatus('v4-status', `Swapped ${show(a, ethIn)} ${name(ethIn)} for about ${show(quoted, !ethIn)} ${name(!ethIn)} in the post-quantum pool: ${tx}`);
+      logAction({ title: `Swapped ${show(a, ethIn)} ${name(ethIn)} for ${name(!ethIn)}`, detail: 'Uniswap v4, in the post-quantum pool', tx });
       input.value = '';
       void refreshTokens().catch(() => undefined);
       void renderBudget().catch(() => undefined);
@@ -1355,12 +1383,15 @@ function setupEthPrivate(): void {
     const split = ethSplit();
     if (split === undefined || split.notes > MAX_NOTES_PER_DEPOSIT) { renderEthSplit(); return; }
     const have = await rt.ethBalance(opaqueAddress as `0x${string}`).catch(() => undefined);
-    if (have !== undefined && split.wei >= have) { setStatus('eth-private-status', `The account holds ${ethText(have)} ETH, and its gas comes from that too: make less private.`); return; }
+    // The operation's gas comes from the same ETH, prepaid at the bundler's price: keep some back.
+    const keep = parseEther('0.004');
+    if (have !== undefined && split.wei + keep > have) { setStatus('eth-private-status', `The account holds ${ethText(have)} ETH, and about 0.004 of it pays this operation's gas: make ${have > keep ? `at most ${ethText(have - keep)} ETH` : 'less'} private.`); return; }
     go.disabled = true;
     setStatus('eth-private-status', 'Wrapping and depositing, in one operation your post-quantum key signs…');
     try {
       await rt.depositEth(split.parts);
       setStatus('eth-private-status', `Private: ${ethText(split.wei)} ETH, as ${describe(split.counts, showEthUnits)} ETH notes.`);
+      logAction({ title: `Made ${ethText(split.wei)} ETH private`, detail: `As ${describe(split.counts, showEthUnits)} ETH notes (WETH)` });
       await refreshNotes();
       void refreshTokens().catch(() => undefined);
     } catch (error) {
@@ -1387,6 +1418,7 @@ async function sendEthTo(to: `0x${string}`): Promise<void> {
     const tx = await rt.execute(opaqueAddress as `0x${string}`, [{ to, data: '0x', value }]);
     status.textContent = '';
     status.append(`Sent ${ethText(value)} ETH to ${to}. `, Object.assign(document.createElement('a'), { href: `${ARC_EXPLORER}/tx/${tx}`, target: '_blank', rel: 'noopener', textContent: 'View the transaction' }));
+    logAction({ title: `Sent ${ethText(value)} ETH`, detail: `To ${to}, in public, signed by FORS+C`, tx });
     void refreshTokens().catch(() => undefined);
     void renderBudget().catch(() => undefined);
   } catch (error) {
@@ -1611,6 +1643,8 @@ async function newDeployer(): Promise<void> {
 /** A bundler's refusal, in words: AA21 is an account with nothing to pay gas from. */
 const gasWhy = (error: unknown): string => {
   const message = (error as Error).message;
+  // Pimlico answers a prefund it can't take from the account as an internal error, not AA21.
+  if (!GAS_IN_USDC && /Internal error from bundler/.test(message)) return `the bundler refused it. Most often the account's ${CHAIN} ETH can't cover the amount and the gas at the bundler's price: send less, or add ETH.`;
   if (!/AA21/.test(message)) return message;
   return GAS_IN_USDC ? 'this account has no USDC to pay gas. Send it 1 or 2 USDC from your notes first.' : `this account has too little ${CHAIN} ETH to pay gas. Get test funds on Home, or send it some.`;
 };
@@ -1702,10 +1736,10 @@ async function onCall(): Promise<void> {
 
 function renderActivity(): void {
   const list = el('intent-list');
-  if (sent.length === 0) {
+  if (sent.length === 0 && actions.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty';
-    empty.textContent = 'Nothing sent yet.';
+    empty.textContent = 'Nothing yet.';
     list.replaceChildren(empty);
     return;
   }
@@ -1717,7 +1751,29 @@ function renderActivity(): void {
     const key = p.group ?? p.handle;
     sends.set(key, [...(sends.get(key) ?? []), p]);
   }
-  list.replaceChildren(...[...sends.values()].map((payments) => {
+  const actionRows = actions.map((a) => {
+    const row = document.createElement('div');
+    row.className = 'intent';
+    const head = document.createElement('div');
+    head.className = 'intent-head';
+    const title = Object.assign(document.createElement('span'), { className: 'intent-amt', textContent: a.title });
+    const when = Object.assign(document.createElement('span'), { className: 'intent-state settled', textContent: new Date(a.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) });
+    head.append(title, when);
+    const meta = Object.assign(document.createElement('p'), { className: 'intent-meta' });
+    if (a.detail !== undefined) meta.append(a.detail);
+    if (a.tx !== undefined) {
+      if (a.detail !== undefined) meta.append(document.createElement('br'));
+      meta.append(Object.assign(document.createElement('a'), { href: `${ARC_EXPLORER}/tx/${a.tx}`, target: '_blank', rel: 'noopener', textContent: 'view transaction' }));
+    }
+    row.append(head, meta);
+    return { at: a.at, row };
+  });
+  const sendRows = [...sends.values()].map((payments) => ({ at: Math.max(...payments.map((p) => p.at)), row: sendRow(payments) }));
+  list.replaceChildren(...[...actionRows, ...sendRows].sort((x, y) => y.at - x.at).map((r) => r.row));
+}
+
+/** One private send, however many notes it took. */
+function sendRow(payments: SentPayment[]): HTMLElement {
     const row = document.createElement('div');
     row.className = 'intent';
     const head = document.createElement('div');
@@ -1756,7 +1812,6 @@ function renderActivity(): void {
     });
     row.append(head, meta);
     return row;
-  }));
 }
 
 let polling = false;

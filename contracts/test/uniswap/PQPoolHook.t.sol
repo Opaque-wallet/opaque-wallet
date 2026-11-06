@@ -8,7 +8,7 @@ import {
     PoolKey,
     PQPoolHook,
     SwapParams
-} from "../src/ethereum/uniswap/PQPoolHook.sol";
+} from "../../src/ethereum/uniswap/PQPoolHook.sol";
 
 contract Factory is IPQAccountFactory {
     mapping(bytes32 => address) public made;

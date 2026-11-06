@@ -11,7 +11,7 @@
 
 import { concat, encodeAbiParameters, encodeFunctionData, getContractAddress, keccak256, parseAbi, parseAbiParameters, type Address, type Hex } from 'viem';
 
-import { call, devnet, type Call } from './frame.ts';
+import { call, devnet, type Call } from '../frame.ts';
 
 const UNI = devnet.uniswap as {
   poolManager: Address; positionManager: Address; universalRouter: Address; permit2: Address;

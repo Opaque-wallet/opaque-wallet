@@ -24,7 +24,7 @@ import type { Bytes32 } from '@opaque/protocol-types';
 
 import { deployment, requireContract } from '../../deployments/index.ts';
 import { userActionPayload } from '../../packages/pq-wallet/src/registry.ts';
-import { masterKey, REGISTRY_ABI } from './ens.ts';
+import { masterKey, REGISTRY_ABI } from './ens/ens.ts';
 
 if (deployment.network.chainId !== sepolia.id) throw new Error('run with OPAQUE_NETWORK=sepolia');
 const HERE = dirname(fileURLToPath(import.meta.url));

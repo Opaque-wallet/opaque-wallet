@@ -43,7 +43,7 @@ import { poolId } from '@opaque/protocol-types/codecs.js';
 import { attesterCommitment } from '../cre/attester-keys.ts';
 import { createNoteSecret, deriveCommitment } from '../zk/index.ts';
 import { accountOf, accountTx, ATTESTER_FIRST_GENERATION, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, forsKey, hasCode, keyNow, keyOf, MAX_USES, mined, nonceOf, seededKey, sendCalls, settled, STACK_FORS, txUrl, type Call } from './frame.ts';
-import { pqHook, pqPoolSetup, pqUSD, poolSetup, quote, swapCalls, tokenBalance } from './uniswap.ts';
+import { pqHook, pqPoolSetup, pqUSD, poolSetup, quote, swapCalls, tokenBalance } from './uniswap/uniswap.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIR = join(HERE, '..', '.stack', 'eth-devnet');

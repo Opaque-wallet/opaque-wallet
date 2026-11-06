@@ -1,5 +1,13 @@
 # The Q-Day vault
 
+## Index
+
+| File | What |
+|---|---|
+| [`PQVault.sol`](PQVault.sol) | The vault. Its tests are [`contracts/test/PQVault.t.sol`](../../../test/PQVault.t.sol), its script [`backend/ethereum/vault-sepolia.ts`](../../../../backend/ethereum/vault-sepolia.ts), its page [`frontend/vault.html`](../../../../frontend/vault.html) |
+
+## How it works
+
 [`PQVault.sol`](PQVault.sol) is for people who keep MetaMask. Any address can put ETH or ERC-20 tokens in. Only a FORS+C signature from the key that address registered in `PQKeyRegistry` can take them out. So on the day the address's ECDSA key falls to a quantum computer, whoever breaks it finds nothing to move.
 
 - **Deposit:** `deposit(token, amount)`, an ordinary transaction from the owner's wallet. ETH is token `0x0`. The owner must have registered a guard key first.

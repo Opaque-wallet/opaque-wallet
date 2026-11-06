@@ -1,4 +1,4 @@
-// Signatures for contracts/test/PQNameController.t.sol, made by packages/pq-wallet
+// Signatures for contracts/test/ens/PQNameController.t.sol, made by packages/pq-wallet
 // as a wallet makes them, never by Solidity: the test then exercises the real
 // cross-language path.
 //
@@ -9,7 +9,7 @@ import { writeFileSync } from 'node:fs';
 import { keyGen, pkCommitment } from '@opaque/pq-wallet';
 import { encodeFunctionData, keccak256, parseAbi, stringToBytes, type Address } from 'viem';
 
-import { signExecute } from '../ethereum/ens.ts';
+import { signExecute } from '../ethereum/ens/ens.ts';
 
 const CHAIN = 31337n;
 // Where the test places the controller and the record keeper (forge-std deployCodeTo).

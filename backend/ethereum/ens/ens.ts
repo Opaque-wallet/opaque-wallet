@@ -8,7 +8,7 @@ import type { Bytes32 } from '@opaque/protocol-types';
 import { encodeAbiParameters, keccak256, parseAbi, parseAbiParameters, type Address, type Hex } from 'viem';
 
 // Not in pq-wallet's pinned public API; imported from source, as cre/attester-keys.ts does.
-import { rotationPayload, userActionPayload } from '../../packages/pq-wallet/src/registry.ts';
+import { rotationPayload, userActionPayload } from '../../../packages/pq-wallet/src/registry.ts';
 
 export type RegistryKey = ReturnType<typeof keyGen>;
 

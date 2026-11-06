@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {OpaqueNames} from "../src/ethereum/ens/OpaqueNames.sol";
+import {OpaqueNames} from "../../src/ethereum/ens/OpaqueNames.sol";
 
 contract OpaqueNamesTest is Test {
     address internal constant IMPL = address(0x17fc96E5B93eb031B2DB2AAC415Dd507ad932DbF);

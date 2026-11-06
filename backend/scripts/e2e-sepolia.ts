@@ -28,9 +28,9 @@ import { sepolia } from 'viem/chains';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
 import { ARC_READY, createWallet, unlockIfAsked } from './wallet-page.ts';
-import { commitmentOf, masterKey, REGISTRY_ABI, CONTROLLER_ABI, signExecute, signRotation } from '../ethereum/ens.ts';
+import { commitmentOf, masterKey, REGISTRY_ABI, CONTROLLER_ABI, signExecute, signRotation } from '../ethereum/ens/ens.ts';
 import { accountKeys, stream } from '../../frontend/src/lib/wallet-keys.ts';
-import { dnsEncode, ETHEREUM_COIN, resolveName } from '../../frontend/src/ethereum/ens-name.ts';
+import { dnsEncode, ETHEREUM_COIN, resolveName } from '../../frontend/src/ethereum/ens/ens-name.ts';
 import { ANNOUNCEMENT, ANNOUNCER, CIPHERTEXT_BYTES, META_ADDRESS_BYTES, META_REGISTRY, META_REGISTRY_ABI, SCHEME_ID } from '../chain/stealth.ts';
 
 const SITE = process.env['SITE'] ?? 'http://localhost:5174';

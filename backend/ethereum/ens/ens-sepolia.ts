@@ -2,13 +2,13 @@
 // (contracts/src/ethereum/ens/) owns the name and is the only admin of its
 // resolver, and acts only on a signature from its key in our PQKeyRegistry.
 //
-//   node --use-system-ca ethereum/ens-sepolia.ts deploy         PQKeyRegistry, the controller (its key registered),
+//   node --use-system-ca ethereum/ens/ens-sepolia.ts deploy         PQKeyRegistry, the controller (its key registered),
 //                                                               and a PermissionedResolver whose one admin it is
 //   (you)  transfer opaque.eth to the controller from the wallet that owns it: its owner roles go with it
-//   node --use-system-ca ethereum/ens-sepolia.ts adopt          FORS-signed: the name's resolver becomes the controller's
-//   node --use-system-ca ethereum/ens-sepolia.ts records <0x devnet account>   FORS-signed, one signature: addr (Ethereum and
+//   node --use-system-ca ethereum/ens/ens-sepolia.ts adopt          FORS-signed: the name's resolver becomes the controller's
+//   node --use-system-ca ethereum/ens/ens-sepolia.ts records <0x devnet account>   FORS-signed, one signature: addr (Ethereum and
 //                                                               the EIP-8141 devnet, ENSIP-11), text pq-key and url
-//   node --use-system-ca ethereum/ens-sepolia.ts status         owner, resolver, records, and an ECDSA write refused
+//   node --use-system-ca ethereum/ens/ens-sepolia.ts status         owner, resolver, records, and an ECDSA write refused
 //
 // The deployer (.stack/eth-sepolia/deployer.key, 0600, never printed) only pays:
 // it holds no role over the name. The controller's key comes from
@@ -26,7 +26,8 @@ import { sepolia } from 'viem/chains';
 
 import { masterKey, signExecute, type RegistryKey } from './ens.ts';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+// backend/ethereum, as before this file moved one folder down.
+const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = join(HERE, '..', '.stack', 'eth-sepolia');
 const DEPLOYMENTS = join(HERE, '..', '..', 'deployments', 'eth-sepolia.json');
 const RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
@@ -195,5 +196,5 @@ async function names(): Promise<void> {
 
 const commands: Record<string, () => Promise<void>> = { deploy, adopt, records, status, names };
 const run = commands[process.argv[2] ?? ''];
-if (run === undefined) throw new Error(`usage: node ethereum/ens-sepolia.ts ${Object.keys(commands).join(' | ')}`);
+if (run === undefined) throw new Error(`usage: node ethereum/ens/ens-sepolia.ts ${Object.keys(commands).join(' | ')}`);
 await run();

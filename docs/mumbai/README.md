@@ -37,9 +37,9 @@
 
 | Track | What it gets | Evidence |
 |---|---|---|
-| **Uniswap**: v4 hooks | Three hooks that move pool authority to a hash-based key, live at Uniswap's own Sepolia v4 and on the devnet | [partner-docs/uniswap.md](../../partner-docs/uniswap.md) |
-| **ENS**: ENSv2 | A real ENSv2 name held by a post-quantum key; subnames only for post-quantum accounts, with post-quantum stealth payments to them | [partner-docs/ens.md](../../partner-docs/ens.md) |
-| **Ethereum Foundation**: CROPS, anon-rpc, EIP-8141 | An exit that needs nobody, ML-KEM stealth, anon-rpc reads, FORS+C-only frame transactions | [partner-docs/ethereum-foundation.md](../../partner-docs/ethereum-foundation.md) |
+| **Uniswap**: v4 hooks | Three hooks that move pool authority to a hash-based key, live at Uniswap's own Sepolia v4 and on the devnet | [partner-docs/ethglobal-mumbai/uniswap.md](../../partner-docs/ethglobal-mumbai/uniswap.md) |
+| **ENS**: ENSv2 | A real ENSv2 name held by a post-quantum key; subnames only for post-quantum accounts, with post-quantum stealth payments to them | [partner-docs/ethglobal-mumbai/ens.md](../../partner-docs/ethglobal-mumbai/ens.md) |
+| **Ethereum Foundation**: CROPS, anon-rpc, EIP-8141 | An exit that needs nobody, ML-KEM stealth, anon-rpc reads, FORS+C-only frame transactions | [partner-docs/ethglobal-mumbai/ethereum-foundation.md](../../partner-docs/ethglobal-mumbai/ethereum-foundation.md) |
 
 ## How it's made
 

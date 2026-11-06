@@ -6,6 +6,8 @@ The contracts behind "Ethereum Devnet (Fully post-quantum)" at [opaque.credit/te
 cd contracts && FOUNDRY_PROFILE=frame forge build
 ```
 
+## Index
+
 | Contract | What it does |
 |---|---|
 | [`FramePQAccount.sol`](FramePQAccount.sol) | The account. `verify()` is its VERIFY frame: it copies the signature out with `SIGDATACOPY`, recovers the FORS+C key with [`LeanFors`](../src/ethereum/frame/LeanFors.sol) and approves execution and payment. The protocol nonce counts the key's uses (8 per key at k=13, a=13), and `rotate(next)`, called from its own SENDER frame, hands over to the next key. |
