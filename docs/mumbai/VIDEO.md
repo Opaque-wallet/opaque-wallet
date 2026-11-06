@@ -49,10 +49,10 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 | Time | Show |
 |---|---|
-| 0:00 | The autopilot on opaque.credit/?demo=swarnim: press Play; the front page's opening plays, the ring and the title |
-| 0:05 | The page starts scrolling by itself: the hero, then how a private payment works |
-| 0:15 | Still scrolling: Spend unseen, the phone tour |
-| 0:24 | Still scrolling: Connect anywhere, Built for Q-Day, Nothing leads back, to the end |
+| 0:00 | The autopilot on opaque.credit/ethglobal-mumbai?demo=swarnim: press Play; the page reloads on Post-quantum. And unseen. |
+| 0:05 | The page scrolls by itself: Nobody sees who's asking, What your RPC sees, Four steps |
+| 0:15 | Still scrolling: names, stealth payments, the Uniswap pool and the LP guard |
+| 0:24 | Still scrolling: the Q-Day vault, Opaque beside MetaMask, What it doesn't hide, to the end |
 
 ## 2. What the demo shows (0:35–0:47)
 
@@ -124,8 +124,8 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 ## Before you record
 
 - **The autopilot plays the demo, in the real site.**
-  - It's on now (`npm run demo:on` was deployed). Open a private window, so the wallet is a fresh one, and go to `opaque.credit/?demo=swarnim`. It claims `swarnim.opaque.eth`; `?demo` alone claims `mumbai-<4 hex>`.
-  - Start the screen recording, then press **Play**. The front page's opening plays and the page scrolls to the end by itself (0:00 to 0:35). The wallet opens and holds 12 seconds on the demo's aims (0:35). Then it types and clicks through 3.1 to 3.7, across the Sepolia wallet, the devnet and the Q-Day page, with a cursor and a caption. Every transaction is real, and Opaque's faucet funds the new wallets.
+  - It's on now (`npm run demo:on` was deployed). Open a private window, so the wallet is a fresh one, and go to `opaque.credit/ethglobal-mumbai?demo=swarnim`. It claims `swarnim.opaque.eth`; `?demo` alone claims `mumbai-<4 hex>`.
+  - Start the screen recording, then press **Play**. The ETHGlobal Mumbai page reloads and scrolls to the end by itself (0:00 to 0:35). The wallet opens and holds 12 seconds on the demo's aims (0:35). Then it types and clicks through 3.1 to 3.7, across the Sepolia wallet, the devnet and the Q-Day page, with a cursor and a caption. Every transaction is real, and Opaque's faucet funds the new wallets.
   - While the chain works, a **Waiting · cut** tag shows in the corner: cut those stretches. Uncut, a run takes about 30 minutes.
   - **Esc** or **Stop** ends a run. If a step fails, the caption says why; reload the page to try that step again.
   - Record the architecture (2:15) and the close (4:13) separately, over `diagrams/opaque.svg` and the README.
