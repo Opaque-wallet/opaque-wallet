@@ -58,7 +58,7 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **Say this, as one paragraph:**
 
-> In this demo, I'll make a wallet, pay privately, swap on Uniswap, claim and pay an ENS name, sign on the devnet, leave without Opaque, and run Q-Day.
+> Today our demo aims are simple yet clear: a wallet, a private payment, a Uniswap swap, an ENS name, the EIP-8141 devnet, leaving without Opaque, and Q-Day.
 
 **On screen:**
 
@@ -70,7 +70,7 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **Say this, as one paragraph:**
 
-> Nothing here is mocked: a script types into the real wallet. Twelve words make it, and every FORS+C key comes from them. The faucet funds it, and the deposit is one ERC-4337 operation its FORS+C key signs. I pay five dollars privately; the ring proof is built in my browser. It crosses three relays and arrives still sealed. Our attester verifies it and signs with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. A swap in Uniswap v4's post-quantum pool: its hook lets in only FORS+C accounts. One signature claims swarnim.opaque.eth on ENSv2, and the wallet takes the name. Paying it pays a one-time address that only my ML-KEM key can find. On the EIP-8141 devnet, the account itself is FORS+C only: frame zero verifies its signature in 76,430 gas, thanks to LeanFors. Now every Opaque server is down. The wallet still finds my notes through anon-rpc, and after the pool's delay withdraws them, with no one's permission. Last, Q-Day. The page hands an attacker this wallet's private key: it takes the wallet and its protocol, and the chain refuses everything behind Opaque. Then the owner moves it all with the FORS+C key alone.
+> Twelve words make the wallet, and every FORS+C key comes from them; a password seals them in this browser. The faucet funds it, and the deposit is one ERC-4337 operation its FORS+C key signs. I pay five dollars privately; the ring proof is built in my browser. It crosses three relays and arrives still sealed. Our attester verifies it and signs with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. A swap in Uniswap v4's post-quantum pool: its hook lets in only FORS+C accounts. One signature claims swarnim.opaque.eth on ENSv2, and the wallet takes the name. Paying it pays a one-time address that only my ML-KEM key can find. On the EIP-8141 devnet, the account itself is FORS+C only: frame zero verifies its signature in 76,430 gas, thanks to LeanFors. Now every Opaque server is down. The wallet still finds my notes through anon-rpc, and after the pool's delay withdraws them, with no one's permission. Last, Q-Day. The page hands an attacker this wallet's private key: it takes the wallet and its protocol, and the chain refuses everything behind Opaque. Then the owner moves it all with the FORS+C key alone.
 
 **On screen:**
 
