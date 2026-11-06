@@ -2,22 +2,72 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "redirects": [
-    { "source": "/arc", "destination": "/", "permanent": false },
-    { "source": "/testnet", "destination": "/", "permanent": false },
-    { "source": "/testnet/", "destination": "/", "permanent": false },
-    { "source": "/xrpl", "destination": "/testnet/xrpl", "permanent": false },
-    { "source": "/devnet", "destination": "/testnet/devnet", "permanent": false },
-    { "source": "/sepolia", "destination": "/sepolia/app", "permanent": false },
-    { "source": "/testnet/opaque-xrpl-extension.zip", "destination": "/opaque-extension.zip", "permanent": false }
+    {
+      "source": "/arc",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/testnet",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/testnet/",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/xrpl",
+      "destination": "/testnet/xrpl",
+      "permanent": false
+    },
+    {
+      "source": "/devnet",
+      "destination": "/testnet/devnet",
+      "permanent": false
+    },
+    {
+      "source": "/sepolia",
+      "destination": "/sepolia/app",
+      "permanent": false
+    },
+    {
+      "source": "/testnet/opaque-xrpl-extension.zip",
+      "destination": "/opaque-extension.zip",
+      "permanent": false
+    },
+    {
+      "source": "/unseen",
+      "destination": "/ethglobal-mumbai#unseen",
+      "permanent": false
+    },
+    {
+      "source": "/post-quantum",
+      "destination": "/ethglobal-mumbai",
+      "permanent": false
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "content-security-policy", "value": "frame-ancestors 'none'" },
-        { "key": "x-frame-options", "value": "DENY" },
-        { "key": "referrer-policy", "value": "no-referrer" },
-        { "key": "x-content-type-options", "value": "nosniff" }
+        {
+          "key": "content-security-policy",
+          "value": "frame-ancestors 'none'"
+        },
+        {
+          "key": "x-frame-options",
+          "value": "DENY"
+        },
+        {
+          "key": "referrer-policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "x-content-type-options",
+          "value": "nosniff"
+        }
       ]
     }
   ]

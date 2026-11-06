@@ -457,3 +457,13 @@ a.trow:hover span:first-child b { color: var(--orange); }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .rise, .step { opacity: 1; transform: none; }
 }
+
+/* ethglobal-mumbai.html: the chapter nav under the hero, and Unseen's stage as a chapter */
+.chapters { position: sticky; top: 68px; z-index: 5; display: flex; gap: 8px; overflow-x: auto; padding-block: 12px; border-block: 1px solid var(--line); background: rgba(7, 6, 8, 0.86); backdrop-filter: blur(12px); scrollbar-width: none; }
+.chapters::-webkit-scrollbar { display: none; }
+.chapters a { flex: none; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 14px; text-decoration: none; transition: color 0.2s, border-color 0.2s; }
+.chapters a:hover { color: var(--cream); border-color: var(--orange); }
+.hero--chapter { min-height: auto; padding-block: clamp(72px, 11vw, 150px); }
+.hero--chapter h2 { font-size: clamp(44px, 6vw, 96px); }
+.hero--chapter h2 em, .final h2 em { color: var(--orange); font-style: normal; }
+section[id] { scroll-margin-top: 130px; }

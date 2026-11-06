@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Post-Quantum, Today</title>
-<meta name="description" content="Opaque's next major upgrade: private payments, stealth addresses, ENSv2 names and Uniswap v4 swaps, all signed by hash-based FORS+C keys. Usable now on Sepolia and Ethereum's EIP-8141 devnet.">
+<title>Opaque at ETHGlobal Mumbai</title>
+<meta name="description" content="What Opaque built at ETHGlobal Mumbai: private payments, stealth addresses, ENSv2 names and Uniswap v4 pools signed by hash-based FORS+C keys; reads through EF's anon-rpc; and a way out of every pool with no server of ours. Live on Sepolia and the EIP-8141 devnet.">
 <meta name="theme-color" content="#070608">
-<meta property="og:title" content="Go post-quantum. Today.">
-<meta property="og:description" content="Payments, stealth addresses, ENSv2 names and Uniswap v4 swaps, signed by hash-based keys. Live now.">
-<meta property="og:image" content="https://www.opaque.credit/post-quantum-og.png">
+<meta property="og:title" content="Opaque at ETHGlobal Mumbai: post-quantum, and unseen">
+<meta property="og:description" content="Payments, stealth addresses, ENSv2 names and Uniswap v4 pools signed by hash-based keys, and reads nobody can trace. Live now.">
+<meta property="og:image" content="https://www.opaque.credit/ethglobal-mumbai-og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,16 +18,16 @@
 </head>
 <body>
 <header class="top wrap">
-  <a class="brand" href="/" aria-label="opaque, home"><img src="/logo.png" alt="opaque" width="942" height="200"><span>Post-quantum</span></a>
+  <a class="brand" href="/" aria-label="opaque, home"><img src="/logo.png" alt="opaque" width="942" height="200"><span>ETHGlobal Mumbai</span></a>
   <a class="btn btn--primary" href="/sepolia/app">Open the wallet</a>
 </header>
 
 <main>
   <section class="hero wrap" aria-labelledby="hero-title">
     <div class="hero__copy">
-      <a class="pill rise" style="--d: 0" href="#now"><b>Next major upgrade</b> Everything, post-quantum</a>
-      <h1 class="display rise" id="hero-title" style="--d: 1">Go post-<em>quantum.</em> Today.</h1>
-      <p class="lede rise" style="--d: 3">Pay, receive, hold a name and swap, every move signed by FORS+C: hash-based keys with no known quantum attack. It isn't a roadmap. Each one works now, on Sepolia and on Ethereum's EIP-8141 devnet.</p>
+      <a class="pill rise" style="--d: 0" href="#now"><b>ETHGlobal Mumbai</b> What Opaque built, live today</a>
+      <h1 class="display rise" id="hero-title" style="--d: 1">Post-quantum. <em>And unseen.</em></h1>
+      <p class="lede rise" style="--d: 3">Pay, receive, hold a name and swap, every move signed by FORS+C: hash-based keys with no known quantum attack. Read the chain through the Ethereum Foundation's anon-rpc, so nobody sees who asks. And leave any pool without a single server of ours. It isn't a roadmap: each one works now, on Sepolia and on Ethereum's EIP-8141 devnet.</p>
       <div class="actions rise" style="--d: 4">
         <a class="btn btn--primary" href="/sepolia/app">Open the Sepolia wallet</a>
         <a class="btn btn--ghost" href="/testnet/devnet">Try the devnet</a>
@@ -37,6 +37,193 @@
       <canvas id="fors"></canvas>
       <div class="stage__log stage__log--left" aria-hidden="true"><p>Signing</p><ol id="signing"></ol></div>
       <p class="stage__caption" aria-hidden="true">One secret leaf per tree, revealed with its path to the root. Hashes only: nothing for Shor's algorithm to attack.</p>
+    </div>
+  </section>
+
+  <nav class="chapters wrap" aria-label="On this page">
+    <a href="#unseen">Unseen</a><a href="#stealth">Stealth addresses</a><a href="#names">ENSv2 names</a><a href="#swap">Uniswap v4</a><a href="#guard">Liquidity guard</a><a href="#now">Available now</a>
+  </nav>
+
+  <section class="hero hero--chapter wrap" id="unseen" aria-labelledby="unseen-title">
+    <div class="hero__copy">
+      <p class="eyebrow">Opaque Unseen · EF's anon-rpc · Live on Sepolia</p>
+      <h2 class="display" id="unseen-title">Nobody sees who's <em>asking.</em></h2>
+      <p class="lede">Every wallet reads the chain, and every read hands an RPC provider your IP beside your address. Opaque Unseen sends your wallet's reads and transactions through the Ethereum Foundation's anon-rpc and the Nox mixnet. The chain answers. Nobody learns who asked. Not even us.</p>
+      <div class="actions">
+        <a class="btn btn--primary" href="/sepolia/app">Turn it on</a>
+        <a class="btn btn--ghost" href="#how">How it works</a>
+      </div>
+    </div>
+    <div class="hero__stage" role="img" aria-label="Requests from many wallets, one of them yours, wrapped in layers, shuffled at each of three mixnet hops, and arriving at the RPC from exit nodes only.">
+      <canvas id="mix"></canvas>
+      <p class="stage__note">Your request is the orange one. By the exit, it looks like everyone else's.</p>
+      <div class="stage__log" aria-hidden="true"><p>What the RPC sees</p><ol id="log"></ol></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="seen" aria-labelledby="seen-title">
+    <div class="head">
+      <p class="eyebrow">One balance check, three ways</p>
+      <h2 class="display" id="seen-title">What your RPC sees.</h2>
+    </div>
+    <div class="views">
+      <article class="view">
+        <span class="tag">Any wallet</span>
+        <h3>Straight to the provider</h3>
+        <svg viewBox="0 0 300 70" aria-hidden="true">
+          <path class="flow" d="M40 35 H260"/>
+          <circle class="node" cx="28" cy="35" r="16"/><text x="28" y="66" text-anchor="middle">you</text>
+          <rect class="node" x="246" y="19" width="40" height="32" rx="8"/><text x="266" y="66" text-anchor="middle">RPC</text>
+        </svg>
+        <p class="seen"><b>203.0.113.7</b> eth_getBalance(<b>0x7a3f…c21e</b>)</p>
+        <p class="verdict">Your address, next to your IP. Every read, every day.</p>
+      </article>
+      <article class="view">
+        <span class="tag">Opaque until now</span>
+        <h3>Through Opaque's relays</h3>
+        <svg viewBox="0 0 300 70" aria-hidden="true">
+          <path class="flow" d="M40 35 H260"/>
+          <circle class="node" cx="28" cy="35" r="16"/><text x="28" y="66" text-anchor="middle">you</text>
+          <circle class="node" cx="94" cy="35" r="9"/><circle class="node" cx="140" cy="35" r="9"/><circle class="node" cx="186" cy="35" r="9"/>
+          <text x="140" y="66" text-anchor="middle">our relays and exit</text>
+          <rect class="node" x="246" y="19" width="40" height="32" rx="8"/><text x="266" y="66" text-anchor="middle">RPC</text>
+        </svg>
+        <p class="seen"><i>opaque-exit</i> eth_getBalance(<b>0x7a3f…c21e</b>)</p>
+        <p class="verdict">Your IP is hidden, but every relay is ours: one operator to trust.</p>
+      </article>
+      <article class="view view--now">
+        <span class="tag">Opaque Unseen</span>
+        <h3>Through EF's anon-rpc</h3>
+        <svg viewBox="0 0 300 70" aria-hidden="true">
+          <path class="flow" d="M40 35 H260"/>
+          <circle class="node" cx="28" cy="35" r="16"/><text x="28" y="66" text-anchor="middle">you</text>
+          <rect class="node" x="62" y="25" width="26" height="20" rx="5"/>
+          <circle class="node" cx="124" cy="35" r="9"/><circle class="node" cx="168" cy="35" r="9"/><circle class="node" cx="212" cy="35" r="9"/>
+          <text x="168" y="66" text-anchor="middle">Nox mixnet</text>
+          <rect class="node" x="246" y="19" width="40" height="32" rx="8"/><text x="266" y="66" text-anchor="middle">RPC</text>
+        </svg>
+        <p class="seen"><i>nox-exit</i> eth_getBalance(<b>0x7a3f…c21e</b>)</p>
+        <p class="verdict">A mixnet anyone can run. Nobody in the path knows it was you.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap" id="how" aria-labelledby="how-title">
+    <div class="head">
+      <p class="eyebrow">How a read leaves your browser</p>
+      <h2 class="display" id="how-title">Four steps. None of them trust us.</h2>
+    </div>
+    <div class="steps">
+      <article class="step">
+        <span class="n">01 · PINNED</span>
+        <svg viewBox="0 0 160 100" aria-hidden="true">
+          <rect class="s-raised" x="12" y="14" width="136" height="30" rx="8"/>
+          <text class="s-txt" x="22" y="33">Specifier on Sepolia</text>
+          <text class="s-mono pin-hash" x="14" y="64">keccak256 0x9f2c…e81a</text>
+          <rect class="s-raised" x="12" y="74" width="100" height="16" rx="5"/><text class="s-txt" x="20" y="86">worker bundle</text>
+          <circle class="s-or pin-check" cx="130" cy="82" r="10"/><path d="M125 82l4 4 7-8" fill="none" stroke="#070608" stroke-width="2.4" class="pin-check"/>
+        </svg>
+        <h3>The code is pinned on chain.</h3>
+        <p>The wallet reads the Nox worker's bundle hash from its <code>IWorkerSpecifier</code> contract and runs only bytes that match it. Nobody can quietly swap the code.</p>
+      </article>
+      <article class="step">
+        <span class="n">02 · SANDBOXED</span>
+        <svg viewBox="0 0 160 100" aria-hidden="true">
+          <rect class="s-line box-in" x="8" y="8" width="144" height="84" rx="10"/><text class="s-txt" x="16" y="22">this page: keys, notes</text>
+          <rect class="s-line box-in2" x="40" y="30" width="104" height="54" rx="8" style="stroke: var(--soft)"/><text class="s-txt" x="48" y="44">null-origin iframe</text>
+          <rect class="s-orl box-in3" x="54" y="52" width="84" height="24" rx="6"/><text class="s-txt" x="96" y="68" text-anchor="middle" style="fill: var(--cream)">Web Worker</text>
+          <g class="keys-block"><rect x="16" y="64" width="16" height="12" rx="2.5" class="s-or"/><path d="M19.5 64v-3.5a4.5 4.5 0 0 1 9 0V64" fill="none" stroke="#ff7a18" stroke-width="2"/></g>
+        </svg>
+        <h3>It runs where it can't see you.</h3>
+        <p>A Web Worker inside a sandboxed, null-origin iframe. It can't reach the page, its storage, or your keys. All it gets is the request.</p>
+      </article>
+      <article class="step">
+        <span class="n">03 · THREE HOPS</span>
+        <svg viewBox="0 0 280 100" aria-hidden="true">
+          <path class="s-line" d="M24 50 H258"/>
+          <circle class="s-raised" cx="102" cy="50" r="7"/><circle class="s-raised" cx="180" cy="50" r="7"/><circle class="s-raised" cx="258" cy="50" r="7"/>
+          <g class="hop">
+            <circle class="s-orl peel1" cx="24" cy="50" r="18" style="stroke-opacity: 0.45"/>
+            <circle class="s-orl peel2" cx="24" cy="50" r="13" style="stroke-opacity: 0.7"/>
+            <circle class="s-orl peel3" cx="24" cy="50" r="8"/>
+            <circle class="s-or" cx="24" cy="50" r="4"/>
+          </g>
+          <text class="s-txt" x="102" y="84" text-anchor="middle">entry</text><text class="s-txt" x="180" y="84" text-anchor="middle">mix</text><text class="s-txt" x="258" y="84" text-anchor="middle">exit</text>
+        </svg>
+        <h3>Wrapped in layers, mixed on the way.</h3>
+        <p>Each request becomes Sphinx packets. Each Nox node peels one layer, waits, and passes it on among everyone else's. TLS to the RPC runs inside the worker, so the exit relays bytes it can't read.</p>
+      </article>
+      <article class="step">
+        <span class="n">04 · ANSWERED</span>
+        <svg viewBox="0 0 160 100" aria-hidden="true">
+          <rect class="s-raised" x="104" y="34" width="44" height="32" rx="8"/><text class="s-txt" x="126" y="54" text-anchor="middle">RPC</text>
+          <circle class="s-raised" cx="24" cy="50" r="14"/><text class="s-txt" x="24" y="54" text-anchor="middle">you</text>
+          <path class="s-orl reply" d="M104 50 C80 20, 52 20, 38 46"/>
+          <text class="s-mono" x="14" y="90">0x…  balance, nonce, key</text>
+        </svg>
+        <h3>The chain answers the mixnet.</h3>
+        <p>Balances, your key's state, and your account's operations to the public bundler: all answered, none tied to you. That's about a second a read.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="through-title">
+    <div class="head">
+      <p class="eyebrow">What goes through it</p>
+      <h2 class="display" id="through-title">Names, your account, your way out.</h2>
+    </div>
+    <div class="through">
+      <article class="card">
+        <svg class="art art--ens" viewBox="0 0 300 118" aria-hidden="true">
+          <rect class="a-field" x="6" y="6" width="156" height="28" rx="8"/>
+          <text class="a-mono a-type" x="16" y="24">alice.opaque.eth</text>
+          <path class="a-line" d="M22 70 H232"/>
+          <circle class="a-hop" cx="84" cy="70" r="7"/><circle class="a-hop" cx="128" cy="70" r="7"/><circle class="a-hop" cx="172" cy="70" r="7"/>
+          <text x="128" y="94" text-anchor="middle">Nox</text>
+          <rect class="a-box" x="228" y="52" width="66" height="36" rx="8"/>
+          <text class="a-strong" x="261" y="67" text-anchor="middle">ENSv2</text><text x="261" y="80" text-anchor="middle">resolver</text>
+          <circle class="a-go" cx="22" cy="70" r="5"/><circle class="a-back" cx="228" cy="70" r="5"/>
+          <text class="a-mono a-result" x="6" y="112">→ 0x5cb6…3131</text>
+          <text class="a-sees" x="294" y="112" text-anchor="end">it sees: nox-exit</text>
+        </svg>
+        <span class="when">Always</span><h3>ENS names</h3><p>Pay <b>alice.opaque.eth</b>: the lookup on ENSv2's UniversalResolver goes through Nox, so no provider learns who you're about to pay.</p></article>
+      <article class="card">
+        <svg class="art art--acct" viewBox="0 0 300 118" aria-hidden="true">
+          <rect class="a-track" x="6" y="8" width="42" height="24" rx="12"/><circle class="a-knob" cx="19" cy="20" r="8"/>
+          <text class="a-strong" x="58" y="24">Opaque Unseen</text>
+          <text class="a-mono a-call a-c1" x="6" y="62">eth_getBalance</text>
+          <text class="a-mono a-call a-c2" x="6" y="80">stateOf</text>
+          <text class="a-mono a-call a-c3" x="6" y="98">eth_sendUserOperation</text>
+          <path class="a-line" d="M150 59 H216"/><path class="a-line" d="M150 95 H216"/>
+          <text x="183" y="81" text-anchor="middle">Nox</text>
+          <rect class="a-box" x="214" y="45" width="82" height="28" rx="7"/><text x="255" y="63" text-anchor="middle">public RPC</text>
+          <rect class="a-box" x="214" y="81" width="82" height="28" rx="7"/><text x="255" y="99" text-anchor="middle">public bundler</text>
+          <circle class="a-go a-c1" cx="150" cy="59" r="4"/><circle class="a-go a-c2" cx="150" cy="59" r="4"/><circle class="a-go a-c3" cx="150" cy="95" r="4"/>
+        </svg>
+        <span class="when">One switch</span><h3>Your whole account</h3><p>Turn on Unseen in Privacy. Balances, key state, nonces and every UserOperation then reach a public RPC and bundler through the mixnet, with nothing of Opaque's in the path.</p>
+        <p class="art-note"><b class="art-count">0</b> of this wallet's reads and operations answered through anon-rpc</p>
+      </article>
+      <article class="card">
+        <svg class="art art--way" viewBox="0 0 300 118" aria-hidden="true">
+          <g class="a-servers"><rect class="a-box" x="6" y="6" width="150" height="30" rx="8"/><text class="a-strong" x="16" y="25">Opaque's servers</text><circle class="a-hop" cx="118" cy="21" r="4"/><circle class="a-hop" cx="132" cy="21" r="4"/><circle class="a-hop" cx="146" cy="21" r="4"/></g>
+          <path class="a-strike" d="M8 21 H154"/>
+          <text class="a-off" x="166" y="25">offline</text>
+          <path class="a-line" d="M40 80 H262"/>
+          <circle class="a-step a-s1" cx="40" cy="80" r="8"/><circle class="a-step" cx="150" cy="80" r="8"/><circle class="a-step a-s3" cx="260" cy="80" r="8"/>
+          <text x="40" y="62" text-anchor="middle">announce</text><text class="a-mono a-clock" x="150" y="62" text-anchor="middle">5:00</text><text x="260" y="62" text-anchor="middle">withdraw</text>
+          <rect class="a-note" x="30" y="74" width="20" height="12" rx="3"/>
+          <text x="150" y="111" text-anchor="middle">over Nox · signed by FORS+C</text>
+        </svg>
+        <span class="when">If we're gone</span><h3>Your way out</h3><p>If Opaque's servers ever stop or refuse you, your notes still leave their pools, signed by your own post-quantum key, with every call through Nox.</p></article>
+    </div>
+  </section>
+
+  <section class="wrap" aria-label="In numbers">
+    <div class="numbers">
+      <div class="num"><b data-to="0">0</b><span>servers of Opaque's in the path of a read</span></div>
+      <div class="num"><b data-to="3">0</b><span>mixnet hops, each one peeling a layer</span></div>
+      <div class="num"><b><span data-to="1.3">0</span><small> s</small></b><span>a read, once the worker is up (4.5 s the first time)</span></div>
+      <div class="num"><b data-to="1">0</b><span>switch, in the wallet's Privacy view</span></div>
     </div>
   </section>
 
@@ -263,7 +450,7 @@
       <a class="trow" role="row" href="/sepolia/app"><span role="cell"><b>ENSv2 names</b>: claim, resolve, pay by name</span><span role="cell">Sepolia</span><span role="cell">FORS+C</span></a>
       <a class="trow" role="row" href="#sepolia-pool"><span role="cell"><b>Uniswap v4</b>: pools only post-quantum accounts can trade in</span><span role="cell">EIP-8141 devnet · Sepolia (Uniswap's v4)</span><span role="cell">FORS+C</span></a>
       <a class="trow" role="row" href="#guard"><span role="cell"><b>Liquidity guard</b> for any wallet: a FORS+C second factor on every removal</span><span role="cell">Sepolia (Uniswap's v4)</span><span role="cell">ECDSA + FORS+C</span></a>
-      <a class="trow" role="row" href="/unseen"><span role="cell"><b>Reads through a mixnet</b>, with EF's anon-rpc</span><span role="cell">Sepolia</span><span role="cell">n/a: nobody sees who asked</span></a>
+      <a class="trow" role="row" href="#unseen"><span role="cell"><b>Reads through a mixnet</b>, with EF's anon-rpc</span><span role="cell">Sepolia</span><span role="cell">n/a: nobody sees who asked</span></a>
     </div>
   </section>
 
@@ -283,10 +470,26 @@
     </div>
   </section>
 
+  <section class="wrap" aria-labelledby="limits-title">
+    <div class="limits">
+      <div class="credit">
+        <p class="eyebrow">Honest about it</p>
+        <h2 class="display" id="limits-title" style="font-size: clamp(36px, 5vw, 72px)">What it doesn't hide.</h2>
+        <p>Built on the Ethereum Foundation's <a href="https://ethereum.github.io/anon-rpc/" target="_blank" rel="noopener">anon-rpc</a> and the <a href="https://demo.nox.hisoka.io/anon-rpc" target="_blank" rel="noopener">Nox</a> mixnet. Opaque's code is <a href="https://github.com/Opaque-wallet/opaque-wallet" target="_blank" rel="noopener">open source</a> (Apache-2.0). On Sepolia today.</p>
+      </div>
+      <ul>
+        <li><b>One bootstrap read.</b> The wallet reads the worker's hash from its contract once, directly, before anything is anonymized.</li>
+        <li><b>Payments still use Opaque's relays.</b> A private payment needs our attester, so it crosses our three-hop mesh, which hides your IP but is one operator.</li>
+        <li><b>Slower.</b> Mixing is the point: a read takes about a second instead of a blink.</li>
+        <li><b>The chain is still public.</b> anon-rpc hides who asks. Opaque's pools and stealth addresses hide who pays and who is paid.</li>
+      </ul>
+    </div>
+  </section>
+
   <section class="final wrap" aria-labelledby="final-title">
-    <h2 class="display" id="final-title">Go post-<br>quantum.</h2>
-    <p class="lede">Make a wallet on Sepolia: free test funds, a name under opaque.eth, private payments in and out. Every signature it makes is post-quantum.</p>
-    <div class="actions"><a class="btn btn--primary" href="/sepolia/app">Open the wallet</a><a class="btn btn--ghost" href="/unseen">See Opaque Unseen</a></div>
+    <h2 class="display" id="final-title">Go post-<br>quantum.<br><em>Go unseen.</em></h2>
+    <p class="lede">Make a wallet on Sepolia: free test funds, a name under opaque.eth, private payments in and out, a swap in the post-quantum pool. Every signature it makes is post-quantum, and one switch in Privacy sends every read through the mixnet.</p>
+    <div class="actions"><a class="btn btn--primary" href="/sepolia/app">Open the wallet</a><a class="btn btn--ghost" href="/testnet/devnet">Try the devnet</a></div>
   </section>
 </main>
 <footer class="wrap"><span>Opaque · Apache-2.0</span><span><a href="/docs">Docs</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>
@@ -446,6 +649,153 @@ function stage(canvas, draw) {
   const uses = document.querySelector('.ens__uses');
   let n = 12;
   if (!reduced) setInterval(() => { n = n >= 31 ? 1 : n + 1; uses.textContent = String(n); }, 1400);
+})();
+</script>
+<script>
+// The hero's mixnet: requests from several wallets, one of them yours (orange), each
+// wrapped in three layers. Each Nox node holds a packet a moment, peels a layer and
+// sends it on to any node of the next column, so the order that reaches the RPC is
+// not the order that left. The RPC's log names exit nodes only.
+(() => {
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canvas = document.getElementById('mix'), ctx = canvas.getContext('2d');
+  const log = document.getElementById('log');
+  const ORANGE = '255, 122, 24', CREAM = '244, 239, 233';
+  const METHODS = ['eth_getBalance', 'eth_call', 'eth_getCode', 'eth_blockNumber', 'eth_estimateUserOperationGas', 'eth_sendUserOperation', 'eth_getLogs'];
+  const COLS = [0.1, 0.32, 0.54, 0.75, 0.93];
+  const LABELS = ['WALLETS', 'ENTRY', 'MIX', 'EXIT', 'RPC'];
+  const counts = [6, 3, 3, 3, 1];
+  let W = 0, H = 0, nodes = [], packets = [], last = 0, spawnAt = 0, flashes = [];
+
+  function layout() {
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    W = r.width; H = r.height;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const top = H * 0.2, bottom = H * 0.86;
+    nodes = COLS.map((x, c) => Array.from({ length: counts[c] }, (_, i) => ({
+      x: x * W, y: counts[c] === 1 ? (top + bottom) / 2 : top + (bottom - top) * (i + 0.5) / counts[c], mine: c === 0 && i === 2,
+    })));
+  }
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  function spawn(now) {
+    const mine = Math.random() < 0.28, from = mine ? nodes[0][2] : pick(nodes[0].filter((n) => !n.mine));
+    packets.push({ mine, at: from, to: pick(nodes[1]), col: 0, t: 0, wait: 0, layers: 3, born: now });
+  }
+  function step(dt, now) {
+    for (const p of packets) {
+      if (p.wait > 0) { p.wait -= dt; continue; }
+      const dist = Math.hypot(p.to.x - p.at.x, p.to.y - p.at.y);
+      p.t += (dt * Math.max(140, W * 0.32)) / dist;
+      if (p.t < 1) continue;
+      p.col++; p.at = p.to; p.t = 0;
+      if (p.col >= 1 && p.col <= 3) { p.layers--; flashes.push({ x: p.at.x, y: p.at.y, life: 1, mine: p.mine }); p.wait = 0.25 + Math.random() * 1.1; }
+      if (p.col === 4) {
+        p.done = true;
+        flashes.push({ x: p.at.x, y: p.at.y, life: 1, mine: false });
+        const exit = nodes[3].indexOf(p.from3) + 1;
+        const li = document.createElement('li');
+        li.innerHTML = `<span>nox-exit-${exit}</span> ${pick(METHODS)}`;
+        log.prepend(li);
+        while (log.children.length > 6) log.lastChild.remove();
+        continue;
+      }
+      if (p.col === 3) p.from3 = p.at;
+      p.to = p.col === 3 ? nodes[4][0] : pick(nodes[p.col + 1]);
+    }
+    packets = packets.filter((p) => !p.done);
+    for (const f of flashes) f.life -= dt * 1.6;
+    flashes = flashes.filter((f) => f.life > 0);
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // Every link between neighbouring columns: any node may pass to any other.
+    ctx.lineWidth = 1;
+    for (let c = 0; c < 4; c++) for (const a of nodes[c]) for (const b of nodes[c + 1]) {
+      ctx.strokeStyle = `rgba(${CREAM}, 0.055)`; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    nodes.forEach((col, c) => col.forEach((n) => {
+      const big = c === 4 ? 22 : c === 0 ? 9 : 12;
+      ctx.fillStyle = '#151117'; ctx.strokeStyle = n.mine ? `rgba(${ORANGE}, 0.9)` : `rgba(${CREAM}, ${c === 4 ? 0.5 : 0.28})`;
+      ctx.lineWidth = n.mine ? 2 : 1.5;
+      ctx.beginPath();
+      if (c === 4) ctx.roundRect(n.x - big, n.y - big * 0.8, big * 2, big * 1.6, 8); else ctx.arc(n.x, n.y, big, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      if (c === 4) { ctx.fillStyle = `rgba(${CREAM}, 0.75)`; ctx.font = '600 11px Poppins, system-ui'; ctx.textAlign = 'center'; ctx.fillText('RPC', n.x, n.y + 4); }
+      if (n.mine) { ctx.fillStyle = `rgba(${ORANGE}, 1)`; ctx.font = '600 11px Poppins, system-ui'; ctx.textAlign = 'right'; ctx.fillText('you', n.x - 15, n.y + 4); }
+    }));
+    ctx.fillStyle = 'rgba(116, 107, 102, 1)'; ctx.font = '700 10.5px Quicksand, system-ui'; ctx.textAlign = 'center';
+    COLS.forEach((x, c) => ctx.fillText(LABELS[c], x * W, H - 18));
+    for (const f of flashes) {
+      ctx.strokeStyle = `rgba(${f.mine ? ORANGE : CREAM}, ${0.5 * f.life})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 14 + (1 - f.life) * 16, 0, Math.PI * 2); ctx.stroke();
+    }
+    for (const p of packets) {
+      const e = p.t < 0.5 ? 2 * p.t * p.t : 1 - (-2 * p.t + 2) ** 2 / 2;
+      const x = p.at.x + (p.to.x - p.at.x) * e, y = p.at.y + (p.to.y - p.at.y) * e;
+      // Its colour fades as its layers go: at the exit, yours looks like anyone's.
+      const tone = p.mine ? (p.col >= 3 ? CREAM : ORANGE) : CREAM;
+      const alpha = p.mine ? 0.95 : 0.6;
+      for (let l = p.layers; l > 0; l--) {
+        ctx.strokeStyle = `rgba(${tone}, ${alpha * (0.25 + 0.2 * (3 - l))})`; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(x, y, 3.5 + l * 3.2, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.fillStyle = `rgba(${tone}, ${alpha})`; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function frame(now) {
+    const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now;
+    if (now > spawnAt) { spawn(now); spawnAt = now + 260 + Math.random() * 380; }
+    step(dt, now); draw();
+    if (running) requestAnimationFrame(frame);
+  }
+  let running = false;
+  layout(); addEventListener('resize', layout);
+  for (let i = 0; i < 4; i++) { const li = document.createElement('li'); li.innerHTML = `<span>nox-exit-${(i % 3) + 1}</span> ${METHODS[(i * 3) % METHODS.length]}`; log.append(li); }
+  if (reduced) {
+    // A still: packets placed along the way, and a log already written.
+    for (let i = 0; i < 14; i++) { spawn(0); const p = packets[i]; p.col = i % 3; p.at = pick(nodes[p.col]); p.to = pick(nodes[p.col + 1]); p.t = Math.random(); p.layers = 3 - p.col; }
+    draw();
+    return;
+  }
+  new IntersectionObserver(([e]) => { if (e.isIntersecting && !running) { running = true; last = 0; requestAnimationFrame(frame); } else if (!e.isIntersecting) running = false; }).observe(canvas);
+})();
+
+// Steps animate as they come into view; the numbers count up once.
+(() => {
+  const seen = new IntersectionObserver((entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('on'); seen.unobserve(e.target); } }), { threshold: 0.3 });
+  document.querySelectorAll('.step, .card').forEach((s) => seen.observe(s));
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // The account card counts answered calls; the way-out card counts the pool's delay down.
+  const answered = document.querySelector('.art-count'), clock = document.querySelector('.a-clock');
+  if (reduced) answered.textContent = '24';
+  else {
+    let n = 0;
+    setInterval(() => { if (answered.closest('.card').classList.contains('on')) answered.textContent = String(++n); }, 900);
+    // 5:00 down to 0:00 between announce and withdraw: 30% to 68% of the note's 8 s loop.
+    const countdown = () => {
+      const t0 = performance.now() + 2400;
+      const tick = (now) => {
+        const k = Math.min(1, Math.max(0, (now - t0) / 3000)), s = Math.round(300 * (1 - k));
+        clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        if (k < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+    const note = document.querySelector('.a-note');
+    note.addEventListener('animationstart', countdown);
+    note.addEventListener('animationiteration', countdown);
+  }
+  const count = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (!e.isIntersecting) return;
+    count.unobserve(e.target);
+    const to = Number(e.target.dataset.to), places = String(e.target.dataset.to).includes('.') ? 1 : 0;
+    if (reduced) { e.target.textContent = to.toFixed(places); return; }
+    const t0 = performance.now();
+    const tick = (now) => { const k = Math.min(1, (now - t0) / 1200); e.target.textContent = (to * (1 - (1 - k) ** 3)).toFixed(places); if (k < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }), { threshold: 0.6 });
+  document.querySelectorAll('[data-to]').forEach((n) => count.observe(n));
 })();
 </script>
 </body>
