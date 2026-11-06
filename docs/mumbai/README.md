@@ -290,8 +290,8 @@ The audited contracts were deployed unchanged; new behaviour lives in new contra
 
 | Check | Result |
 |---|---|
-| `cd contracts && forge test` | 153 passed |
-| `cd backend && npm test` | 394 passed |
+| `cd contracts && forge test` | 154 passed |
+| `cd backend && npm test` | 396 passed |
 | `scripts/e2e-sepolia.ts` | 33 checks against the live site and Sepolia: a private payment, a v4 swap, a name claimed and paid at a one-time address, the sweep, anon-rpc, and a note leaving its pool with every Opaque server blocked |
 | `scripts/e2e-sepolia-eth.ts` | 0.0015 ETH made private in one operation and sent privately. The payee holds exactly 0.0015 WETH, with no transfer from the wallet's address. |
 | `scripts/e2e-eth-connect.ts` | 19 checks: Opaque found by EIP-6963, connected, a mined transaction, a rejection returned as 4001 |

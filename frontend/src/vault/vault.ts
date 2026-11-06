@@ -7,7 +7,7 @@ import { decodeFunctionResult, encodeFunctionData, formatEther, isAddress, parse
 import { commitmentOf, masterKey, REGISTRY_ABI, signAction, signRotation, type RegistryKey } from '../../../backend/ethereum/ens/ens.ts';
 import { deployment, requireContract } from '../../../deployments/index.ts';
 import { isPhrase, newPhrase, normalizePhrase } from '../lib/wallet-keys.ts';
-import { guardKeyAt, guardPhraseKey } from './guard.ts';
+import { copyWords, guardKeyAt, guardPhraseKey, keepPhrase, showWords, SIGNATURES_PER_KEY } from './guard.ts';
 
 type Hex = `0x${string}`;
 type Address = `0x${string}`;
@@ -28,7 +28,8 @@ const VAULT_ABI = parseAbi([
 ]);
 const ERC20 = parseAbi(['function approve(address spender, uint256 value) returns (bool)']);
 const REGISTER = parseAbi(['function register(bytes32 pkCommitment, bytes32 nextCommitment, uint64 maxUses, uint64 rotationDeadline)']);
-const MAX_USES = 32n;
+// Every new guard key: the registry then refuses a 9th signature (FORS+C stays at 2^-160 against forgery).
+const MAX_USES = SIGNATURES_PER_KEY;
 const DEADLINE_2100 = 4_102_444_800n;
 
 interface Provider { request(args: { method: string; params?: unknown[] }): Promise<unknown> }
@@ -73,17 +74,25 @@ async function refresh(): Promise<void> {
   el('key-info').hidden = false;
   say('key-pk', `${commitmentOf(keyAt(generation)).slice(0, 18)}… (FORS+C, generation ${generation})`);
   say('key-reg', !registered ? 'not yet' : found === undefined ? 'a different key: these words are not the ones this address registered' : 'yes, for this address');
-  say('key-left', registered && found !== undefined ? `${s.maxUses - s.useCount} of ${s.maxUses}` : '—');
+  // A key registered with 32 uses still signs at most 8: the budget shown is that.
+  const budget = s.maxUses < MAX_USES ? s.maxUses : MAX_USES;
+  say('key-left', registered && found !== undefined ? `${budget > s.useCount ? budget - s.useCount : 0n} of ${budget}` : '—');
   el('key-register').hidden = registered;
   const ready = registered && found !== undefined;
+  // Saved only if these are the registered key's words, or nothing is registered yet.
+  keepPhrase(me, phrase, !registered || ready);
+  // Once a key is registered, a new phrase could never open the vault: only its words can.
+  el('key-new').hidden = registered;
+  if (registered && !ready) el('key-make').hidden = false;
+  el('key-show').hidden = !(ready || !registered);
   el('s-key').classList.toggle('done', ready);
   for (const id of ['s-vault', 's-out', 's-attack']) unlock(id, ready);
   if (!ready) return;
   const [eth, usdc] = await Promise.all([balance(ETH), balance(USDC)]);
   say('bal-eth', formatEther(eth).replace(/(\.\d{6})\d+$/, '$1'));
   say('bal-usdc', (Number(usdc) / 1e6).toFixed(2));
-  // A few-time key: hand over to the next one before it runs out.
-  if (s.maxUses - s.useCount <= 2n) await rotate(s.useCount);
+  // A few-time key: its 8th signature is the hand-over to the next one.
+  if (s.useCount >= MAX_USES - 1n) await rotate(s.useCount);
 }
 
 async function rotate(useCount: bigint): Promise<void> {
@@ -95,9 +104,17 @@ async function rotate(useCount: bigint): Promise<void> {
   say('key-status', `Rotated to the next guard key: ${txLink(hash)}`);
 }
 
+/** Before a signature: a key that has signed 7 times hands over first, so none signs a 9th time. */
+async function fresh(): Promise<void> {
+  const s = await stateOf();
+  if (s.useCount < MAX_USES - 1n) return;
+  await rotate(s.useCount);
+  for (let i = 0; i < 30 && (await stateOf()).useCount !== 0n; i++) await new Promise((r) => setTimeout(r, 2_000));
+  await refresh();
+}
+
 function usePhrase(words: string): void {
   phrase = normalizePhrase(words);
-  try { localStorage.setItem(storeKey(), phrase); } catch { /* private window: keep it only here */ }
   void refresh().catch((e: Error) => say('key-status', e.message));
 }
 
@@ -118,14 +135,20 @@ el('connect').addEventListener('click', () => void (async () => {
   } catch (e) { say('connect-status', `Not connected: ${(e as Error).message}`); }
 })());
 
-el('key-new').addEventListener('click', () => {
+el('key-new').addEventListener('click', () => void (async () => {
+  if (BigInt((await stateOf()).pkCommitment) !== 0n) {
+    say('key-status', 'This address already registered a guard key, and a new one can never replace it. Enter its 12 words with "I have the words".');
+    return;
+  }
   const words = newPhrase();
-  el('words').replaceChildren(...words.split(' ').map((w) => { const li = document.createElement('li'); li.textContent = w; return li; }));
+  showWords(words, el('words'));
   el('key-words').hidden = false;
   el('key-make').hidden = true;
-  say('key-status', 'Write these 12 words down now: they are the only way to open the vault.');
+  say('key-status', 'Write these 12 words down now, or copy them somewhere safe: they are the only way to open the vault.');
   usePhrase(words);
-});
+})());
+el('key-show').addEventListener('click', () => { showWords(phrase!, el('words')); el('key-words').hidden = false; });
+el('key-copy').addEventListener('click', () => void copyWords(phrase!, el('words'), el('key-status')));
 el('key-have').addEventListener('click', () => { el('key-enter').hidden = false; });
 el('key-use').addEventListener('click', () => {
   const words = el<HTMLInputElement>('key-phrase').value;
@@ -174,6 +197,7 @@ el('out-go').addEventListener('click', () => void (async () => {
   if (amount === undefined || amount === 0n) { say('out-status', 'Enter an amount.'); return; }
   if (!isAddress(to)) { say('out-status', 'That is not an address.'); return; }
   try {
+    await fresh();
     say('out-status', 'Signing with your post-quantum guard key in this page…');
     const data = await withdrawal(keyAt(generation), eth ? ETH : USDC, amount, to);
     say('out-status', 'Signed (FORS+C, about 9 KB). Your wallet submits it…');

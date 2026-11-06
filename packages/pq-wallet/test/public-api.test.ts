@@ -13,7 +13,7 @@ test('package_root_imports_and_export_map_remains_unchanged', () => {
   });
   assert.deepEqual(Object.keys(api).sort(), ['createPqWallet', 'createMockPqWallet',
     'keyGen', 'sign', 'forsVerify', 'pkCommitment', 'pqDigest', 'PQ_DOMAIN',
-    'canonical', 'utf8', 'FORS_C_DEFAULT', 'assertForsParams', 'decodeSignature',
+    'canonical', 'utf8', 'FORS_C_DEFAULT', 'SIGNATURES_PER_KEY', 'assertForsParams', 'decodeSignature',
     'deriveIndices', 'encodeSignature', 'forsSchemeId', 'randomSeed'].sort());
   // Bare `verify` stays off the barrel: a signature, a proof and a directory
   // all have one in this repo, and the name alone does not say which.

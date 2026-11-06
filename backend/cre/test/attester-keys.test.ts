@@ -287,3 +287,45 @@ test('F72_two_signers_cannot_count_against_one_log', async () => {
   (first as unknown as { close: () => void }).close();
   keysAt();
 });
+
+// SIGNATURES_PER_KEY: a FORS+C key past 8 signatures falls below 2^-160 against forgery, so
+// however much the registry allows a key, the attester rotates well before 8.
+function budgetWorld(maxUses: bigint, before = 0) {
+  const registry = new PQKeyRegistry({ chainId: asChainId(chainId), now: () => 100n, policy });
+  registry.register(attester, { pkCommitment: attesterCommitment(master, 0), nextCommitment: attesterCommitment(master, 1), maxUses, rotationDeadline: 1_000n });
+  const signWith = (seed: Uint8Array, useCount: bigint) => {
+    const key = keyGen(seed);
+    const payload = userActionPayload('0x1234');
+    const digest = pqDigest({ chainId: asChainId(chainId), walletAddress: attester, schemeId: forsSchemeId(key.publicKey.params), useCount, payload });
+    registry.consume(attester, '0x1234' as Hex, encodeSignature(key.publicKey, sign(key.secretKey, digest)));
+  };
+  // Signatures made before the budget existed, by generation 0.
+  for (let i = 0; i < before; i++) signWith(attesterSeed(master, 0), registry.stateOf(attester)!.useCount);
+  const signedBeforeRotating: bigint[] = [];
+  const keys = createAttesterKeys({
+    master, attester, chainId, maxUses, now: () => 100n,
+    readState: async () => { const s = registry.stateOf(attester)!; return { pkCommitment: s.pkCommitment, useCount: s.useCount, maxUses: s.maxUses }; },
+    rotate: async (next, m, deadline, sig) => { signedBeforeRotating.push(registry.stateOf(attester)!.useCount); registry.rotate(attester, next, m, deadline, sig); },
+    takeover: async () => { throw new Error('no takeover: every key still has the registry\'s budget'); },
+  });
+  const attest = async () => { const { forsSeed, useCount } = await keys.current(); signWith(forsSeed, useCount); };
+  return { registry, attest, signedBeforeRotating };
+}
+
+test('no_key_signs_more_than_SIGNATURES_PER_KEY_though_the_registry_allows_32', async () => {
+  const { attest, signedBeforeRotating } = budgetWorld(32n);
+  for (let i = 0; i < 20; i++) await attest();
+  assert.ok(signedBeforeRotating.length >= 3, `rotated ${signedBeforeRotating.length} times in 20 attestations`);
+  // Each key's attestations, plus the rotation it signs, stay within 8.
+  for (const n of signedBeforeRotating) assert.ok(n + 1n <= 8n, `a key signed ${n + 1n} times`);
+});
+
+test('a_key_already_past_the_budget_rotates_at_once_instead_of_stopping', async () => {
+  // The live Sepolia attester's key had signed 24 of its 32 when the budget arrived.
+  const { registry, attest, signedBeforeRotating } = budgetWorld(32n, 24);
+  await attest();
+  assert.deepEqual(signedBeforeRotating, [24n], 'it rotated at the next attestation, by the registry\'s budget it still had');
+  const s = registry.stateOf(attester)!;
+  assert.equal(s.pkCommitment, attesterCommitment(master, 1), 'generation 1 signs from here');
+  assert.equal(s.useCount, 1n, 'and has signed that attestation');
+});

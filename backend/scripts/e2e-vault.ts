@@ -79,7 +79,8 @@ try {
   await page.waitForFunction(() => (document.getElementById('connect-status')?.textContent ?? '').startsWith('Connected'), undefined, { timeout: 60_000 });
   check(true, `connected: ${await page.textContent('#connect-status')}`);
   await page.click('#key-new');
-  check((await page.$$eval('#words li', (ls: Element[]) => ls.length)) === 12, 'a guard key from 12 new words');
+  await page.waitForFunction(() => document.querySelectorAll('#words li').length === 12, undefined, { timeout: 60_000 });
+  check(true, 'a guard key from 12 new words');
   await page.waitForSelector('#key-register', { state: 'visible', timeout: 60_000 });
   await page.click('#key-register');
   await page.waitForFunction(() => /^(Registered|Not registered)/.test(document.getElementById('key-status')?.textContent ?? ''), undefined, { timeout: 180_000 });

@@ -27,6 +27,7 @@ export {
 
 export {
   FORS_C_DEFAULT,
+  SIGNATURES_PER_KEY,
   assertForsParams,
   decodeSignature,
   deriveIndices,

@@ -4,7 +4,7 @@
 
 | File | Tests |
 |---|---|
-| [`PQAdmin.t.sol`](PQAdmin.t.sol) | 11 tests of [`PQAdmin`](../../src/ethereum/admin/PQAdmin.sol), against OpenZeppelin's own `ProxyAdmin`, `TransparentUpgradeableProxy`, `Ownable2Step` and `AccessControl` |
+| [`PQAdmin.t.sol`](PQAdmin.t.sol) | 12 tests of [`PQAdmin`](../../src/ethereum/admin/PQAdmin.sol), against OpenZeppelin's own `ProxyAdmin`, `TransparentUpgradeableProxy`, `Ownable2Step`, `AccessControl`, `UpgradeableBeacon` and `BeaconProxy` |
 
 They show:
 - the demo protocol starts with two ECDSA admin keys;
@@ -17,7 +17,8 @@ They show:
 - an expired signature is refused;
 - a failed call reverts and keeps the signature unspent;
 - `Ownable2Step` hands over with a signed accept;
-- an AccessControl admin role hands over.
+- an AccessControl admin role hands over;
+- every role and a beacon hand over in the order the page uses, after which the ECDSA key alone can't upgrade, set the fee, pause or take a role back.
 
 A stand-in registry marks payloads as signed. The real `PQKeyRegistry` and real FORS+C signatures are checked on Sepolia by [`backend/ethereum/admin-sepolia.ts`](../../../backend/ethereum/admin-sepolia.ts).
 

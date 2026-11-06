@@ -11,7 +11,7 @@ The signature scheme behind every Opaque key. The live system signs with this pa
 | **Scheme** | FORS+C: hash-based, few-time. Security rests on keccak alone |
 | **Default parameters** | k=32, a=8 (`FORS_C_DEFAULT`) |
 | **Signature** | 9,251 bytes |
-| **Uses per key** | 32 for a live account (`ACCOUNT_MAX_USES` in `backend/chain/pq-wallet-chain.ts`) |
+| **Signatures per key** | At most 8, the rotation included (`SIGNATURES_PER_KEY`): 2⁻¹⁶⁰ against forgery. The registry allows a live account 32 (`ACCOUNT_MAX_USES` in `backend/chain/pq-account.ts`), and that number is in its address, so the signer enforces the 8 itself |
 | **Signing time** | About 140 ms median in Node; 231 to 313 ms in three Chromium samples |
 | **On-chain check** | `ForsVerifier.sol`, measured in [contracts/README.md](../../contracts/README.md#forsverifiersol) |
 
@@ -46,7 +46,7 @@ packages/pq-wallet/
 ├── scripts/                  # Vectors, benchmarks, lifecycle checks
 ├── abi/                      # PQKeyRegistry ABI snapshot and its provenance
 ├── benchmarks/               # Recorded measurements
-└── test/                     # 90 tests; the browser suite is opt-in
+└── test/                     # 93 tests; the browser suite is opt-in
 ```
 
 ## Public API
@@ -98,7 +98,7 @@ Node 22.18 or later.
 ```bash
 cd packages/pq-wallet
 npm ci
-npm test               # 88 passing, 2 skipped
+npm test               # 91 passing, 2 skipped
 npx tsc --noEmit
 ```
 

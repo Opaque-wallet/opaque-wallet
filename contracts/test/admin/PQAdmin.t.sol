@@ -11,6 +11,8 @@ import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transp
 import {IPQKeyRegistry} from "../../src/opaque/interfaces/IPQKeyRegistry.sol";
 import {PQAdmin, PQAdminFactory} from "../../src/ethereum/admin/PQAdmin.sol";
 import {DemoProtocolFactory, DemoProtocolV1, DemoProtocolV2} from "../../src/ethereum/admin/DemoProtocol.sol";
+import {DemoRolesFactory, DemoRolesV1, DemoRolesV2} from "../../src/ethereum/admin/DemoRolesProtocol.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 /// The registry's two calls PQAdmin makes; the test "signs" a payload by marking it. The real
 /// registry and real FORS+C signatures are on Sepolia (backend/ethereum/admin-sepolia.ts).
@@ -194,5 +196,46 @@ contract PQAdminTest is Test {
         uint256 deadline = _sign(a, OWNER, address(roles), grant);
         a.execute(address(roles), grant, deadline, "fors");
         assertTrue(roles.hasRole(keccak256("MINTER"), ANYONE));
+    }
+
+    bytes32 constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50; // EIP-1967
+
+    function test_every_role_and_a_beacon_hand_over_in_the_order_the_page_uses() public {
+        PQAdmin a = _admin(OWNER);
+        DemoRolesFactory roles = new DemoRolesFactory(address(new DemoRolesV1()));
+        DemoRolesV2 rolesV2 = new DemoRolesV2();
+        vm.prank(OWNER);
+        DemoRolesV1 p = DemoRolesV1(roles.create());
+        UpgradeableBeacon beacon = UpgradeableBeacon(address(uint160(uint256(vm.load(address(p), BEACON_SLOT)))));
+        assertEq(beacon.owner(), OWNER);
+        bytes32 admin = p.DEFAULT_ADMIN_ROLE();
+
+        vm.startPrank(OWNER);
+        beacon.transferOwnership(address(a));
+        // Every role the admin role manages first, while the wallet still holds it; the admin role last.
+        p.grantRole(p.FEE_ROLE(), address(a));
+        p.renounceRole(p.FEE_ROLE(), OWNER);
+        p.grantRole(p.PAUSER_ROLE(), address(a));
+        p.renounceRole(p.PAUSER_ROLE(), OWNER);
+        p.grantRole(admin, address(a));
+        p.renounceRole(admin, OWNER);
+        // Q-Day: the ECDSA key alone can't upgrade, set the fee, pause, or take any role back.
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, OWNER));
+        beacon.upgradeTo(address(rolesV2));
+        vm.expectRevert();
+        p.setFee(1);
+        vm.expectRevert();
+        p.pause();
+        vm.expectRevert();
+        p.grantRole(admin, OWNER);
+        vm.stopPrank();
+
+        bytes memory fee = abi.encodeCall(DemoRolesV1.setFee, (9));
+        a.execute(address(p), fee, _sign(a, OWNER, address(p), fee), "fors");
+        bytes memory up = abi.encodeCall(UpgradeableBeacon.upgradeTo, (address(rolesV2)));
+        a.execute(address(beacon), up, _sign(a, OWNER, address(beacon), up), "fors");
+        assertEq(p.fee(), 9);
+        assertEq(p.version(), 2);
+        assertTrue(p.hasRole(admin, address(a)) && !p.hasRole(admin, OWNER));
     }
 }

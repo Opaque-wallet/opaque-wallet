@@ -117,7 +117,7 @@ Post-quantum stealth payments, on the **standard** contracts ([`backend/chain/st
   - turning it off publishes an empty one.
 - **Paying:**
   1. The payer reads the payee's meta-address and encapsulates to it. This gives a 1,088-byte ciphertext and a shared secret `ss`.
-  2. `ss` draws **both** FORS+C keys (active and next) of a fresh `PQAccount`. The payer computes its counterfactual address through the factory (CREATE2, 32 uses per key).
+  2. `ss` draws **both** FORS+C keys (active and next) of a fresh `PQAccount`. The payer computes its counterfactual address through the factory (CREATE2, registered for 32 uses; a one-time account signs only its sweep).
   3. The pool pays that address.
   4. The announcement goes on ERC-5564's Announcer, with a view tag, the first byte of `keccak256("opaque/v1/stealth/view-tag" ‖ ss)`. Opaque's exit posts it, so the payer's own address isn't on the announcement.
 - **Finding and sweeping:**
@@ -228,7 +228,7 @@ Each pool's exit waits 300 s on Sepolia.
 ## Reproduce it
 
 ```bash
-cd contracts && forge test                                   # 153 pass, incl. LeanFors and ExitableRingVerifier
+cd contracts && forge test                                   # 154 pass, incl. LeanFors and ExitableRingVerifier
 cd backend && node --use-system-ca scripts/e2e-sepolia.ts    # 33 checks: stealth, anon-rpc, the exit with Opaque blocked
 cd backend && node --use-system-ca scripts/e2e-devnet-private.ts   # a private payment on the devnet, every signature FORS+C
 cd backend && node ethereum/frame-tx.ts send                 # a FORS+C-only frame transaction

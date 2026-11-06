@@ -54,11 +54,22 @@ export interface ForsParams {
  * and costs calldata linearly.
  *
  * Forgery resistance after q signatures under one key is about
- * (1 - (1 - 2^-a)^q)^k: q=1 → 2^-256, q=8 → 2^-160, q=32 → 2^-121. That is why
+ * (1 - (1 - 2^-a)^q)^k: q=1 → 2^-256, q=8 → 2^-160, q=16 → 2^-129, q=32 → 2^-99.
+ * A quantum search for a message whose digest lands on revealed leaves needs
+ * roughly the square root: about 2^80 at q=8, about 2^49 at q=32. That is why
  * maxUses is small and why exceeding it is refused rather than warned about.
  * These are the analytic numbers; §5.1 still wants them benchmarked on chain.
  */
 export const FORS_C_DEFAULT: ForsParams = Object.freeze({ k: 32, a: 8 });
+
+/**
+ * At FORS_C_DEFAULT, no key signs more than this, its rotation included: 2^-160
+ * against forgery, about 2^-80 against a quantum search. The registry may allow
+ * a key more (accounts were registered with 32, and that number is in their
+ * address), so signers enforce this themselves and rotate at
+ * SIGNATURES_PER_KEY - 1 uses, the rotation being the last signature.
+ */
+export const SIGNATURES_PER_KEY = 8n;
 
 export interface ForsSecretKey {
   readonly params: ForsParams;

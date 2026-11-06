@@ -23,7 +23,8 @@ import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 
 import { sepolia } from 'viem/chains';
 
 import { deployment, requireContract } from '../../deployments/index.ts';
-import { commitmentOf, masterKey, REGISTRY_ABI, signAction, signRotation } from './ens/ens.ts';
+import { commitmentOf, currentKey, masterKey, REGISTRY_ABI, signAction, signRotation } from './ens/ens.ts';
+import { SIGNATURES_PER_KEY } from '@opaque/pq-wallet';
 
 if (deployment.network.chainId !== sepolia.id) throw new Error('run with OPAQUE_NETWORK=sepolia');
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +37,8 @@ const pub = createPublicClient({ chain: sepolia, transport: rpc });
 const deployer = privateKeyToAccount(readFileSync(join(DIR, 'deployer.key'), 'utf8').trim() as Hex);
 const REGISTRY = requireContract('pqKeyRegistry') as Address;
 const ADMIN_SLOT = '0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103'; // EIP-1967
-const MAX_USES = 32n;
+// Every new guard key: the registry then refuses a 9th signature.
+const MAX_USES = SIGNATURES_PER_KEY;
 const ADMIN_ABI = parseAbi([
   'function create(address guardian) returns (address)',
   'function adminOf(address guardian) view returns (address)',
@@ -111,6 +113,11 @@ d.admin.factory ??= await deploy('PQAdmin.sol', 'PQAdminFactory', [REGISTRY]); s
 d.admin.demo.v1 ??= await deploy('DemoProtocol.sol', 'DemoProtocolV1', []); save();
 d.admin.demo.v2 ??= await deploy('DemoProtocol.sol', 'DemoProtocolV2', []); save();
 d.admin.demo.factory ??= await deploy('DemoProtocol.sol', 'DemoProtocolFactory', [d.admin.demo.v1]); save();
+// The second demo: a beacon-proxied protocol with AccessControl roles (DemoRolesProtocol.sol).
+d.admin.rolesDemo ??= {};
+d.admin.rolesDemo.v1 ??= await deploy('DemoRolesProtocol.sol', 'DemoRolesV1', []); save();
+d.admin.rolesDemo.v2 ??= await deploy('DemoRolesProtocol.sol', 'DemoRolesV2', []); save();
+d.admin.rolesDemo.factory ??= await deploy('DemoRolesProtocol.sol', 'DemoRolesFactory', [d.admin.rolesDemo.v1]); save();
 d.admin.deployedAtBlock ??= Number(await pub.getBlockNumber()); save();
 const FACTORY = d.admin.factory as Address;
 const DEMO = d.admin.demo as { factory: Address; v1: Address; v2: Address };
@@ -188,6 +195,9 @@ const feeCall = (n: bigint) => encodeFunctionData({ abi: DEMO_ABI, functionName:
 const thief = await signed(masterKey(randomBytes(32), 'thief', 0), protocol, feeCall(666n));
 if (!carries(await revertData(deployer.address, pqAdmin, thief()), 'BadSignature()')) throw new Error('the admin acted on another key\'s signature, or failed otherwise');
 log('a FORS+C signature from another key: refused by the registry, BadSignature');
+
+// The key in force, handed over first if it has signed 7 times: no key signs a 9th.
+await currentKey({ master, label: 'opaque/v1/admin/guard', account: team.address, chainId: BigInt(sepolia.id), registry: REGISTRY, stateOf, send: (to, data) => send(deployer, to, data) });
 
 // 4. The real signature for one fee, replayed for another.
 const fee = (await read<bigint>(protocol, 'fee')) + 1n;

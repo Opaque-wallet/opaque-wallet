@@ -39,6 +39,11 @@ import { decodeIntentPlaintext, openBulk, releaseTag } from './sealed-intent.ts'
 
 export interface SettlerOptions {
   readonly executor: OpaqueExecutor;
+  /**
+   * One line per step a payment takes here, for an operator to watch: what the settler opened, that
+   * the proof verified and the attester signed. Only what this box already sees; never a note secret.
+   */
+  readonly trace?: (line: string) => void;
   /** Shared with CRE: checks decision tags, and MACs the release the egress trusts. */
   readonly credentialMac: Uint8Array;
   readonly policyVersion: string;
@@ -295,6 +300,8 @@ export function createSettler(options: SettlerOptions): Settler {
         return;
       }
       const checked = spend;
+      const units = BigInt(checked.scope.denomination);
+      options.trace?.(`opened payment ${String(intentId).slice(0, 10)}…: one ${units >= 10n ** 12n ? `${Number(units) / 1e18} ETH` : `${Number(units) / 1e6} USDC`} note to ${String(checked.recipient).slice(0, 10)}…, ${checked.mode === 'RING_8' ? `hiding among a ring of ${checked.ring.length}` : 'one note, not in a ring'}`);
       await oneAtATime(async () => {
         const at = now();
         let attested = { ...checked, ...beside } as PrivateSpend;
@@ -316,7 +323,9 @@ export function createSettler(options: SettlerOptions): Settler {
           // note between the read and the signature.
           await options.spendable?.(checked);
           const key = await options.attester.current();
+          const started = Date.now();
           attested = attestRingSpend({ spend: checked, identity: identityFor(checked.scope), ...key });
+          options.trace?.(`ring proof verified in ${((Date.now() - started) / 1000).toFixed(1)} s; attested with the attester's FORS+C key${key.generation === undefined ? '' : ` (generation ${key.generation}`}, signature ${key.useCount + 1n}${key.generation === undefined ? '' : ')'}`);
           attesting.set(nullifier, intentId);
           attestedAt.set(nullifier, [...recent, Number(at)]);
           signed = { useCount: key.useCount, ...(key.generation === undefined ? {} : { generation: key.generation }) };

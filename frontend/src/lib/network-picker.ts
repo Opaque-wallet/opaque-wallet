@@ -70,6 +70,24 @@ export function networkPicker(button: HTMLButtonElement, current: WalletPage): v
       sheet.append(row);
     }
   }
+  // Post-quantum protection for what people already have, with no wallet to switch to: pages of the
+  // Sepolia build, so on the site, not in the extension, which bundles only the wallets.
+  sheet.append(Object.assign(document.createElement('p'), { className: 'net-group', textContent: 'Keep what you have · Sepolia' }));
+  const inExtension = location.protocol === 'chrome-extension:';
+  for (const [page, name, note] of [
+    ['vault', 'Q-Day vault', 'Keep MetaMask: only a FORS+C key takes funds out'],
+    ['quantum-safe', 'Quantum-safe admin', 'Any protocol\'s admin keys, moved to a FORS+C key'],
+  ] as const) {
+    const row = document.createElement('a');
+    row.className = 'net-row';
+    row.dataset['tool'] = page;
+    row.href = inExtension ? `https://www.opaque.credit/${sepolia.network.sitePath}${page}` : `${dirOf(sepolia.network.sitePath)}${page}.html`;
+    if (inExtension) { row.target = '_blank'; row.rel = 'noopener'; }
+    row.innerHTML = '<i class="tok tok-eth">E</i><span><b></b><small></small></span>';
+    row.querySelector('b')!.textContent = name;
+    row.querySelector('small')!.textContent = note;
+    sheet.append(row);
+  }
   sheet.append(Object.assign(document.createElement('p'), { className: 'fine-print', textContent: 'Each network keeps its own keys and notes. Switching opens that network\'s wallet and never moves funds.' }));
   document.body.append(sheet);
   button.addEventListener('click', () => sheet.showModal());

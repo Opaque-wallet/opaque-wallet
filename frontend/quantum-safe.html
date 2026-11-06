@@ -46,6 +46,7 @@
   .grow { flex: 1 1 200px; }
   .words { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: w; }
   .words li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--ink); font: 500 15px var(--mono); counter-increment: w; }
+  .key-words:not([hidden]) { display: grid; gap: 12px; }
   .words li::before { content: counter(w) ". "; color: var(--faint); }
   .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; font-size: 15px; }
   .kv dt { color: var(--faint); } .kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
@@ -62,6 +63,7 @@
   .keys li.yours span { color: var(--soft); }
   .keys li.safe { border-color: rgba(255, 122, 24, 0.45); }
   .keys li.safe span { color: var(--orange); font-weight: 600; }
+  .keys li.info { border-style: dashed; color: var(--muted); }
   footer { padding-block: 28px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
 </style>
 </head>
@@ -85,17 +87,17 @@
       <h2><i>2</i>Your post-quantum guard key</h2>
       <p>A FORS+C key from 12 new words, the same key as your <a href="/sepolia/vault">Q-Day vault</a>'s. It is its own secret: nothing about your ECDSA key or a MetaMask signature can rebuild it, so a cracked ECDSA key can't either.</p>
       <div class="row" id="key-make"><button class="primary" id="key-new" type="button">Make a guard key</button><button id="key-have" type="button">I have the words</button></div>
-      <div id="key-words" hidden><ol class="words" id="words"></ol></div>
+      <div class="key-words" id="key-words" hidden><ol class="words" id="words"></ol><div class="row"><button id="key-copy" type="button">Copy the 12 words</button></div></div>
       <div class="row" id="key-enter" hidden><input class="grow" id="key-phrase" type="text" autocomplete="off" spellcheck="false" placeholder="your 12 words"><button id="key-use" type="button">Use these words</button></div>
       <dl class="kv" id="key-info" hidden><dt>Guard key</dt><dd id="key-pk"></dd><dt>In the registry</dt><dd id="key-reg"></dd><dt>Signatures left</dt><dd id="key-left"></dd></dl>
-      <div class="row"><button class="primary" id="key-register" type="button" hidden>Register the guard key (one MetaMask transaction)</button></div>
+      <div class="row"><button class="primary" id="key-register" type="button" hidden>Register the guard key (one MetaMask transaction)</button><button id="key-show" type="button" hidden>Show my 12 words</button></div>
       <p class="status" id="key-status" role="status"></p>
     </article>
 
     <article class="step locked" id="s-contract">
       <h2><i>3</i>Your contract</h2>
-      <p>Paste a contract your wallet administers. The page finds its admin keys: an Ownable owner, an OpenZeppelin ProxyAdmin or EIP-1967 admin, an AccessControl admin role. No contract to try? Make a demo protocol: an OpenZeppelin upgradeable proxy with two admin keys, as real protocols have.</p>
-      <div class="row"><input class="grow" id="c-address" type="text" spellcheck="false" placeholder="0x… your contract on Sepolia"><button id="c-inspect" type="button">Find its admin keys</button><button id="demo-make" type="button">Make a demo protocol</button></div>
+      <p>Paste a contract your wallet administers. The page finds every admin key it can see: an Ownable owner, the proxy's upgrade admin (an OpenZeppelin ProxyAdmin, an EIP-1967 admin or a beacon), every AccessControl role and who holds it, and an AccessManager's admin role. It also lists a Safe's owners and names UUPS upgrades. No contract to try? Make a demo: an upgradeable proxy with two admin keys, or a beacon proxy with roles.</p>
+      <div class="row"><input class="grow" id="c-address" type="text" spellcheck="false" placeholder="0x… your contract on Sepolia"><button id="c-inspect" type="button">Find its admin keys</button><button id="demo-make" type="button">Make a demo protocol</button><button id="demo-roles" type="button">Make a demo with roles</button></div>
       <ul class="keys" id="c-keys"></ul>
       <p class="status" id="c-status" role="status"></p>
     </article>

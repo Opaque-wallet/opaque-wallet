@@ -56,6 +56,8 @@ const HTTP_STATUS: Partial<Record<ErrorCode, number>> = {
 
 export interface ExecutorServerOptions {
   readonly executor?: OpaqueExecutor;
+  /** One line when a payment comes out of the mesh here, for an operator to watch. */
+  readonly trace?: (line: string) => void;
   readonly now?: () => UnixSeconds;
   /**
    * The confidential workflow's HTTP trigger. Optional: without it the intent
@@ -299,6 +301,7 @@ export function createExecutorServer(options: ExecutorServerOptions = {}): Execu
       // The hash already matched inside take(). The intent is the committed
       // header plus the reassembled ciphertext, revived like any other.
       const intent = reviveIntent({ ...(c['intent'] as object), encryptedPayload: toHex(done.payload) });
+      options.trace?.(`a payment came out of the mesh: ${c['total']} chunks through three relays, ${(done.payload.length / 1024 / 1024).toFixed(2)} MiB reassembled at the last hop, still sealed`);
       return send(res, 200, await submitIntent(intent));
     }
 

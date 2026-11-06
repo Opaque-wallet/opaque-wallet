@@ -6,6 +6,7 @@
 |---|---|
 | [`PQAdmin.sol`](PQAdmin.sol) | `PQAdmin`, which calls out only on a FORS+C signature from its guardian's key in `PQKeyRegistry`, and `PQAdminFactory`, which makes one per guardian at a CREATE2 address known before it exists |
 | [`DemoProtocol.sol`](DemoProtocol.sol) | A protocol to try it on: an OpenZeppelin `TransparentUpgradeableProxy` with two admin keys, its `ProxyAdmin` (upgrades) and an owner (the fee) |
+| [`DemoRolesProtocol.sol`](DemoRolesProtocol.sol) | A second one, with the keys real protocols spread around: an OpenZeppelin `UpgradeableBeacon` (upgrades) and three AccessControl roles (`DEFAULT_ADMIN_ROLE`, `FEE_ROLE`, `PAUSER_ROLE`) |
 
 - **Tests:** [`contracts/test/admin/PQAdmin.t.sol`](../../../test/admin/PQAdmin.t.sol).
 - **On-chain proof:** [`backend/ethereum/admin-sepolia.ts`](../../../../backend/ethereum/admin-sepolia.ts).
@@ -14,6 +15,21 @@
 ## Why
 
 The largest Q-Day risk across Ethereum is admin keys: proxy admins, `owner()` roles and Safe signers, nearly all of them ECDSA. Whoever cracks one upgrades the protocol and drains it. A protocol doesn't need a new chain to fix that. It needs its admin to be something only a post-quantum key can drive.
+
+## What the page finds
+
+| Admin power | How it's found | How it's handed over |
+|---|---|---|
+| An Ownable owner (`owner()`) | Read | `transferOwnership(pqAdmin)`, then a signed `acceptOwnership()` for `Ownable2Step` |
+| Upgrades through an OpenZeppelin `ProxyAdmin` | The EIP-1967 admin slot, then its `owner()` | The `ProxyAdmin`'s `transferOwnership` |
+| Upgrades through an EIP-1967 admin that is a wallet | The admin slot | `changeAdmin(pqAdmin)` |
+| Upgrades through a beacon | The EIP-1967 beacon slot, then the beacon's `owner()` | The beacon's `transferOwnership` |
+| UUPS upgrades | The implementation slot, with no admin or beacon | Listed: they follow the owner or the role the contract checks, handed over above |
+| Every AccessControl role, and who holds it | Every `RoleGranted` log: one query where the RPC allows it, else 49,000-block windows back to before the contract existed. The usual role names are checked too, whatever the logs. | `grantRole(role, pqAdmin)` then `renounceRole(role, wallet)`: roles that administer others after them, `DEFAULT_ADMIN_ROLE` last |
+| An OpenZeppelin AccessManager's admin role | `authority()`, then `hasRole(0, …)` | `grantRole(0, pqAdmin, 0)` then `renounceRole(0, wallet)` |
+| A Safe's owners | `getOwners()`, `getThreshold()` | Listed only: this page can't swap a Safe's owners yet |
+
+Keys held by other addresses are listed as theirs: each holder hands over their own.
 
 ## How it works
 
@@ -28,6 +44,7 @@ The largest Q-Day risk across Ethereum is admin keys: proxy admins, `owner()` ro
 - **Anyone may submit a signed call.** Paying for it authorizes nothing.
 - **The guardian is the wallet's own address**, and its key is the guard key the wallet registered. That's the same key the [Q-Day vault](../vault/README.md) and [`PQGuardHook`](../uniswap/README.md) use.
 - **Rotation changes nothing here.** `PQAdmin` names the guardian, not a key, so when the key rotates the admin keeps working.
+- **No guard key signs more than 8 times.** New guard keys are registered for 8, so the registry itself refuses a 9th. A key registered for 32 before that still rotates at 7 uses, and the page checks before every signature. At 8 signatures a FORS+C key keeps 2⁻¹⁶⁰ against forgery.
 - **`PQAdminFactory.create` refuses a guardian with no key.** A contract handed to an admin no key can drive would be locked for good.
 
 ## On Sepolia
@@ -36,6 +53,7 @@ The largest Q-Day risk across Ethereum is admin keys: proxy admins, `owner()` ro
 |---|---|
 | `PQAdminFactory` | [`0xd5fd1bed7558d1cdad40461547aec57d43d0b490`](https://sepolia.etherscan.io/address/0xd5fd1bed7558d1cdad40461547aec57d43d0b490) |
 | `DemoProtocolFactory` / V1 / V2 | [`0xe093275c213795bf2689d02a86bd8fe92d53aa70`](https://sepolia.etherscan.io/address/0xe093275c213795bf2689d02a86bd8fe92d53aa70) / [`0x1c21de8c…3d52`](https://sepolia.etherscan.io/address/0x1c21de8c4ec284860ecd9df5d2d5b2e954943d52) / [`0x93d1d359…349f`](https://sepolia.etherscan.io/address/0x93d1d3593d1607d61a91a0509fc49cb6ccbb349f) |
+| `DemoRolesFactory` / V1 / V2 | [`0x4608e4a4c42dcdd74b0cf9fe243937bcdad9631b`](https://sepolia.etherscan.io/address/0x4608e4a4c42dcdd74b0cf9fe243937bcdad9631b) / [`0x82a095d3…`](https://sepolia.etherscan.io/address/0x82a095d381aa26061c0de599f21821eacb8fb4af) / [`0x24e07bc1…`](https://sepolia.etherscan.io/address/0x24e07bc15b50754e32144fbf315dd37833a287f1) |
 | The example protocol, and its `PQAdmin` | [`0xbc8f8ff74223696dd76287330466d8d24f1687a0`](https://sepolia.etherscan.io/address/0xbc8f8ff74223696dd76287330466d8d24f1687a0), [`0x0833a5525ecf0df46d69c8eb1a9a7f5e53d7dcfb`](https://sepolia.etherscan.io/address/0x0833a5525ecf0df46d69c8eb1a9a7f5e53d7dcfb) |
 
 What `admin-sepolia.ts` showed on chain, with the real registry and real FORS+C signatures:
@@ -50,7 +68,7 @@ What `admin-sepolia.ts` showed on chain, with the real registry and real FORS+C 
 ## Run it
 
 ```bash
-cd contracts && forge test --match-path test/admin/PQAdmin.t.sol                 # 11 tests
+cd contracts && forge test --match-path test/admin/PQAdmin.t.sol                 # 12 tests
 cd backend && OPAQUE_NETWORK=sepolia node --use-system-ca ethereum/admin-sepolia.ts
 cd backend && node --use-system-ca scripts/e2e-admin.ts                           # the page, with a stand-in MetaMask
 ```
@@ -59,5 +77,6 @@ cd backend && node --use-system-ca scripts/e2e-admin.ts                         
 
 - **Gas:** each signed call carries a 9,251-byte signature and its on-chain check, about 430k gas.
 - **The guardian's own address stays exposed,** like every ECDSA address. Only what it handed to the `PQAdmin` is protected.
-- **Not covered:** Safe multisigs. A `PQAdmin` can be a Safe owner through `approveHash`, but this page doesn't do that yet.
+- **Not covered:** swapping a Safe's owners. The page lists them; a `PQAdmin` could be a Safe owner through `approveHash`, but this page doesn't do that yet.
+- **Only what the chain shows.** A custom admin variable that isn't `owner()`, a role or a standard proxy slot isn't found.
 - **Testnet only.** Tested, not audited.

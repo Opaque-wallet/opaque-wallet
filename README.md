@@ -7,8 +7,8 @@
 [![Uniswap v4](https://img.shields.io/badge/Uniswap%20v4-post--quantum%20hooks-FF007A?style=flat-square)](partner-docs/ethglobal-mumbai/uniswap.md)
 [![ENSv2](https://img.shields.io/badge/ENSv2-names%20held%20by%20FORS%2BC-0080BC?style=flat-square)](partner-docs/ethglobal-mumbai/ens.md)
 [![EF](https://img.shields.io/badge/Ethereum%20Foundation-CROPS%20·%20anon--rpc%20·%20EIP--8141-627EEA?style=flat-square)](partner-docs/ethglobal-mumbai/ethereum-foundation.md)
-[![forge](https://img.shields.io/badge/forge-153%20passed-FF7A18?style=flat-square)](contracts/)
-[![backend](https://img.shields.io/badge/backend-394%20passed-FF7A18?style=flat-square)](backend/)
+[![forge](https://img.shields.io/badge/forge-154%20passed-FF7A18?style=flat-square)](contracts/)
+[![backend](https://img.shields.io/badge/backend-396%20passed-FF7A18?style=flat-square)](backend/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-FF7A18?style=flat-square)](LICENSE)
 
 **Opaque is the post-quantum security layer for Ethereum.** It moves everything ECDSA guards today to hash-based keys, and makes payments private:
@@ -36,7 +36,7 @@ It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumb
 > - **On the EIP-8141 devnet:** the transaction itself is signed by FORS+C alone, in 76,430 gas.
 > - **Leaving:** every note can leave its pool with every Opaque server switched off.
 > - **Any protocol:** one button hands a contract's admin keys to a contract that acts only on a FORS+C signature.
-> - **Tests:** 153 contract tests, 394 backend tests and eight browser suites check it against the live chains.
+> - **Tests:** 154 contract tests, 396 backend tests and eight browser suites check it against the live chains.
 
 ## Contents
 
@@ -184,7 +184,7 @@ Nothing below rests on factoring or discrete logs.
 
 | Layer | Primitive | Size and cost | Why this one |
 |---|---|---|---|
-| **Account, attester, ENS controller and LP guard signatures** | **FORS+C**, a few-time hash-based signature over keccak ([`fors.ts`](packages/pq-wallet/src/fors.ts)). FORS is the few-time layer inside SLH-DSA (FIPS 205). A key is `k` Merkle trees of height `a`; a signature reveals one leaf and its path in each tree. | **Sepolia:** k=32, a=8; 9,251 bytes; 32 uses per key. **Devnet:** k=13, a=13; about 5.9 KB; 8 uses per key. About 140 ms to sign. | It's keccak only, so the EVM checks it as a loop of hashes: 260k gas (`ForsVerifier`, k=32 a=8), or 53.6k (`LeanFors`, k=13 a=13). It's few-time, so every use is counted, locally and on chain (`PQKeyRegistry.consume`). Each key commits to its successor in advance, and the wallet rotates before the budget runs out. |
+| **Account, attester, ENS controller and LP guard signatures** | **FORS+C**, a few-time hash-based signature over keccak ([`fors.ts`](packages/pq-wallet/src/fors.ts)). FORS is the few-time layer inside SLH-DSA (FIPS 205). A key is `k` Merkle trees of height `a`; a signature reveals one leaf and its path in each tree. | **Sepolia:** k=32, a=8; 9,251 bytes; at most 8 signatures per key (the registry allows 32). **Devnet:** k=13, a=13; about 5.9 KB; 8 uses per key. About 140 ms to sign. | It's keccak only, so the EVM checks it as a loop of hashes: 260k gas (`ForsVerifier`, k=32 a=8), or 53.6k (`LeanFors`, k=13 a=13). It's few-time, so every use is counted, locally and on chain (`PQKeyRegistry.consume`). Each key commits to its successor in advance, and the wallet rotates before the budget runs out. |
 | **Ring proof** | **ZKBoo**: MPC-in-the-head over an AES-128 circuit, made non-interactive with Fiat-Shamir ([`zkboo.ts`](backend/zk/zkboo.ts)) | 1.08 MiB; 219 repetitions, so `(2/3)^219 < 2⁻¹²⁸`; 39,264 AND gates per repetition; 2.2 s to prove, 2.0 s to verify | Hashes and a block cipher only, with no trusted setup. AES-128 rather than keccak as the one-way function: about 5,760 AND gates per call against keccak's 38,400, the same reasoning as Picnic's. |
 | **Note commitments and nullifiers** | **AES-128** under the note secret, over pool-bound blocks derived with keccak | 16 bytes, right-padded into `bytes32` | The same function the proof proves, and [`AES128.sol`](contracts/src/opaque/lib/AES128.sol) recomputes it on chain for the exit. The nullifier binds the secret and the pool, never the recipient, so one note can't be spent once per recipient. |
 | **Transport** | **ML-KEM-768** per hop, HKDF-SHA-256, AES-256-GCM ([`transport.ts`](backend/mesh/transport.ts)) | 1,185 bytes per layer; padding classes of 4, 16 and 64 KiB | There's no X25519 anywhere in the path. ML-KEM-768 comes from `@noble/post-quantum`, because Node 22 and browsers have none. |
@@ -284,6 +284,7 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 | ENSv2's roles **move with the token**. | Hold the token in a contract whose only authority is a FORS+C key. No ENS change was needed. |
 | The devnet's ethrex **refuses `eth_call` from a contract** and takes no state overrides, so a v4 swap can't be simulated. | Quote from PoolManager storage (`extsload`) with v4's swap-step math. It matches the router to the unit. |
 | The alt mempool sometimes **drops a transaction it accepted**. | FORS signing is deterministic, so the wallet re-broadcasts the *same bytes* to the gateway and the miner until mined. No key signs twice for one nonce. |
+| A FORS+C key **weakens with every signature**: at the 32 the registry allows, 2⁻⁹⁹ against forgery, about 2⁻⁴⁹ against a quantum search. | No key signs more than 8 (`SIGNATURES_PER_KEY`). The wallet holds 25 of its 32 back, so ordinary signing stops at 7 and the 8th is the rotation. The attester rotates with 4 to spare. New guard and name keys are registered for 8, so the registry itself refuses a 9th. No account address changed. |
 | A crash between signing and sending could make a few-time key **sign twice**. | A reservation is committed before a signature exists. A crash burns that index, and local and chain counters are never reconciled downward. |
 | Pimlico prices Sepolia gas at about **1.15 gwei**, while the chain's own price is near zero. | Make private keeps 0.004 ETH back for gas, and a bundler refusal is explained in plain words. |
 
@@ -295,7 +296,7 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 | Signing | About 140 ms in Node; 231–313 ms in Chromium |
 | On-chain FORS+C check | 260k gas (`ForsVerifier`, k=32 a=8) · 167k (k=13 a=13) · **53.6k** (`LeanFors`, k=13 a=13) |
 | EIP-8141 VERIFY frame | **76,430** of 100,000 gas |
-| Uses per key | 32 on Sepolia, 8 on the devnet, then a precommitted next key |
+| Signatures per key | At most 8, the rotation included: 2⁻¹⁶⁰ against forgery, about 2⁻⁸⁰ against a quantum search. Sepolia keys are registered for 32 and rotate at 8; the devnet's are registered for 8. |
 | Ring | 8 members, fixed note sizes |
 | ZKBoo proof | 1.08 MiB, 219 repetitions, 2⁻¹²⁸ soundness, 2.2 s to prove, 2.0 s to verify |
 | Mesh | 3 hops of 6 relays, 1,185 bytes per layer, about 35 chunks of 32,640 bytes per payment |
@@ -303,7 +304,7 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 | Exit delay | 300 s on Sepolia (days for a real pool) |
 | anon-rpc read | About 1 s |
 | Pools | Sepolia: 7 tUSDC (1, 2, 5, 10, 20, 50, 100) and 3 WETH (0.0005, 0.001, 0.005 ETH). Devnet: 7 pqUSDC. |
-| Tests | 153 forge, 394 backend, eight Playwright suites against the live chains |
+| Tests | 154 forge, 396 backend, eight Playwright suites against the live chains |
 
 ## Deployment addresses
 
@@ -334,8 +335,8 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 
 | Check | Result |
 |---|---|
-| `cd contracts && forge test` | 153 passed, 1 skipped |
-| `cd backend && npm test` | 394 passed |
+| `cd contracts && forge test` | 154 passed, 1 skipped |
+| `cd backend && npm test` | 396 passed |
 | `scripts/e2e-sepolia.ts` (in `backend/`, with `node --use-system-ca`) | 33 checks in Chromium, against the live site and Sepolia: a private payment, a v4 swap, a name claimed and paid at a one-time address, the stealth sweep, anon-rpc, and **a note leaving its pool with every Opaque server blocked** |
 | `scripts/e2e-sepolia-eth.ts` | 0.0015 ETH made private as 0.001 + 0.0005 notes in one operation, then sent privately. The payee holds exactly 0.0015 WETH, with no transfer from the wallet's address. |
 | `scripts/e2e-eth-connect.ts` | 19 checks: the extension's provider found by EIP-6963, connected, a mined transaction, a rejection returned as 4001 |
@@ -368,7 +369,7 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 - **One operator, for now.** Opaque runs all six relays and the attester. **Before mainnet, the relays will be run by multiple independent operators.** The exit already works without any of it.
 - **Hash-based keys have costs.**
   - A signature is about 9 KB.
-  - Each key signs a set number of times before it rotates.
+  - No key signs more than 8 times, its rotation included. A few-time key weakens with each signature (to 2⁻⁹⁹ at 32), so the wallet, the attester, the name keys and the guard pages all hand over at 8.
   - A stealth payer holds the one-time account's keys until the payee sweeps, which the wallet does at once.
 - **Amounts are public, and the anonymity set is the ring.** Notes have fixed sizes, and each one hides among 8, not the whole pool.
 - **Timing isn't hidden.** A payment is about 35 chunks and a query is one.

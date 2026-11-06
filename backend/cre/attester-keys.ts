@@ -37,7 +37,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 
 import { ProtocolFailure, type Address, type Bytes32, type Hex } from '@opaque/protocol-types';
 import { asChainId } from '@opaque/protocol-types/codecs.js';
-import { canonical, encodeSignature, forsSchemeId, keyGen, pkCommitment, pqDigest, sign, utf8 } from '@opaque/pq-wallet';
+import { canonical, encodeSignature, forsSchemeId, keyGen, pkCommitment, pqDigest, sign, SIGNATURES_PER_KEY, utf8 } from '@opaque/pq-wallet';
 // Not in pq-wallet's pinned public API; imported from source, as
 // chain/test/registry-digest.test.ts does.
 import { rotationPayload, takeoverPayload } from '../../packages/pq-wallet/src/registry.ts';
@@ -71,6 +71,12 @@ export interface AttesterKeysOptions {
   readonly maxUses?: bigint;
   /** Rotate once this few signatures are left. Must be at least 1: rotation spends one. */
   readonly rotateWhenLeft?: bigint;
+  /**
+   * The most signatures a key makes, in flight ones and the rotation included, whatever the
+   * registry allows it (SIGNATURES_PER_KEY: 8 keeps a FORS+C key at 2^-160 against forgery).
+   * It only brings rotation forward; the registry's budget still decides what a key may sign.
+   */
+  readonly signaturesPerKey?: bigint;
   readonly now?: () => bigint;
   /** How far past the last known generation a restart will look. */
   readonly searchGenerations?: number;
@@ -165,6 +171,8 @@ export function createAttesterKeys(options: AttesterKeysOptions): AttesterKeys {
   const maxUses = options.maxUses ?? 32n;
   const rotateWhenLeft = options.rotateWhenLeft ?? 4n;
   if (rotateWhenLeft < 1n) throw new ProtocolFailure('INVALID_INPUT', 'rotation needs a signature left to spend');
+  const perKey = options.signaturesPerKey ?? SIGNATURES_PER_KEY;
+  if (perKey <= rotateWhenLeft) throw new ProtocolFailure('INVALID_INPUT', 'a key must have more signatures than are kept for rotating');
   const now = options.now ?? (() => BigInt(Math.floor(Date.now() / 1000)));
   const search = options.searchGenerations ?? 256;
 
@@ -308,7 +316,11 @@ export function createAttesterKeys(options: AttesterKeysOptions): AttesterKeys {
         const rotation = `rotate:${g}:${at}`;
         // A rotation already signed for this state goes again first: its
         // signature is counted, so it may be the one that used up the budget.
-        const rotate = pending?.move.at === rotation || (used < limit && limit - used <= rotateWhenLeft);
+        // Rotate with rotateWhenLeft signatures to spare, counted from the per-key budget when that is
+        // the smaller: a key past it (one signed before the budget existed) rotates at once, by the
+        // registry's own budget, which it still has.
+        const soft = perKey < limit ? perKey : limit;
+        const rotate = pending?.move.at === rotation || (used < limit && (limit - used <= rotateWhenLeft || used + rotateWhenLeft >= soft));
         const takeover = !rotate && used >= limit;
 
         if (rotate) {

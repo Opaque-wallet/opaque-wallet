@@ -24,7 +24,7 @@ import type { Bytes32 } from '@opaque/protocol-types';
 
 import { deployment, requireContract } from '../../deployments/index.ts';
 import { userActionPayload } from '../../packages/pq-wallet/src/registry.ts';
-import { masterKey, REGISTRY_ABI } from './ens/ens.ts';
+import { currentKey, masterKey, REGISTRY_ABI } from './ens/ens.ts';
 
 if (deployment.network.chainId !== sepolia.id) throw new Error('run with OPAQUE_NETWORK=sepolia');
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -89,8 +89,9 @@ if (vault === undefined) {
 const keyFile = join(DIR, 'uniswap-guard.master');
 if (!existsSync(keyFile)) throw new Error('run uniswap-sepolia.ts first: it registers this wallet\'s guard key');
 const master = Buffer.from(readFileSync(keyFile, 'utf8').trim().slice(2), 'hex');
-const key = masterKey(master, 'opaque/v1/uniswap/guard', 0);
-const stateOf = async () => pub.readContract({ address: REGISTRY, abi: REGISTRY_ABI, functionName: 'stateOf', args: [deployer.address] }) as Promise<{ useCount: bigint }>;
+const stateOf = async () => pub.readContract({ address: REGISTRY, abi: REGISTRY_ABI, functionName: 'stateOf', args: [deployer.address] }) as Promise<{ pkCommitment: Hex; useCount: bigint }>;
+// The generation in force, handed over first if it has signed 7 times: no key signs a 9th.
+const key = await currentKey({ master, label: 'opaque/v1/uniswap/guard', account: deployer.address, chainId: BigInt(sepolia.id), registry: REGISTRY, stateOf, send: (to, data) => send(to, data) });
 
 // 1. Into the vault, with the wallet's ordinary ECDSA transaction.
 const amount = parseEther('0.001');

@@ -46,6 +46,7 @@
   .grow { flex: 1 1 200px; }
   .words { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: w; }
   .words li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--ink); font: 500 15px var(--mono); counter-increment: w; }
+  .key-words:not([hidden]) { display: grid; gap: 12px; }
   .words li::before { content: counter(w) ". "; color: var(--faint); }
   .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; font-size: 15px; }
   .kv dt { color: var(--faint); } .kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
@@ -79,10 +80,10 @@
       <h2><i>2</i>Your post-quantum guard key</h2>
       <p>A FORS+C key from 12 new words. It is its own secret: nothing about your ECDSA key or a MetaMask signature can rebuild it, so a cracked ECDSA key can't either. Write the words down: they are the only way to open the vault.</p>
       <div class="row" id="key-make"><button class="primary" id="key-new" type="button">Make a guard key</button><button id="key-have" type="button">I have the words</button></div>
-      <div id="key-words" hidden><ol class="words" id="words"></ol></div>
+      <div class="key-words" id="key-words" hidden><ol class="words" id="words"></ol><div class="row"><button id="key-copy" type="button">Copy the 12 words</button></div></div>
       <div class="row" id="key-enter" hidden><input class="grow" id="key-phrase" type="text" autocomplete="off" spellcheck="false" placeholder="your 12 words"><button id="key-use" type="button">Use these words</button></div>
       <dl class="kv" id="key-info" hidden><dt>Guard key</dt><dd id="key-pk"></dd><dt>In the registry</dt><dd id="key-reg"></dd><dt>Signatures left</dt><dd id="key-left"></dd></dl>
-      <div class="row"><button class="primary" id="key-register" type="button" hidden>Register the guard key (one MetaMask transaction)</button></div>
+      <div class="row"><button class="primary" id="key-register" type="button" hidden>Register the guard key (one MetaMask transaction)</button><button id="key-show" type="button" hidden>Show my 12 words</button></div>
       <p class="status" id="key-status" role="status"></p>
     </article>
 

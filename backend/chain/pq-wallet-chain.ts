@@ -36,7 +36,7 @@ import { toPackedUserOperation } from 'viem/account-abstraction';
 
 import { ProtocolFailure, type Address, type Bytes32, type Hex, type PqWallet, type TxHash } from '@opaque/protocol-types';
 import { asAddress, asBytes32, asChainId } from '@opaque/protocol-types/codecs.js';
-import { createPqWallet, encodeSignature, FORS_C_DEFAULT, keyGen, pqDigest, sign, type WalletOptions } from '@opaque/pq-wallet';
+import { createPqWallet, encodeSignature, FORS_C_DEFAULT, SIGNATURES_PER_KEY, keyGen, pqDigest, sign, type WalletOptions } from '@opaque/pq-wallet';
 
 import { deployment, entryPoint, requireContract } from '../../deployments/index.ts';
 // Not in pq-wallet's pinned public API; imported from source, as
@@ -255,7 +255,7 @@ export function createLiveWalletChain(options: LiveWalletChainOptions): WalletCh
 }
 
 const YEAR = 365n * 86_400n;
-export { ACCOUNT_MAX_USES, PHRASE_ROTATION_DEADLINE };
+export { ACCOUNT_MAX_USES, PHRASE_ROTATION_DEADLINE, SIGNATURES_PER_KEY };
 
 export interface LivePqWalletOptions {
   readonly signerStore: SignerStore;
@@ -279,7 +279,11 @@ export function livePqWalletOptions(options: LivePqWalletOptions): WalletOptions
   });
   return {
     walletId: options.walletId ?? 'opaque-account', signerStore: options.signerStore, walletStore: options.walletStore, chain,
-    authority: ARC_AUTHORITY, params: FORS_C_DEFAULT, maxUses: ACCOUNT_MAX_USES, lifecycleReserve: 2n,
+    // The registry allows each key 32 signatures (that number is in the account's address), but no key
+    // signs more than SIGNATURES_PER_KEY: ordinary signing stops at 7 and the rest is held back, so the
+    // 8th is the rotation. Records made before this keep the reserve they were made with (2) and rotate
+    // at 7 all the same (app.ts renderBudget).
+    authority: ARC_AUTHORITY, params: FORS_C_DEFAULT, maxUses: ACCOUNT_MAX_USES, lifecycleReserve: ACCOUNT_MAX_USES - (SIGNATURES_PER_KEY - 1n),
     initialKeyEpoch: 0n, initialRotationDeadline: deadline, registryPolicy: CONTRACT_POLICY,
     nextKeyEpoch: (epoch) => epoch + 1n, nextRotationDeadline: (t) => t + YEAR,
     ...(options.seedFor === undefined ? {} : { seedFor: options.seedFor }),

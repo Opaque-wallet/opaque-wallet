@@ -31,7 +31,7 @@ import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase
 import { acceptTerms, copy, idOf, markOf, openOnboarding, setupWalletScreens, swapProgress, tokenBadge, type OpenAccount } from './lib/wallet-ui.ts';
 import { deployment, NETWORK, requireService, type SwapToken } from '../../deployments/index.ts';
 import type { SwapQuote } from '../../backend/chain/wallet-rpc.ts';
-import { oneOperationAtATime } from '../../backend/chain/pq-wallet-chain.ts';
+import { oneOperationAtATime, SIGNATURES_PER_KEY } from '../../backend/chain/pq-wallet-chain.ts';
 import { networkPicker } from './lib/network-picker.ts';
 import { ENS, ETHEREUM_COIN, ethCall, dnsEncode, isName, opaqueClaimOf, opaqueNameFree, opaqueNameOf, resolveName } from './ethereum/ens/ens-name.ts';
 import { commitmentOf, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signExecute } from '../../backend/ethereum/ens/ens.ts';
@@ -164,9 +164,12 @@ async function renderBudget(): Promise<void> {
   el('account-address').textContent = opaqueAddress;
   el('receive-address').textContent = opaqueAddress;
   el<HTMLAnchorElement>('open-explorer').href = `${ARC_EXPLORER}/address/${opaqueAddress}`;
-  const max = Number(state.maxUses);
+  // No key signs more than SIGNATURES_PER_KEY, whatever the registry allows it (32, for accounts):
+  // past 8 signatures a FORS+C key's margin falls below 2^-160 against forgery, 2^-80 against a
+  // quantum search. So the budget shown is 8, and the last of them is the rotation's.
+  const max = Math.min(Number(state.maxUses), Number(SIGNATURES_PER_KEY));
   const left = Math.max(0, max - Number(state.localSigningReservations));
-  const low = left <= Math.ceil(max / 4);
+  const low = left <= 1;
 
   el('sig-left').textContent = String(left);
   el('sig-max').textContent = `of ${max}`;
@@ -215,14 +218,16 @@ async function renderBudget(): Promise<void> {
 // on purpose: a few-time key whose replacement waited on someone noticing a
 // warning is one busy afternoon from being spent, and the old button needed a
 // funding wallet the extension does not have. The mesh exit relays the
-// rotation and pays for it, so nothing pops up here. Two of the key's 32
-// signatures are held back for exactly this, so it can always afford to go.
+// rotation and pays for it, so nothing pops up here. A key makes at most 8
+// signatures: 7 for operations, then this rotation. The rest of the 32 the
+// registry allows stays held back, so it can always afford to go.
 //
-// ONCE PER PAGE LOAD, WHATEVER HAPPENS. Signing the rotation spends one of
-// those two reserved signatures whether or not the transaction lands, so a
-// retry loop on a rotation that keeps failing would spend the second one too
-// and leave the key unable to rotate or disable at all. A failure says so and
-// stops; a reload is the retry, and a deliberate one.
+// ONCE PER PAGE LOAD, WHATEVER HAPPENS. Signing the rotation spends a
+// signature whether or not the transaction lands, so a retry loop on a
+// rotation that keeps failing would push the key past its 8 and, on a key made
+// before the 8-signature budget (two held back), leave it unable to rotate or
+// disable at all. A failure says so and stops; a reload is the retry, and a
+// deliberate one.
 let rotating = false;
 let rotated = false;
 async function autoRotate(): Promise<void> {

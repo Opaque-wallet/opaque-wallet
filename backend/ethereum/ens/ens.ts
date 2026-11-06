@@ -3,9 +3,9 @@
 // (target, exact calldata, deadline) under PQKeyRegistry's digest, which binds
 // the chain, the controller and the key's use count.
 
-import { canonical, encodeSignature, forsSchemeId, keyGen, pkCommitment, pqDigest, sign, utf8 } from '@opaque/pq-wallet';
+import { canonical, encodeSignature, forsSchemeId, keyGen, pkCommitment, pqDigest, sign, SIGNATURES_PER_KEY, utf8 } from '@opaque/pq-wallet';
 import type { Bytes32 } from '@opaque/protocol-types';
-import { encodeAbiParameters, keccak256, parseAbi, parseAbiParameters, type Address, type Hex } from 'viem';
+import { encodeAbiParameters, encodeFunctionData, keccak256, parseAbi, parseAbiParameters, type Address, type Hex } from 'viem';
 
 // Not in pq-wallet's pinned public API; imported from source, as cre/attester-keys.ts does.
 import { rotationPayload, userActionPayload } from '../../../packages/pq-wallet/src/registry.ts';
@@ -57,3 +57,33 @@ export const REGISTRY_ABI = parseAbi([
   'function rotate(address account, bytes32 newNextCommitment, uint64 newMaxUses, uint64 newRotationDeadline, bytes signature)',
 ]);
 export const CONTROLLER_ABI = parseAbi(['function execute(address target, bytes data, uint256 deadline, bytes signature) returns (bytes)']);
+
+/**
+ * The key `account` answers to now, drawn from `master` under `label`: the generation the registry
+ * holds, after handing over to the next one first if this one has signed SIGNATURES_PER_KEY - 1
+ * times, so its 8th signature is the rotation and it never signs a 9th. `send` submits a
+ * PQKeyRegistry call (anyone may: the signature is the authority) and waits for it.
+ */
+export async function currentKey(o: {
+  master: Uint8Array; label: string; account: Address; chainId: bigint; registry: Address;
+  stateOf: () => Promise<{ pkCommitment: Hex; useCount: bigint }>;
+  send: (to: Address, data: Hex) => Promise<unknown>;
+}): Promise<RegistryKey> {
+  const keyAt = (g: number) => masterKey(o.master, o.label, g);
+  const generation = async () => {
+    const pk = (await o.stateOf()).pkCommitment.toLowerCase();
+    const g = Array.from({ length: 64 }, (_, i) => i).find((i) => commitmentOf(keyAt(i)).toLowerCase() === pk);
+    if (g === undefined) throw new Error(`${o.account} answers to a key ${o.label} never made`);
+    return g;
+  };
+  const g = await generation();
+  const s = await o.stateOf();
+  if (s.useCount < SIGNATURES_PER_KEY - 1n) return keyAt(g);
+  const next = commitmentOf(keyAt(g + 2));
+  const deadline = 4_102_444_800n;
+  const signature = signRotation(keyAt(g), o.chainId, o.account, s.useCount, next, SIGNATURES_PER_KEY, deadline);
+  await o.send(o.registry, encodeFunctionData({ abi: REGISTRY_ABI, functionName: 'rotate', args: [o.account, next, SIGNATURES_PER_KEY, deadline, signature] }));
+  // A load-balanced RPC's node can lag the one that mined it.
+  for (let i = 0; i < 40 && (await generation()) === g; i++) await new Promise((r) => setTimeout(r, 3_000));
+  return keyAt(await generation());
+}

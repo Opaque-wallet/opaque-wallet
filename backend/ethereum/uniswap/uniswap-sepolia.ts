@@ -25,7 +25,7 @@ import { concat, createPublicClient, createWalletClient, encodeAbiParameters, en
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 
-import { encodeSignature, forsSchemeId, pqDigest, sign } from '@opaque/pq-wallet';
+import { encodeSignature, forsSchemeId, pqDigest, sign, SIGNATURES_PER_KEY } from '@opaque/pq-wallet';
 import type { Bytes32 } from '@opaque/protocol-types';
 
 import { deployment, requireContract } from '../../../deployments/index.ts';
@@ -36,7 +36,7 @@ import { userActionPayload } from '../../../packages/pq-wallet/src/registry.ts';
 import { ARC_AUTHORITY, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../chain/pq-wallet-chain.ts';
 import { decreaseCall, ERC20_ABI, keyOf, mintCalls, PM_ABI, POSM_ABI, quote, sqrtPriceOf, swapCalls, V4, type V4Pool } from './uniswap-v4.ts';
 import { createWalletRpcAnswerer } from '../../chain/wallet-rpc.ts';
-import { commitmentOf, masterKey, REGISTRY_ABI } from '../ens/ens.ts';
+import { commitmentOf, masterKey, REGISTRY_ABI, currentKey } from '../ens/ens.ts';
 
 // backend/ethereum, as before this file moved one folder down.
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -175,12 +175,13 @@ async function guarded(pool: V4Pool): Promise<void> {
   const keyAt = (g: number) => masterKey(master, 'opaque/v1/uniswap/guard', g);
   if (BigInt(state.pkCommitment) === 0n) {
     const register = parseAbi(['function register(bytes32 pkCommitment, bytes32 nextCommitment, uint64 maxUses, uint64 rotationDeadline)']);
-    const hash = await send(REGISTRY, encodeFunctionData({ abi: register, functionName: 'register', args: [commitmentOf(keyAt(0)) as Bytes32, commitmentOf(keyAt(1)) as Bytes32, 32n, 4_102_444_800n] }));
+    const hash = await send(REGISTRY, encodeFunctionData({ abi: register, functionName: 'register', args: [commitmentOf(keyAt(0)) as Bytes32, commitmentOf(keyAt(1)) as Bytes32, SIGNATURES_PER_KEY, 4_102_444_800n] }));
     await until('the guard key', async () => BigInt((await stateOf()).pkCommitment) !== 0n);
     state = await stateOf();
     log(`the ECDSA wallet ${deployer.address} registered a FORS+C guard key in PQKeyRegistry: https://sepolia.etherscan.io/tx/${hash}`);
   }
-  if (state.pkCommitment.toLowerCase() !== commitmentOf(keyAt(0)).toLowerCase()) throw new Error('the guard key in force is not generation 0: rotate support not written here');
+  // The generation in force, handed over first if it has signed 7 times: no key signs a 9th.
+  const k = await currentKey({ master, label: 'opaque/v1/uniswap/guard', account: deployer.address, chainId: BigInt(sepolia.id), registry: REGISTRY, stateOf, send: (to, data) => send(to, data) });
 
   // Its position: opened with an ordinary ECDSA transaction; the hook binds it to the guard key.
   // One a run before left open is used again.
@@ -208,7 +209,6 @@ async function guarded(pool: V4Pool): Promise<void> {
   const recipient = `0x${randomBytes(20).toString('hex')}` as Address;
   const payloadOf = (to: Address) => encodeAbiParameters(parseAbiParameters('string, uint256, address, bytes32, int256, address, uint256'),
     ['opaque/v1/uniswap/remove', BigInt(sepolia.id), key.hooks, position, -liquidity, to, deadline]);
-  const k = keyAt(0);
   const digest = pqDigest({ chainId: BigInt(sepolia.id) as never, walletAddress: deployer.address.toLowerCase() as never, schemeId: forsSchemeId(k.publicKey.params), useCount: (await stateOf()).useCount, payload: userActionPayload(payloadOf(recipient)) });
   const signature = encodeSignature(k.publicKey, sign(k.secretKey, digest as Bytes32)) as Hex;
   const hookData = (to: Address, sig: Hex) => encodeAbiParameters(parseAbiParameters('address, uint256, bytes'), [to, deadline, sig]);

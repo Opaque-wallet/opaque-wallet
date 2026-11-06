@@ -319,7 +319,7 @@ The tests:
 
 - **What the hooks protect:** who may move liquidity and trade, in pools that use them. They don't protect an ECDSA wallet's other assets. That's what the [Q-Day vault](https://www.opaque.credit/sepolia/vault) and Opaque accounts are for.
 - **Cost:** a FORS+C signature is about 9 KB of calldata. The guard asks for one only on removal, the rare action. Swaps in a guarded pool cost what they always did.
-- **Keys:** each guard key signs a set number of times, then rotates through `PQKeyRegistry`'s committed next key.
+- **Keys:** each guard key signs at most 8 times, then rotates through `PQKeyRegistry`'s committed next key.
 - **Status:** tested with forge, not audited. Testnet only.
 
 [ETHGlobal Mumbai partners](README.md) · [All partner evidence](../README.md) · [Main README](../../README.md)

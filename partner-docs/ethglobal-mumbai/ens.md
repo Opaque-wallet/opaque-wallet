@@ -55,7 +55,7 @@ abi.encode("opaque/v1/ens/execute", block.chainid, address(this), deadline, targ
 
 **`execute(target, data, deadline, signature)`**, the controller's only way to act:
 1. if `block.timestamp > deadline`, revert `Expired(deadline)`;
-2. `registry.consume(address(this), payload(target, data, deadline), signature)`. This reverts with `BadSignature()` unless the key in force signed exactly this, with `KeyExhausted()` past 32 uses, or with `KeyDisabled()`. On success it counts the use, so **each signature works once**;
+2. `registry.consume(address(this), payload(target, data, deadline), signature)`. This reverts with `BadSignature()` unless the key in force signed exactly this, with `KeyExhausted()` past the key's registered uses (8 for every key handed over now), or with `KeyDisabled()`. On success it counts the use, so **each signature works once**;
 3. `target.call(data)`, as the name's owner. A failed call reverts with `CallFailed(reason)`;
 4. emit `Executed(target, selector, useCount)` and return the call's output.
 
@@ -71,7 +71,7 @@ All of it is in [`backend/ethereum/ens/ens-sepolia.ts`](../../backend/ethereum/e
 
 | Step | What happens | Signed by |
 |---|---|---|
-| 1. `deploy` | Deploys `PQNameController` with key generation 0 in force and generation 1 committed next (32 uses, 30-day rotation). Then makes a `PermissionedResolver` through ENS's `VerifiableFactory.deployProxy(impl, salt, initialize([{account: controller, roles: ALL}], []))`, so the controller is its only admin. | the deployer, which only pays |
+| 1. `deploy` | Deploys `PQNameController` with key generation 0 in force and generation 1 committed next (32 uses then, 30-day rotation; keys handed over since are registered for 8). Then makes a `PermissionedResolver` through ENS's `VerifiableFactory.deployProxy(impl, salt, initialize([{account: controller, roles: ALL}], []))`, so the controller is its only admin. | the deployer, which only pays |
 | 2. Transfer | opaque.eth's owner (registered through ENS's `ETHRegistrar`) calls `safeTransferFrom` on the ETHRegistry token to the controller. Every role moves with it. | the old owner, once |
 | 3. `adopt` | `execute(ETHRegistry, setResolver(tokenId, resolver))`, tx `0x621bfed7…a3b1` | **FORS+C** |
 | 4. `records` | `execute(resolver, multicall([setAddress(opaque.eth, 60, controller), setAddress(opaque.eth, 0x80000539, devnet account), setText(opaque.eth, "pq-key", commitment), setText(opaque.eth, "url", "https://opaque.credit")]))`: every record in **one** signature, tx `0x23aa1a10…1791` | **FORS+C** |

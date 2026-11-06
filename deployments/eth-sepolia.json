@@ -374,6 +374,11 @@
       "proxyAdmin": "0x77c7e1b20347e90ccd4319282dde0d7ceec99256",
       "pqAdmin": "0x0833a5525ecf0df46d69c8eb1a9a7f5e53d7dcfb",
       "guardian": "0x006508975a5ce7901df571806d85218f320f8a36"
+    },
+    "rolesDemo": {
+      "v1": "0x82a095d381aa26061c0de599f21821eacb8fb4af",
+      "v2": "0x24e07bc15b50754e32144fbf315dd37833a287f1",
+      "factory": "0x4608e4a4c42dcdd74b0cf9fe243937bcdad9631b"
     }
   }
 }

@@ -35,6 +35,11 @@ try {
   await page.goto(`${SITE}/testnet/devnet`);
   await ready();
   const address = (await page.textContent('#address-x'))!.trim();
+  // The network drop-down also offers what needs no switching.
+  await page.click('#network-switch');
+  const tools = await page.$$eval('#network-dialog [data-tool]', (as: Element[]) => as.map((a) => (a as HTMLAnchorElement).getAttribute('href')));
+  check(tools.length === 2 && tools[0]!.endsWith('sepolia/vault.html') && tools[1]!.endsWith('sepolia/quantum-safe.html'), `the network drop-down lists the Q-Day vault and the quantum-safe admin: ${tools.join(', ')}`);
+  await page.keyboard.press('Escape');
   check((await received()).includes('Nothing received yet.'), `a new account has received nothing: ${address}`);
 
   // Another post-quantum account pays it, as Account 2 would pay Account 1.

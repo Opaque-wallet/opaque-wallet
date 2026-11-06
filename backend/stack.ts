@@ -56,6 +56,7 @@ import { createExecutorServer } from './cre/executor-server.ts';
 import { generateIntentKeypair } from './cre/seal-client.ts';
 import { createSettler, type Settler, type SettlerOptions } from './cre/settler.ts';
 import { commitmentOf, CONTROLLER_ABI, masterKey, REGISTRY_ABI as NAME_REGISTRY_ABI, signRotation } from './ethereum/ens/ens.ts';
+import { SIGNATURES_PER_KEY } from '@opaque/pq-wallet';
 import { createCreSimulator } from './cre/simulator.ts';
 import { createEgress, egressClient } from './mesh/egress.ts';
 import { backupFromEnv, backupHttpHandler } from './mesh/backup-store.ts';
@@ -91,6 +92,8 @@ const env = (name: string): string => {
 };
 const nowS = (): UnixSeconds => BigInt(Math.floor(Date.now() / 1000)) as UnixSeconds;
 const log = (s: string) => process.stdout.write(`${s}\n`);
+/** One line per step of a payment, under the part that took it: what `railway logs` shows while one goes through. */
+const trace = (who: string, line: string) => log(`  ${who.padEnd(10)} ${line}`);
 const bigintReplacer = (_k: string, v: unknown) => (typeof v === 'bigint' ? `${v}n` : v);
 
 // ── who decides: the CRE workflow, or a stand-in in this process ─────────
@@ -246,6 +249,7 @@ let settler: Settler | undefined;
 // with the backup volume keeps it; the others ask it; a laptop keeps its own.
 const backup = backupFromEnv(join(STATE, 'backups'), PUBLIC_URL !== undefined);
 const exit = createExecutorServer({
+  trace: (line) => trace('mesh exit', line),
   backup: backup.send,
   // Asked across the mesh, so the authority never sees who asked; the HTTP route stays for old clients.
   credential: async (recipient) => toHex(new TextEncoder().encode(credentialJson(recipient, POLICY, credentialMac, nowS()))),
@@ -279,6 +283,7 @@ const attesterKeys = registryAttesterKeys({
 });
 const settlement: SettlerOptions = {
   executor: exit.executor,
+  trace: (line) => trace('settler', line),
   credentialMac,
   policyVersion: POLICY,
   releaseTtlSeconds: 900n,
@@ -296,6 +301,7 @@ const settlement: SettlerOptions = {
   // Evidence from the chain: the receipt succeeded and the spend's own pool
   // emitted a Spent for exactly this nullifier and recipient.
   async evidence(txHash, release) {
+    trace('egress', `sent pool.spend: ${deployment.network.explorer.replace(/\/$/, '')}/tx/${txHash}; the payer's own account sends nothing`);
     // Arc's blocks are a second apart: a minute without a receipt is a
     // transaction that is late or gone, and the settler's retry looks again
     // without holding up the next one. viem's nonce manager would go on
@@ -312,7 +318,9 @@ const settlement: SettlerOptions = {
         && l.args.nullifier.toLowerCase() === (release.spend.nullifier as string).toLowerCase()
         && l.args.recipient.toLowerCase() === (release.spend.recipient as string).toLowerCase(),
     );
-    log(`  settled ${txHash} (${receipt.status})`);
+    trace('chain', receipt.status === 'success' && spent !== undefined
+      ? `settled in block ${receipt.blockNumber}: the pool paid ${String(release.spend.recipient).slice(0, 10)}… one note, and the nullifier is spent`
+      : `${txHash} ${receipt.status}: the settler retries`);
     return { txHash, spendHash: spendHash(release.spend), succeeded: receipt.status === 'success' && spent !== undefined };
   },
   nullifierSpent: async (s) => publicClient.readContract({ address: s.scope.pool, abi: poolAbi, functionName: 'isNullifierSpent', args: [s.nullifier as `0x${string}`] }),
@@ -431,8 +439,9 @@ async function claimName(pk: `0x${string}`, next: `0x${string}`): Promise<`0x${s
     // The key in force commits the wallet's key next; once that is committed, the wallet's own next key.
     const after = s.nextCommitment.toLowerCase() === pk.toLowerCase() ? next : pk;
     const deadline = (await publicClient.getBlock()).timestamp + 30n * 86_400n;
-    const signature = signRotation(keyAt(g), BigInt(deployment.network.chainId), ENS!.controller, s.useCount, after, 32n, deadline);
-    const hash = await writeInTurn(egressAccount.address, () => nameWallet().writeContract({ address: ENS!.pqKeyRegistry, abi: NAME_REGISTRY_ABI, functionName: 'rotate', args: [ENS!.controller, after, 32n, deadline, signature] }));
+    // The name's keys get SIGNATURES_PER_KEY in the registry itself: none of them can sign a 9th time.
+    const signature = signRotation(keyAt(g), BigInt(deployment.network.chainId), ENS!.controller, s.useCount, after, SIGNATURES_PER_KEY, deadline);
+    const hash = await writeInTurn(egressAccount.address, () => nameWallet().writeContract({ address: ENS!.pqKeyRegistry, abi: NAME_REGISTRY_ABI, functionName: 'rotate', args: [ENS!.controller, after, SIGNATURES_PER_KEY, deadline, signature] }));
     if ((await publicClient.waitForTransactionReceipt({ hash })).status !== 'success') throw new Error(`the rotation reverted: ${hash}`);
     hashes.push(hash);
   }

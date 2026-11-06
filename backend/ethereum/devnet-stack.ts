@@ -185,7 +185,10 @@ const graph = {
 
 // ── exit, attester, settler ──────────────────────────────────────────────
 const selectors = (...signatures: string[]) => new Set(signatures.map((s) => toFunctionSelector(s)));
+/** One line per step of a payment, under the part that took it: what `railway logs` shows while one goes through. */
+const trace = (who: string, line: string) => log(`  ${who.padEnd(10)} ${line}`);
 const exit = createExecutorServer({
+  trace: (line) => trace('mesh exit', line),
   credential: async (recipient) => toHex(new TextEncoder().encode(credentialJson(recipient, POLICY, credentialMac, nowS()))),
   graph,
   // The page's note reads (is it spent? is it in?), asked here so the devnet's RPC never learns which notes one wallet holds.
@@ -205,6 +208,7 @@ await exit.listen(PORTS.exit, LOOPBACK);
 const sent = new Map<string, Hex>();
 const settlement: SettlerOptions = {
   executor: exit.executor,
+  trace: (line) => trace('settler', line),
   credentialMac,
   policyVersion: POLICY,
   releaseTtlSeconds: 900n,
@@ -226,7 +230,7 @@ const settlement: SettlerOptions = {
     const data = encodeFunctionData({ abi: POOL_ABI, functionName: 'spend', args: [s.ring as readonly Hex[], s.proof as Hex, s.recipient as Address, salt] });
     const hash = await asStack([{ to: s.scope.pool as Address, data, gas: 2_000_000n, state: 300_000n }]);
     sent.set(id, hash);
-    log(`  settled ${hash}`);
+    trace('stack', `sent pool.spend in a frame transaction signed by FORS+C alone: ${devnet.explorer}/tx/${hash}`);
     return hash as TxHash;
   },
   receiptEvidence: true,
@@ -238,6 +242,7 @@ const settlement: SettlerOptions = {
         && l.args.nullifier.toLowerCase() === String(release.spend.nullifier).toLowerCase()
         && l.args.recipient.toLowerCase() === String(release.spend.recipient).toLowerCase(),
     );
+    trace('chain', ok && spent !== undefined ? `settled: the pool paid ${String(release.spend.recipient).slice(0, 10)}… one note, and the nullifier is spent` : `${txHash} failed: the settler retries`);
     return { txHash, spendHash: spendHash(release.spend), succeeded: ok && spent !== undefined };
   },
   nullifierSpent: async (s) => publicClient.readContract({ address: s.scope.pool as Address, abi: POOL_ABI, functionName: 'isNullifierSpent', args: [s.nullifier as Hex] }),

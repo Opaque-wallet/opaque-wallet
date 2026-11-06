@@ -88,7 +88,7 @@ async function handBack({ phrase, to }: { phrase: string; to: number }): Promise
       continue;
     }
     const next = s.nextCommitment.toLowerCase() === home ? after : home;
-    await mined(await wallet.writeContract({ address: pqKeyRegistry, abi: REGISTRY_ABI, functionName: 'rotate', args: [controller, next, 32n, deadline, signRotation(key, chainId, controller, s.useCount, next, 32n, deadline)] }));
+    await mined(await wallet.writeContract({ address: pqKeyRegistry, abi: REGISTRY_ABI, functionName: 'rotate', args: [controller, next, 8n, deadline, signRotation(key, chainId, controller, s.useCount, next, 8n, deadline)] }));
     s = await settled((x) => x.pkCommitment !== was.pkCommitment, 'the rotation');
   }
   await settled((x) => x.pkCommitment.toLowerCase() === home && x.nextCommitment.toLowerCase() === after, `the stack's generation ${to}`);
