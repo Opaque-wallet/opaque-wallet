@@ -17,9 +17,72 @@
 <link rel="stylesheet" href="/upgrade.css">
 </head>
 <body>
-<header class="top wrap">
-  <a class="brand" href="/" aria-label="opaque, home"><img src="/logo.png" alt="opaque" width="942" height="200"><span>ETHGlobal Mumbai</span></a>
-  <a class="btn btn--primary" href="/sepolia/app">Open the wallet</a>
+<header class="nav" id="nav">
+  <div class="nav__bar">
+    <a class="brand" href="/" aria-label="opaque, back to top"><img src="/logo.png" alt="opaque" width="942" height="200"></a>
+    <nav class="menu" aria-label="Main">
+      <button class="menu__trigger" type="button" aria-expanded="false" aria-controls="menu-product">Product <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="menu__trigger" type="button" aria-expanded="false" aria-controls="menu-resources">Resources <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </nav>
+    <button class="bell" type="button" popovertarget="updates" aria-label="Updates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 1.8H4.4z"/><path d="M10 21h4"/></svg><span class="bell__dot"></span></button>
+    <div class="updates" id="updates" popover>
+      <p class="updates__label">Updates</p>
+      <a class="updates__item" href="/ethglobal-mumbai">
+        <span class="updates__mark" data-dots="#070608"></span>
+        <span><time datetime="2026-11-06">6 Nov 2026</time><b>Opaque Unseen, and post-quantum ENS, stealth and swaps</b><small>Reads through EF's anon-rpc, one-time ML-KEM stealth addresses, yourname.opaque.eth on ENSv2, and a Uniswap v4 pool only post-quantum accounts can trade in.</small><em>See what's new →</em></span>
+      </a>
+      <a class="updates__item" href="/testnet/xrpl">
+        <span class="updates__mark" data-dots="#070608"></span>
+        <span><time datetime="2026-10-18">18 Oct 2026</time><b>Opaque is now on XRPL testnet</b><small>You can now enjoy Opaque on XRPL testnet: hold and send XRP, RLUSD and USDC privately, right in your browser.</small><em>Open the wallet →</em></span>
+      </a>
+    </div>
+    <a class="btn btn--primary btn--small nav__cta" href="/testnet/xrpl">Open wallet</a>
+    <button class="menu__toggle" type="button" aria-expanded="false" aria-controls="menu-sheet" aria-label="Menu"><span></span><span></span></button>
+    <div class="menu__sheet" id="menu-sheet">
+      <div class="menu__panel" id="menu-product" role="region" aria-label="Product">
+        <p class="menu__heading">Product</p>
+        <div class="menu__cols">
+        <div class="menu__col"><p class="menu__label">Use Opaque</p>
+          <a class="menu__link" href="/ethglobal-mumbai"><strong>ETHGlobal Mumbai <span class="badge">New</span></strong><span>Post-quantum stealth, ENSv2 names and Uniswap v4 pools, and reads nobody can trace</span></a>
+          <a class="menu__link" href="/testnet/xrpl"><strong>Private wallet</strong><span>Deposit, hold and send on Ethereum, Arc and the XRP Ledger</span></a>
+          <a class="menu__link" href="#story"><strong>How a payment hides</strong><span>One of eight notes, three relays, a fresh address</span></a>
+          <a class="menu__link" href="#connect"><strong>An account per app</strong><span>Apps see an address that leads nowhere</span></a>
+          <a class="menu__link" href="#keys"><strong>Post-quantum keys</strong><span>Keys a quantum computer can't use</span></a>
+        </div>
+        <div class="menu__col"><p class="menu__label">Get Opaque</p>
+          <a class="menu__link" href="/testnet/xrpl"><strong>Web wallet</strong><span>Runs in your browser, nothing to install</span></a>
+          <a class="menu__link" href="/testnet/xrpl"><strong>On your phone</strong><span>Add it to your home screen</span></a>
+          <a class="menu__link" href="/testnet/xrpl-connect"><strong>Connect to an app</strong><span>Scan a WalletConnect QR code</span></a>
+          <a class="menu__link" href="/opaque-extension.zip" download><strong>Browser extension</strong><span>A wallet in Chrome's side panel</span></a>
+        </div>
+        <div class="menu__popular"><p class="menu__label">Popular</p>
+          <a class="menu__card menu__card--dark" href="/testnet/xrpl"><strong>Try it on testnet →</strong><span>Free test tokens, straight into notes</span></a>
+        </div>
+        </div>
+      </div>
+      <div class="menu__panel" id="menu-resources" role="region" aria-label="Resources">
+        <p class="menu__heading">Resources</p>
+        <div class="menu__cols">
+        <div class="menu__col"><p class="menu__label">Learn</p>
+          <a class="menu__link" href="/docs"><strong>Docs</strong><span>Use the wallet, and build on it</span></a>
+          <a class="menu__link" href="/developers"><strong>Opaque API</strong><span>The SDK and MCP server, for your app or agent</span></a>
+          <a class="menu__link" href="#story"><strong>How it works</strong><span>Follow one payment from deposit to app</span></a>
+          <a class="menu__link" href="#keys"><strong>Quantum safety</strong><span>Why your keys outlast a quantum computer</span></a>
+          <a class="menu__link" href="/privacy"><strong>Privacy</strong><span>What Opaque keeps, and what it never sees</span></a>
+          <a class="menu__link" href="/terms"><strong>Terms</strong><span>What you agree to when you use Opaque</span></a>
+        </div>
+        <div class="menu__col"><p class="menu__label">Explorers</p>
+          <a class="menu__link" href="https://sepolia.etherscan.io" target="_blank" rel="noopener noreferrer"><strong>Ethereum Sepolia ↗</strong><span>Look up any pool or app account</span></a>
+          <a class="menu__link" href="https://explorer.arc.io" target="_blank" rel="noopener noreferrer"><strong>Arc ↗</strong><span>Private USDC, live on mainnet</span></a>
+          <a class="menu__link" href="https://testnet.xrpl.org" target="_blank" rel="noopener noreferrer"><strong>XRPL testnet ↗</strong><span>Pools and app accounts on the XRP Ledger</span></a>
+        </div>
+        <div class="menu__popular"><p class="menu__label">Also from Opaque</p>
+          <a class="menu__card" href="/app"><strong>Opaque on Arc</strong><span>Private USDC payments on Arc mainnet</span></a>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </header>
 
 <main>
@@ -797,6 +860,43 @@ function stage(canvas, draw) {
   }), { threshold: 0.6 });
   document.querySelectorAll('[data-to]').forEach((n) => count.observe(n));
 })();
+</script>
+<script>
+// ── the nav's menus: hover or click opens one panel; Esc, or a click away, closes ──
+const nav = document.querySelector('#nav');
+const triggers = [...nav.querySelectorAll('.menu__trigger')];
+const panelOf = (t) => document.getElementById(t.getAttribute('aria-controls'));
+const hoverable = matchMedia('(hover: hover) and (min-width: 861px)');
+let closing = 0;
+function openMenu(trigger) {
+  clearTimeout(closing);
+  for (const t of triggers) {
+    const on = t === trigger;
+    t.setAttribute('aria-expanded', String(on));
+    panelOf(t).toggleAttribute('data-open', on);
+  }
+}
+const closeSoon = () => { closing = setTimeout(() => openMenu(null), 180); };
+for (const t of triggers) {
+  t.addEventListener('click', () => openMenu(t.getAttribute('aria-expanded') === 'true' ? null : t));
+  t.addEventListener('pointerenter', () => { if (hoverable.matches) openMenu(t); });
+  t.addEventListener('pointerleave', () => { if (hoverable.matches) closeSoon(); });
+  const panel = panelOf(t);
+  panel.addEventListener('pointerenter', () => clearTimeout(closing));
+  panel.addEventListener('pointerleave', () => { if (hoverable.matches) closeSoon(); });
+  panel.querySelectorAll('.menu__link, .menu__card').forEach((a, i) => a.style.setProperty('--i', String(i)));
+}
+const toggle = document.querySelector('.menu__toggle');
+const setSheet = (on) => { nav.toggleAttribute('data-sheet', on); toggle.setAttribute('aria-expanded', String(on)); };
+toggle.addEventListener('click', () => setSheet(!nav.hasAttribute('data-sheet')));
+nav.addEventListener('click', (e) => { if (e.target.closest('.menu__sheet a')) { openMenu(null); setSheet(false); } });
+document.addEventListener('click', (e) => { if (!nav.contains(e.target)) { openMenu(null); setSheet(false); } });
+addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const open = triggers.find((t) => t.getAttribute('aria-expanded') === 'true');
+  openMenu(null); setSheet(false);
+  open?.focus();
+});
 </script>
 </body>
 </html>

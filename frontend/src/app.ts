@@ -1039,11 +1039,12 @@ function setupStealth(): void {
   refreshStealth = async () => {
     if (opaqueAddress === '') return;
     on = await s.isOn(me()).catch(() => on);
-    el('stealth-on').hidden = on;
+    el<HTMLInputElement>('stealth-toggle').checked = on;
     el('stealth-copy').textContent = on
-      ? 'On. Every payment to this wallet or its name lands at a one-time address only this wallet can find, then moves into your notes by itself. Nobody reading the chain can tell those payments are yours, even with a quantum computer.'
-      : 'Payments to this wallet can land at one-time addresses only it can find: nobody reading the chain, now or with a quantum computer, can tell they are yours. Turning it on publishes one post-quantum key (ML-KEM-768) in the standard stealth-address registry.';
-    if (!on) return;
+      ? 'Payments to this wallet or its name land at one-time addresses only it can find, then move into your notes by itself. Nobody reading the chain can tell they are yours, even with a quantum computer.'
+      : 'Off: payers pay this wallet\'s own address. On publishes one post-quantum key (ML-KEM-768) in the standard stealth-address registry, so each payment lands at a one-time address only this wallet can find.';
+    // Off still sweeps what arrived while it was on.
+    if (!on && s.payments().length === 0) return;
     await s.scan();
     for (const p of s.payments()) {
       const held = await s.held(p).catch(() => 0);
@@ -1065,15 +1066,23 @@ function setupStealth(): void {
     }
     render();
   };
-  el('stealth-on').addEventListener('click', () => void (async () => {
-    setStatus('stealth-status', 'Publishing this wallet\'s post-quantum stealth key: its FORS+C key signs it…');
+  const toggle = el<HTMLInputElement>('stealth-toggle');
+  toggle.addEventListener('change', () => void (async () => {
+    const want = toggle.checked;
+    toggle.disabled = true;
+    setStatus('stealth-status', want
+      ? 'Publishing this wallet\'s post-quantum stealth key: its FORS+C key signs it…'
+      : 'Taking the stealth key down: payers will pay this wallet\'s address again…');
     try {
-      if (opaqueAddress === '') { setStatus('stealth-status', 'Opaque is still starting.'); return; }
-      const tx = await rt.execute(me(), [s.turnOnCall]);
-      for (let tries = 0; tries < 20 && !(await s.isOn(me()).catch(() => false)); tries++) await new Promise((r) => setTimeout(r, 3_000));
-      setStatus('stealth-status', `On: ${tx}`);
+      if (opaqueAddress === '') throw new Error('Opaque is still starting');
+      const tx = await rt.execute(me(), [want ? s.turnOnCall : s.turnOffCall]);
+      for (let tries = 0; tries < 20 && (await s.isOn(me()).catch(() => !want)) !== want; tries++) await new Promise((r) => setTimeout(r, 3_000));
+      setStatus('stealth-status', `${want ? 'On' : 'Off'}: ${tx}`);
       await refreshStealth();
-    } catch (error) { setStatus('stealth-status', `Not turned on: ${gasWhy(error)}`); }
+    } catch (error) {
+      toggle.checked = !want;
+      setStatus('stealth-status', `Not changed: ${gasWhy(error)}`);
+    } finally { toggle.disabled = false; }
   })());
   const tick = () => void refreshStealth().catch(() => undefined).finally(() => setTimeout(tick, 30_000));
   tick();
@@ -1084,13 +1093,15 @@ function setupStealth(): void {
 // accounts; the quote is the pool's own state, read across the mesh, and the swap is
 // one UserOperation this account's FORS+C key signs.
 
+let refreshV4: (() => Promise<void>) | undefined;
 function setupV4Swap(): void {
   const pool = V4?.pq;
   if (pool === undefined) return;
   const key = v4Key(pool);
-  el('v4-card').hidden = false;
+  el<HTMLAnchorElement>('v4-hook').href = `${deployment.network.explorer.replace(/\/$/, '')}/address/${pool.hook}`;
   let ethIn = true;
   const input = el<HTMLInputElement>('v4-amount');
+  const go = el<HTMLButtonElement>('v4-go');
   /** The amount in the input token's smallest units: ETH's 18 decimals or tUSDC's 6. */
   const amount = (): bigint | undefined => {
     const v = input.value.trim();
@@ -1102,42 +1113,68 @@ function setupV4Swap(): void {
     return n > 0n ? n : undefined;
   };
   const show = (n: bigint, eth: boolean) => eth ? formatEther(n).replace(/(\.\d{6})\d+$/, '$1') : (Number(n) / 1e6).toFixed(6).replace(/\.?0+$/, '');
+  const name = (eth: boolean) => (eth ? 'ETH' : 'tUSDC');
+  let held = { eth: 0n, usdc: 0n };
   let quoted: bigint | undefined;
+  const sides = () => {
+    el('v4-in').textContent = name(ethIn); el('v4-out-name').textContent = name(!ethIn);
+    el('v4-in-tok').className = `tok ${ethIn ? 'tok-eth' : 'tok-usdc'}`; el('v4-in-tok').textContent = ethIn ? 'E' : 'U';
+    el('v4-out-tok').className = `tok ${ethIn ? 'tok-usdc' : 'tok-eth'}`; el('v4-out-tok').textContent = ethIn ? 'U' : 'E';
+    el('v4-have').textContent = `${show(ethIn ? held.eth : held.usdc, ethIn)} ${name(ethIn)}`;
+    el('v4-have-out').textContent = `${show(ethIn ? held.usdc : held.eth, !ethIn)} ${name(!ethIn)}`;
+    input.placeholder = ethIn ? '0.001' : '1';
+  };
   const requote = async () => {
     const a = amount();
     quoted = undefined;
-    if (a === undefined || !runtimeReady) { el('v4-quote').textContent = 'Enter an amount for a quote from the pool.'; return; }
+    el('v4-out').textContent = '0';
+    for (const id of ['v4-rate', 'v4-min']) el(id).textContent = '—';
+    el('v4-quote').textContent = '';
+    if (a === undefined || !runtimeReady) { go.disabled = true; go.textContent = 'Enter an amount'; return; }
+    go.disabled = true; go.textContent = 'Getting a quote…';
     try {
       quoted = await v4Quote((slot) => rt.v4Slot(slot), key, a, ethIn);
-      el('v4-quote').textContent = `≈ ${show(quoted, !ethIn)} ${ethIn ? 'tUSDC' : 'ETH'}, from the pool's own price and liquidity. At least 99% of that, or nothing.`;
-    } catch (error) { el('v4-quote').textContent = `No quote: ${(error as Error).message}`; }
+      el('v4-out').textContent = show(quoted, !ethIn);
+      const rate = ethIn ? Number(quoted) / 1e6 / (Number(a) / 1e18) : (Number(quoted) / 1e18) / (Number(a) / 1e6);
+      el('v4-rate').textContent = `1 ${name(ethIn)} ≈ ${rate.toPrecision(5)} ${name(!ethIn)}`;
+      el('v4-min').textContent = `${show((quoted * 99n) / 100n, !ethIn)} ${name(!ethIn)}`;
+      el('v4-quote').textContent = `≈ ${show(quoted, !ethIn)} ${name(!ethIn)}, from the pool's own price and liquidity.`;
+      const enough = (ethIn ? held.eth : held.usdc) >= a;
+      go.disabled = !enough;
+      go.textContent = enough ? `Swap ${name(ethIn)} for ${name(!ethIn)}` : `Not enough ${name(ethIn)}`;
+    } catch (error) { go.textContent = 'No quote'; el('v4-quote').textContent = `No quote: ${(error as Error).message}`; }
   };
+  refreshV4 = async () => {
+    if (!runtimeReady || opaqueAddress === '') return;
+    const me = opaqueAddress as `0x${string}`;
+    const [eth, funds] = await Promise.all([rt.ethBalance(me), rt.accountFunds(me)]);
+    held = { eth, usdc: BigInt(Math.round(funds.usdc * 1e6)) };
+    sides();
+    await requote();
+  };
+  sides();
   input.addEventListener('input', () => void requote());
-  el('v4-flip').addEventListener('click', () => {
-    ethIn = !ethIn;
-    el('v4-in').textContent = ethIn ? 'ETH' : 'tUSDC';
-    input.placeholder = ethIn ? '0.001' : '1';
+  el('v4-max').addEventListener('click', () => {
+    // ETH also pays the swap's gas, so not all of it.
+    const max = ethIn ? (held.eth > 3n * 10n ** 15n ? held.eth - 3n * 10n ** 15n : 0n) : held.usdc;
+    input.value = show(max, ethIn);
     void requote();
   });
-  el('v4-go').addEventListener('click', () => void (async () => {
+  el('v4-flip').addEventListener('click', () => { ethIn = !ethIn; input.value = ''; sides(); void requote(); });
+  go.addEventListener('click', () => void (async () => {
     const a = amount();
-    if (a === undefined) { setStatus('v4-status', `Enter an amount of ${ethIn ? 'ETH, like 0.001' : 'tUSDC, like 1'}.`); return; }
-    if (opaqueAddress === '') { setStatus('v4-status', 'Opaque is still starting.'); return; }
+    if (a === undefined || quoted === undefined || opaqueAddress === '') return;
     const me = opaqueAddress as `0x${string}`;
-    await requote();
-    if (quoted === undefined) { setStatus('v4-status', 'No quote from the pool yet.'); return; }
-    // A swap that reverts still spends one of the key's signatures: check the balance first.
-    const have = ethIn ? await rt.ethBalance(me) : BigInt(Math.round((await rt.accountFunds(me)).usdc * 1e6));
-    if (have < a) { setStatus('v4-status', ethIn ? `This account holds ${show(have, true)} ETH.` : `This account holds ${show(have, false)} tUSDC at its address (deposited notes don't count).`); return; }
+    go.disabled = true; go.textContent = 'Signing…';
     setStatus('v4-status', 'Signing the swap with this wallet\'s post-quantum key; the public bundler submits it…');
     try {
       const tx = await rt.execute(me, v4SwapCalls(key, a, (quoted * 99n) / 100n, ethIn) as never);
-      setStatus('v4-status', `Swapped ${show(a, ethIn)} ${ethIn ? 'ETH' : 'tUSDC'} for about ${show(quoted, !ethIn)} ${ethIn ? 'tUSDC' : 'ETH'} in the post-quantum pool: ${tx}`);
+      setStatus('v4-status', `Swapped ${show(a, ethIn)} ${name(ethIn)} for about ${show(quoted, !ethIn)} ${name(!ethIn)} in the post-quantum pool: ${tx}`);
       input.value = '';
-      void requote();
       void refreshTokens().catch(() => undefined);
       void renderBudget().catch(() => undefined);
     } catch (error) { setStatus('v4-status', `Not swapped: ${gasWhy(error)}`); }
+    void refreshV4!().catch(() => undefined);
   })());
 }
 
@@ -1637,14 +1674,17 @@ async function pollActivity(): Promise<void> {
 
 // ── wiring ────────────────────────────────────────────────────────────────
 
-type View = 'home' | 'send' | 'swap' | 'ring' | 'activity' | 'contracts';
+type View = 'home' | 'send' | 'swap' | 'v4' | 'names' | 'ring' | 'activity' | 'contracts';
 function showView(name: View): void {
   if (name === 'swap') { renderSwapSides(); void refreshTokens().catch(() => undefined); }
   if (name === 'contracts') renderContracts();
-  for (const view of ['home', 'send', 'swap', 'ring', 'activity', 'contracts'] as const) {
+  // Sepolia's swap is Uniswap v4's (view-v4), under the same Swap tab.
+  const tabOf = (view: View) => (view === 'v4' ? 'swap' : view);
+  for (const view of ['home', 'send', 'swap', 'v4', 'names', 'ring', 'activity', 'contracts'] as const) {
     el(`view-${view}`).hidden = view !== name;
-    el(`tab-${view}`).setAttribute('aria-selected', String(view === name));
   }
+  for (const tab of ['home', 'send', 'swap', 'names', 'ring', 'activity', 'contracts'] as const) el(`tab-${tab}`).setAttribute('aria-selected', String(tab === tabOf(name)));
+  if (name === 'v4') void refreshV4?.();
   window.scrollTo(0, 0);
 }
 
@@ -1674,10 +1714,16 @@ async function init(): Promise<void> {
   el('tile-deposit').addEventListener('click', () => { el('deposit-card').scrollIntoView({ block: 'center' }); el<HTMLInputElement>('deposit-count').focus(); });
   el('tile-privacy').addEventListener('click', () => el('tab-ring').click());
   el('tile-activity').addEventListener('click', () => el('tab-activity').click());
-  el('tile-swap').addEventListener('click', () => showView('swap'));
-  el('tab-swap').addEventListener('click', () => showView('swap'));
+  // Arc swaps through LI.FI; Sepolia in Uniswap v4's post-quantum pool; elsewhere there is no swap.
+  const swapView: View = SWAPS ? 'swap' : 'v4';
+  el('tile-swap').addEventListener('click', () => showView(swapView));
+  el('tab-swap').addEventListener('click', () => showView(swapView));
   if (SWAPS) setupSwap();
-  else for (const id of ['tile-swap', 'tab-swap']) el(id).hidden = true;
+  else if (V4?.pq === undefined) for (const id of ['tile-swap', 'tab-swap']) el(id).hidden = true;
+  if (NETWORK === 'sepolia') {
+    el('tab-names').hidden = false;
+    el('tab-names').addEventListener('click', () => showView('names'));
+  }
   // The balance card catches the light where the pointer is.
   el('hero').addEventListener('pointermove', (e) => {
     const r = el('hero').getBoundingClientRect();

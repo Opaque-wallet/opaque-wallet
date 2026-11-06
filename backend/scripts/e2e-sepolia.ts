@@ -175,7 +175,7 @@ try {
   // Uniswap v4, in the post-quantum pool: a quote from the pool's state, then one UserOperation the
   // account's FORS+C key signs. The pool's hook admits only PQ accounts, so this is the only kind that can.
   const swapFrom = await pub.getBlockNumber();
-  await page.click('#tab-home');
+  await page.click('#tab-swap');
   await page.fill('#v4-amount', '0.001');
   await page.waitForFunction(() => (document.getElementById('v4-quote')?.textContent ?? '').startsWith('≈'), undefined, { timeout: 120_000 });
   check(true, `the post-quantum pool quotes: ${await page.textContent('#v4-quote')}`);
@@ -187,7 +187,7 @@ try {
 
   // name.opaque.eth: the wallet claims its own name; ENS resolves it to the wallet; a payment by that name arrives.
   const label = `e2e-${randomBytes(4).toString('hex')}`;
-  await page.click('#tab-home');
+  await page.click('#tab-names');
   await page.fill('#sub-label', label);
   await page.click('#sub-claim');
   await page.waitForFunction(() => /is yours|^Not done/.test(document.getElementById('sub-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
@@ -221,7 +221,7 @@ try {
   await until('the one-time address to be empty', async () => (await tusdc(oneTime!)) === 0n, 120_000);
   check(((await pub.getCode({ address: oneTime! })) ?? '0x').length > 2, 'the one-time address is now a PQ account its sweep deployed, and holds no tUSDC');
   page.once('dialog', (dialog: any) => void dialog.accept());
-  await page.click('#tab-home');
+  await page.click('#tab-names');
   await page.click('#sub-release');
   await page.waitForFunction(() => /free again|^Not done/.test(document.getElementById('sub-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
   check((await page.textContent('#sub-status'))?.includes('free again'), `released: ${await page.textContent('#sub-status')}`);
@@ -234,7 +234,7 @@ try {
   // Only this wallet's own first name key may be sent: one the test could not hand back never leaves the page.
   const ours = commitmentOf(nameKeys(phrase)(0));
   await page.route('**/v1/ens/claim', (route: any) => (JSON.parse(route.request().postData()).pk === ours ? route.continue() : route.abort()));
-  await page.click('#tab-home');
+  await page.click('#tab-names'); await page.click('#names-advanced summary');
   await page.click('#name-owner');
   await page.waitForSelector('#name-claim', { state: 'visible', timeout: 60_000 });
   await page.fill('#name-code', readFileSync(new URL('ens-claim-code', STACK), 'utf8').trim());

@@ -110,42 +110,6 @@
       <div id="exit-notes"></div>
       <p class="status" id="exit-status" role="status"></p>
     </div>
-    <div class="deposit-card" id="sub-card" hidden>
-      <div class="deposit-copy"><p class="eyebrow">Your ENS name</p><p id="sub-copy">A name under opaque.eth for this wallet: anyone can pay it by name, and only this wallet's post-quantum key holds it.</p></div>
-      <div class="deposit-row" id="sub-claim-row">
-        <label class="deposit-amount" for="sub-label"><input id="sub-label" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="yourname" maxlength="32"><span>.opaque.eth</span></label>
-        <button class="primary" id="sub-claim" type="button">Claim</button>
-      </div>
-      <div class="deposit-row" id="sub-held" hidden><b class="mono" id="sub-name"></b><button class="link" id="sub-release" type="button">Release</button></div>
-      <small class="deposit-split"><button class="link" id="name-owner" type="button">Hold opaque.eth itself? Claim it with the code</button></small>
-      <p class="status" id="sub-status" role="status"></p>
-    </div>
-    <div class="deposit-card" id="v4-card" hidden>
-      <div class="deposit-copy"><p class="eyebrow">Swap · Uniswap v4</p><p id="v4-copy">ETH and tUSDC in Uniswap's post-quantum pool. Its hook lets only post-quantum accounts trade, and this wallet's FORS+C key signs the swap.</p></div>
-      <div class="deposit-row">
-        <label class="deposit-amount" for="v4-amount"><input id="v4-amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.001"><span id="v4-in">ETH</span></label>
-        <button class="secondary" id="v4-flip" type="button" aria-label="Swap the other way">⇄</button>
-        <button class="primary" id="v4-go" type="button">Swap</button>
-      </div>
-      <small class="deposit-split" id="v4-quote">Enter an amount for a quote from the pool.</small>
-      <p class="status" id="v4-status" role="status"></p>
-    </div>
-    <div class="deposit-card" id="stealth-card" hidden>
-      <div class="deposit-copy"><p class="eyebrow">Receive privately</p><p id="stealth-copy">Reading this wallet's stealth key…</p></div>
-      <button class="primary" id="stealth-on" type="button" hidden>Turn on</button>
-      <div id="stealth-list"></div>
-      <p class="status" id="stealth-status" role="status"></p>
-    </div>
-    <div class="deposit-card" id="name-card" hidden>
-      <div class="deposit-copy"><p class="eyebrow">opaque.eth</p><p id="name-copy">Reading opaque.eth on ENS…</p></div>
-      <div class="deposit-row" id="name-claim-row">
-        <label class="deposit-amount" for="name-code"><input id="name-code" type="text" autocomplete="off" spellcheck="false" placeholder="claim code" maxlength="32"><span>code</span></label>
-        <button class="primary" id="name-claim" type="button">Claim</button>
-      </div>
-      <button class="secondary" id="name-point" type="button" hidden>Point opaque.eth at this wallet</button>
-      <small class="deposit-split" id="name-records"></small>
-      <p class="status" id="name-status" role="status"></p>
-    </div>
     <div id="home-notes">
       <div class="list-head"><span>Your funds</span><button class="link" id="refresh-balance" type="button">Refresh</button></div>
       <div id="assets"><div class="asset"><i class="tok tok-usdc">U</i><span><b>USD Coin</b><small>Private notes on Arc</small></span><span class="asset-value"><b><span id="asset-balance">—</span> USDC</b><small id="asset-notes">—</small></span></div></div>
@@ -277,9 +241,84 @@
     <div class="card ring-card"><div id="ring-wrap"></div><p>One member signed. No member is singled out.</p></div>
     <dl class="stats"><div><dt>Pool freshness</dt><dd id="freshness-now">—</dd></div><div><dt>Pool deposits</dt><dd id="pool-size">—</dd></div></dl>
     <div class="card route"><p class="eyebrow">Relay path · 3 hops</p><div class="hops" id="hops"></div><p class="fine-print">Each payment draws a fresh route from the verified relay directory.</p></div>
-    <label class="fine-print anon-switch" id="anon-reads-wrap" hidden><input type="checkbox" id="anon-reads"> <span><b>Opaque Unseen:</b> read the chain through EF's <a href="https://ethereum.github.io/anon-rpc/" target="_blank" rel="noopener">anon-rpc</a> (the Nox mixnet) instead of Opaque's relays. Your balances, key state and account operations then reach a public RPC and bundler with nothing of ours in the path; only payments cross Opaque's relays. Slower, about a second a read. The wallet reloads. <a href="https://www.opaque.credit/ethglobal-mumbai#unseen" target="_blank" rel="noopener">What's this?</a></span></label>
-    <p class="fine-print" id="anon-reads-count" role="status"></p>
+    <div class="card privacy-toggle" id="stealth-card" hidden>
+      <label class="switch-row" for="stealth-toggle"><span><b>Receive privately</b><small id="stealth-copy">Reading this wallet's stealth key…</small></span><input type="checkbox" role="switch" id="stealth-toggle"></label>
+      <div id="stealth-list"></div>
+      <p class="status" id="stealth-status" role="status"></p>
+    </div>
+    <div class="card privacy-toggle" id="anon-reads-wrap" hidden>
+      <label class="switch-row" for="anon-reads"><span><b>Opaque Unseen</b><small>Read the chain through EF's <a href="https://ethereum.github.io/anon-rpc/" target="_blank" rel="noopener">anon-rpc</a> (the Nox mixnet) instead of Opaque's relays. Your balances, key state and account operations then reach a public RPC and bundler with nothing of ours in the path; only payments cross Opaque's relays. Slower, about a second a read. The wallet reloads. <a href="https://www.opaque.credit/ethglobal-mumbai#unseen" target="_blank" rel="noopener">What's this?</a></small></span><input type="checkbox" role="switch" id="anon-reads"></label>
+      <p class="fine-print" id="anon-reads-count" role="status"></p>
+    </div>
     <p class="fine-print" id="exit-link-wrap" hidden>If Opaque's servers ever go away or refuse you, your notes still leave their pools. <button class="link" id="exit-link" type="button">Leave without Opaque</button></p>
+  </section>
+
+  <section class="view" id="view-names" aria-labelledby="tab-names" hidden>
+    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Names</h1><span></span></div>
+    <p class="lede">A name on ENSv2 for this wallet, held by its post-quantum key. Anyone can pay it by name, and with Receive privately on (Privacy), those payments land at one-time addresses only this wallet can find.</p>
+    <div class="deposit-card" id="sub-card" hidden>
+      <div class="deposit-copy"><p class="eyebrow">Your ENS name</p><p id="sub-copy">A name under opaque.eth for this wallet: anyone can pay it by name, and only this wallet's post-quantum key holds it.</p></div>
+      <div class="deposit-row" id="sub-claim-row">
+        <label class="deposit-amount" for="sub-label"><input id="sub-label" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="yourname" maxlength="32"><span>.opaque.eth</span></label>
+        <button class="primary" id="sub-claim" type="button">Claim</button>
+      </div>
+      <div class="deposit-row" id="sub-held" hidden><b class="mono" id="sub-name"></b><button class="link" id="sub-release" type="button">Release</button></div>
+      <p class="status" id="sub-status" role="status"></p>
+    </div>
+    <details class="advanced" id="names-advanced">
+      <summary>Advanced: hold opaque.eth itself</summary>
+      <p class="fine-print">opaque.eth is the parent of every name here. A controller holds it and acts only on a FORS+C signature. The claim code hands that control to one wallet, so the team can show a top-level ENS name run by a post-quantum key. You don't need it for your own name.</p>
+      <p class="fine-print"><button class="link" id="name-owner" type="button">Claim opaque.eth with the code</button></p>
+    <div class="deposit-card" id="name-card" hidden>
+      <div class="deposit-copy"><p class="eyebrow">opaque.eth</p><p id="name-copy">Reading opaque.eth on ENS…</p></div>
+      <div class="deposit-row" id="name-claim-row">
+        <label class="deposit-amount" for="name-code"><input id="name-code" type="text" autocomplete="off" spellcheck="false" placeholder="claim code" maxlength="32"><span>code</span></label>
+        <button class="primary" id="name-claim" type="button">Claim</button>
+      </div>
+      <button class="secondary" id="name-point" type="button" hidden>Point opaque.eth at this wallet</button>
+      <small class="deposit-split" id="name-records"></small>
+      <p class="status" id="name-status" role="status"></p>
+    </div>
+    </details>
+  </section>
+
+  <section class="view flow-view" id="view-v4" aria-labelledby="tab-swap" hidden>
+    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Swap</h1><span></span></div>
+    <div class="flow">
+      <div class="flow-main">
+        <div class="ticket">
+          <div class="swap">
+            <div class="swap-side">
+              <div class="swap-head"><span>You pay</span><button class="link" id="v4-max" type="button">Balance <b id="v4-have">—</b></button></div>
+              <div class="swap-line"><input id="v4-amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0" maxlength="24" aria-label="Amount to pay"><span class="tok-pick static"><i class="tok tok-eth" id="v4-in-tok">E</i><b id="v4-in">ETH</b></span></div>
+            </div>
+            <button class="icon-btn swap-flip" id="v4-flip" type="button" aria-label="Swap the other way"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4v15M4.5 15.5 8 19l3.5-3.5M16 20V5M12.5 8.5 16 5l3.5 3.5"/></svg></button>
+            <div class="swap-side">
+              <div class="swap-head"><span>You get</span><span>Balance <b id="v4-have-out">—</b></span></div>
+              <div class="swap-line"><output id="v4-out">0</output><span class="tok-pick static"><i class="tok tok-usdc" id="v4-out-tok">U</i><b id="v4-out-name">tUSDC</b></span></div>
+            </div>
+          </div>
+          <dl class="swap-quote" id="v4-details">
+            <div><dt>Rate</dt><dd id="v4-rate">—</dd></div>
+            <div><dt>You get at least</dt><dd id="v4-min">—</dd></div>
+            <div><dt>Pool</dt><dd>Uniswap v4 · ETH/tUSDC · 0.30%</dd></div>
+            <div><dt>Who can trade</dt><dd><a id="v4-hook" target="_blank" rel="noopener">Post-quantum accounts only</a></dd></div>
+          </dl>
+          <button class="primary" id="v4-go" type="button" disabled>Enter an amount</button>
+          <small class="deposit-split" id="v4-quote"></small>
+        </div>
+        <p class="status" id="v4-status" role="status"></p>
+      </div>
+      <aside class="flow-side">
+        <p class="eyebrow">How a swap works on Sepolia</p>
+        <ol class="steps">
+          <li><b>A pool only post-quantum accounts can use</b><small>Its Uniswap v4 hook checks who is trading. This wallet's account gets in; an ECDSA wallet is refused with NotPostQuantum.</small></li>
+          <li><b>Quoted from the pool itself</b><small>Its price and liquidity, read from Uniswap's PoolManager across Opaque's relays.</small></li>
+          <li><b>Signed post-quantum</b><small>One operation this wallet's FORS+C key signs; the public bundler submits it.</small></li>
+          <li><b>Then private</b><small>tUSDC that arrives becomes private notes by itself.</small></li>
+        </ol>
+      </aside>
+    </div>
   </section>
 
   <section class="view" id="view-activity" aria-labelledby="tab-activity" hidden>
@@ -295,6 +334,7 @@
     <button id="tab-home" aria-selected="true" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4.5l8 6.5v8.5H14.5V14h-5v5.5H4z"/></svg></i>Home</button>
     <button id="tab-send" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 10 14M20.5 3.5 14 20.5l-4-6.5-6.5-4z"/></svg></i>Send</button>
     <button id="tab-swap" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5 3.5 8 7 11.5M3.5 8h13M17 12.5l3.5 3.5-3.5 3.5M20.5 16h-13"/></svg></i>Swap</button>
+    <button id="tab-names" aria-selected="false" type="button" hidden><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.6"/><path d="M15.6 12v1.4a2.6 2.6 0 0 0 5.2 0V12a8.8 8.8 0 1 0-3.4 6.9"/></svg></i>Names</button>
     <button id="tab-ring" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 5 6.5v5c0 4.2 3 7.6 7 9 4-1.4 7-4.8 7-9v-5z"/><path d="m9 12 2 2 4-4"/></svg></i>Privacy</button>
     <button id="tab-activity" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></i>Activity</button>
     <button id="tab-contracts" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7 3.5 12 8 17M16 7l4.5 5-4.5 5M13.5 5l-3 14"/></svg></i>Contracts</button>

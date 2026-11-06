@@ -39,6 +39,8 @@ export interface Stealth {
   isOn(account: Address): Promise<boolean>;
   /** The registry call that turns it on, made by the account. */
   readonly turnOnCall: { readonly to: Address; readonly data: Hex };
+  /** And off: an empty meta-address, so payers pay the account's own address again. */
+  readonly turnOffCall: { readonly to: Address; readonly data: Hex };
   /**
    * A fresh address for `recipient`, announced, if it receives privately;
    * undefined if it publishes no meta-address.
@@ -93,6 +95,7 @@ export function createStealth(deps: {
   return {
     metaAddress,
     turnOnCall: registerCall(metaAddress) as { to: Address; data: Hex },
+    turnOffCall: registerCall('0x') as { to: Address; data: Hex },
     async isOn(account) {
       const held = (await readOne(walletRpc, META_REGISTRY, 'stealthMetaAddressOf', [account, SCHEME_ID])).value as Hex;
       return held.toLowerCase() === metaAddress.toLowerCase();
