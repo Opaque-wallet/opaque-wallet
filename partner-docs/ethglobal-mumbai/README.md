@@ -23,6 +23,8 @@ Each is drawn in Excalidraw; edit the `.excalidraw` file on excalidraw.com, or c
 | Uniswap | [`diagrams/uniswap.svg`](../../diagrams/uniswap.svg) | Who calls the PoolManager, which callbacks each hook's flags turn on, the `actor` and post-quantum check behind every callback, and the guard's signed removal |
 | ENS | [`diagrams/ens.svg`](../../diagrams/ens.svg) | Who controls opaque.eth, who can hold `name.opaque.eth`, and how a payer resolves one through anon-rpc |
 | Ethereum Foundation | [`diagrams/ethereum-foundation.svg`](../../diagrams/ethereum-foundation.svg) | The FORS+C frame transaction, the exit with every Opaque server down, and post-quantum stealth payments |
+| The whole of Opaque | [`diagrams/opaque.svg`](../../diagrams/opaque.svg) | Everything on one page: who uses it, how it's sent, what it does, and the post-quantum core under it |
+| The problem | [`diagrams/q-day.svg`](../../diagrams/q-day.svg) | What a quantum computer takes on Ethereum, and Opaque under all of it |
 | Any protocol | [`diagrams/any-protocol.svg`](../../diagrams/any-protocol.svg) | A protocol's admin keys before (one ECDSA key) and after one button (`PQAdmin`, which acts only on a FORS+C signature), with the cracked key refused |
 
 ## Where each partner's code is

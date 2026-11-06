@@ -8,7 +8,7 @@
 
 [**Open the wallet**](https://www.opaque.credit/testnet/devnet) · [The project page](https://www.opaque.credit/ethglobal-mumbai) · [Sepolia wallet](https://www.opaque.credit/sepolia/app) · [Keep MetaMask](https://www.opaque.credit/sepolia/vault) · [Make any protocol quantum-safe](https://www.opaque.credit/sepolia/quantum-safe) · [Opaque beside MetaMask](https://www.opaque.credit/connect-opaque) · [Main README](../../README.md)
 
-![Opaque on Ethereum](../../diagrams/ethereum.svg)
+![The whole of Opaque: who uses it (the Opaque wallet, MetaMask users, protocol teams, dapps, Uniswap LPs), how it's sent (EIP-8141 frame transactions, ERC-4337, anon-rpc), what it does (private payments, ENS, stealth addresses, the Q-Day vault and PQAdmin, the EIP-8141 devnet, Uniswap v4, leaving without Opaque), and the post-quantum core under all of it](../../diagrams/opaque.svg)
 
 </div>
 
@@ -50,6 +50,8 @@ Every note can leave its pool with all of Opaque's servers switched off.
 - `PQNameController` holds any ENSv2 name.
 
 ## The problem
+
+![Q-Day: a quantum computer derives private keys from public keys, so wallets are emptied, Uniswap positions removed, ENS names taken, protocol admin keys used to upgrade and drain, stealth payments unmasked and SNARK privacy pools forged; Opaque moves every one of these to hash-based keys](../../diagrams/q-day.svg)
 
 - **Ethereum's keys don't outlive a quantum computer.**
   - Every account that has signed has published its ECDSA public key, and from a public key Shor's algorithm recovers the private key.

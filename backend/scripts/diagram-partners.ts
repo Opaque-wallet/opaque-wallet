@@ -193,6 +193,136 @@ const anyProtocol = [
   box(40, 670, 2280, 100, 'Anyone may submit a signed call: paying authorises nothing · the key rotates, and PQAdmin names the team\'s address, not a key, so nothing changes\nFound and handed over: an owner (two-step too) · a ProxyAdmin or EIP-1967 admin · a beacon · every AccessControl role · an AccessManager\'s admin role', O, 17),
 ];
 
+const W = { strokeColor: '#2f9e44', backgroundColor: '#b2f2bb', fillStyle: 'solid', strokeWidth: 2, roughness: 1, roundness: { type: 3 } };
+const label = (x: number, y: number, t: string) => text(x, y, t, 16, '#e8590c');
+// The whole of Opaque on one page: who → how it's sent → what it does, with the core under all of it.
+const whole = [
+  text(40, 20, 'Opaque: the post-quantum security layer for Ethereum', 40),
+  text(40, 78, 'orange: Opaque · grey: Ethereum and others, unchanged · every orange box that acts does so only on a FORS+C signature, checked in the core', 20, GREY),
+
+  // Who
+  label(40, 132, 'WHO'),
+  box(40, 160, 360, 200, 'Opaque wallet\n12 words → FORS+C keys', W, 22),
+  box(40, 730, 360, 70, 'MetaMask user', G),
+  box(40, 805, 360, 70, 'Protocol team', G),
+  box(40, 880, 360, 70, 'Any dapp', G),
+  box(40, 1060, 360, 90, 'Uniswap LP', G),
+
+  // How it's sent
+  label(520, 132, 'HOW IT\'S SENT'),
+  box(520, 160, 300, 90, 'EIP-8141 frame tx\nVERIFY: LeanFors', O),
+  box(860, 160, 200, 90, 'Alt mempool', G),
+  box(520, 290, 300, 90, 'ERC-4337\nUserOperation', O),
+  box(860, 290, 200, 90, 'Pimlico bundler', G),
+  box(520, 420, 300, 90, 'anon-rpc\nNox mixnet', G),
+  box(860, 420, 200, 90, 'Public RPC', G),
+  arrow([[402, 210], [518, 205]], 'signs'),
+  arrow([[402, 290], [518, 335]], 'signs'),
+  arrow([[402, 340], [518, 465]], 'reads'),
+  arrow([[822, 205], [858, 205]]),
+  arrow([[822, 335], [858, 335]]),
+  arrow([[822, 465], [858, 465]]),
+
+  // What it does
+  label(1160, 132, 'WHAT IT DOES'),
+  frame(1160, 160, 2000, 250),
+  text(1180, 172, 'Private payments', 18),
+  box(1190, 220, 280, 110, 'Ring proof\n1 of 8 · ZKBoo', O),
+  box(1510, 220, 280, 110, 'Three relays\nML-KEM onion', O),
+  box(1830, 220, 280, 110, 'Attester\nverifies · signs', O),
+  box(2150, 220, 280, 110, 'Note pool\npays', O),
+  box(2470, 220, 280, 110, 'Recipient', G),
+  text(2790, 250, 'the payer\'s account\nsends nothing', 17, GREY),
+  arrow([[1472, 275], [1508, 275]]),
+  arrow([[1792, 275], [1828, 275]]),
+  arrow([[2112, 275], [2148, 275]]),
+  arrow([[2432, 275], [2468, 275]]),
+  arrow([[1062, 205], [1158, 220]], 'devnet'),
+  arrow([[1062, 335], [1158, 320]], 'Sepolia'),
+
+  frame(1160, 450, 1000, 220),
+  text(1180, 462, 'ENS', 18),
+  box(1190, 510, 280, 110, 'PQNameController\nholds opaque.eth', O),
+  box(1520, 510, 280, 110, 'OpaqueNames\nname.opaque.eth', O),
+  box(1850, 510, 280, 110, 'UniversalResolverV2', G),
+  arrow([[1472, 565], [1518, 565]]),
+  arrow([[1848, 565], [1802, 565]]),
+  arrow([[1062, 465], [1158, 520]], 'ENS reads'),
+
+  frame(2200, 450, 960, 220),
+  text(2220, 462, 'Stealth addresses', 18),
+  box(2230, 510, 280, 110, 'One-time account\nswept into notes', O),
+  box(2540, 510, 280, 110, 'ERC-5564\nAnnouncer', G),
+  box(2850, 510, 280, 110, 'ERC-6538\nML-KEM-768 key', G),
+  arrow([[2290, 332], [2330, 508]], 'or'),
+  arrow([[2132, 565], [2228, 565]]),
+
+  frame(1160, 700, 1000, 270),
+  text(1180, 712, 'Keep what you have', 18),
+  box(1190, 745, 380, 60, 'Q-Day vault', O),
+  box(1190, 820, 380, 60, 'PQAdmin', O),
+  box(1190, 895, 380, 60, 'Connect with Opaque', O),
+  box(1720, 820, 400, 60, 'Your protocol', G),
+  arrow([[1572, 850], [1718, 850]], 'acts on FORS+C'),
+  text(1600, 763, 'out: FORS+C only', 17, GREY),
+  text(1600, 913, 'the wallet approves', 17, GREY),
+  arrow([[402, 765], [1188, 775]], 'deposits'),
+  arrow([[402, 840], [1188, 850]], 'admin keys'),
+  arrow([[402, 915], [1188, 925]], 'EIP-6963'),
+
+  frame(2200, 700, 960, 270),
+  text(2220, 712, 'EIP-8141 devnet', 18),
+  box(2230, 755, 280, 100, 'FramePQAccount\nverifies itself', O),
+  box(2540, 755, 280, 100, 'Factory\nno signature', O),
+  box(2850, 755, 280, 100, 'pqUSDC pools\nPQPoolHook', O),
+  text(2230, 885, 'no bundler, no paymaster: the account pays its own gas', 17, GREY),
+
+  frame(1160, 1010, 1000, 190),
+  text(1180, 1022, 'Uniswap v4', 18),
+  box(1190, 1065, 280, 100, 'v4 PoolManager', G),
+  box(1520, 1065, 280, 100, 'PQ pool hooks\nPQ accounts only', O),
+  box(1850, 1065, 280, 100, 'PQGuardHook\nsigned removals', O),
+  arrow([[1472, 1115], [1518, 1115]]),
+  arrow([[1330, 1167], [1330, 1185], [1990, 1185], [1990, 1167]]),
+  arrow([[402, 1105], [1188, 1115]], 'add · remove'),
+
+  frame(2200, 1010, 960, 190),
+  text(2220, 1022, 'Leave without Opaque', 18),
+  box(2230, 1065, 420, 100, 'Exitable pools\nannounce · wait · reveal', O),
+  box(2700, 1065, 430, 100, 'AES-128 on chain\nrecomputes the note', O),
+  arrow([[2652, 1115], [2698, 1115]]),
+
+  // The core, under everything
+  box(40, 1250, 3120, 130, 'PQ AUTH CORE\nFORS+C keys · PQKeyRegistry · at most 8 signatures a key, then the next · hash-based', K, 24),
+];
+
+// The problem, for the video's opening: what a quantum computer takes, and Opaque under all of it.
+const qday = [
+  text(40, 20, 'Q-Day: what a quantum computer does to Ethereum', 40),
+  text(40, 78, 'Every account that has signed has published its public key. Shor\'s algorithm turns a public key back into its private key.', 20, GREY),
+  text(40, 106, 'Harvest now, decrypt later: on a public chain, everything is already harvested.', 20, GREY),
+  box(1290, 160, 560, 110, 'A quantum computer\nShor\'s algorithm', K, 26),
+  box(40, 390, 460, 130, 'Wallets\nemptied', G, 22),
+  box(560, 390, 460, 130, 'Uniswap positions\nremoved', G, 22),
+  box(1080, 390, 460, 130, 'ENS names\ntaken', G, 22),
+  box(1600, 390, 460, 130, 'Protocol admin keys\nupgraded, drained', G, 22),
+  box(2120, 390, 460, 130, 'Stealth payments\nunmasked, all at once', G, 22),
+  box(2640, 390, 460, 130, 'SNARK privacy pools\nforged withdrawals', G, 22),
+  arrow([[1450, 272], [270, 386]]),
+  arrow([[1500, 272], [790, 386]]),
+  arrow([[1550, 272], [1310, 386]]),
+  arrow([[1590, 272], [1830, 386]]),
+  arrow([[1640, 272], [2350, 386]]),
+  arrow([[1690, 272], [2870, 386]]),
+  box(40, 650, 3060, 130, 'Opaque: the quantum-safe layer for Ethereum\nevery one of these on hash-based keys, today, without a fork', O, 28),
+  arrow([[270, 522], [270, 646]]),
+  arrow([[790, 522], [790, 646]]),
+  arrow([[1310, 522], [1310, 646]]),
+  arrow([[1830, 522], [1830, 646]]),
+  arrow([[2350, 522], [2350, 646]]),
+  arrow([[2870, 522], [2870, 646]]),
+];
+
 const html = `<!doctype html><html><body><script type="module">
   import * as X from 'https://esm.sh/@excalidraw/excalidraw@0.18.0?bundle-deps';
   window.make = async ([skeleton, name]) => {
@@ -218,7 +348,7 @@ await page.goto('https://example.com');
 await page.setContent(html);
 await page.waitForFunction(() => (window as unknown as { ready?: boolean }).ready === true, undefined, { timeout: 120_000 });
 const dir = new URL('../../diagrams/', import.meta.url).pathname;
-for (const [name, els] of [['uniswap', uniswap], ['ens', ens], ['ethereum-foundation', ef], ['any-protocol', anyProtocol]] as const) {
+for (const [name, els] of [['uniswap', uniswap], ['ens', ens], ['ethereum-foundation', ef], ['any-protocol', anyProtocol], ['opaque', whole], ['q-day', qday]] as const) {
   const out = await page.evaluate((a) => (window as unknown as { make: (a: unknown) => Promise<{ svg: string; json: string; png: string }> }).make(a), [els, `opaque-${name}`]);
   writeFileSync(join(dir, `${name}.svg`), out.svg);
   writeFileSync(join(dir, `${name}.excalidraw`), out.json);

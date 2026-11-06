@@ -6,15 +6,15 @@ For recording the ETHGlobal Mumbai video. **Four and a half minutes at most**: t
 
 ## The one sentence
 
-**Opaque is the post-quantum security layer for Ethereum.** It moves everything ECDSA guards today to hash-based keys (accounts, payments, ENS names, Uniswap liquidity and any protocol's admin keys) and makes payments private. The wallet is one way in; MetaMask users, LPs and any protocol plug in without switching.
+**Opaque is the quantum-safe layer for Ethereum.** It moves everything ECDSA guards today to hash-based keys (accounts, payments, ENS names, Uniswap liquidity and any protocol's admin keys) and makes payments private. The wallet is one way in; MetaMask users, LPs and any protocol plug in without switching.
 
 ## Timing
 
 | Part | Time | Length |
 |---|---|---|
-| The problem | 0:00–0:25 | 25 s |
-| The architecture | 0:25–1:55 | 90 s |
-| The demo | 1:55–4:13 | 138 s |
+| The problem, and Opaque | 0:00–0:38 | 38 s |
+| The architecture | 0:38–2:08 | 90 s |
+| The demo | 2:08–4:13 | 125 s |
 | The close | 4:13–4:30 | 17 s |
 
 ## The architecture, in parts
@@ -38,43 +38,45 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **How any protocol becomes quantum-safe.** Before: the protocol's admin powers (its owner, its ProxyAdmin or beacon, its AccessControl roles) are held by one ECDSA key, and whoever cracks it upgrades or drains the protocol. After one button on /sepolia/quantum-safe, every power the team's wallet held is held by its `PQAdmin`. `PQAdmin.execute(target, data, deadline, signature)` calls out only if `PQKeyRegistry.consume` accepts a FORS+C signature from the guard key over exactly that call; anyone may submit it. The ECDSA key is refused (`OwnableUnauthorizedAccount`), and the guard key rotates without the admin changing.
 
-## 1. The problem (0:00–0:25)
+## 1. The problem, and Opaque (0:00–0:38)
 
 | Time | On screen | Voiceover |
 |---|---|---|
-| 0:00 | opaque.credit/ethglobal-mumbai, top of the page | "Every Ethereum account that has ever signed has published its public key. From a public key, a quantum computer derives the private key." |
-| 0:10 | Scroll to "Why now" | "So on Q-Day, wallets, Uniswap positions, ENS names and protocols' admin keys can all be taken." |
-| 0:18 | Stay on "Why now" | "And privacy built on elliptic curves can be unmasked later. On a public chain, everything is already harvested." |
+| 0:00 | You on camera, or GitHub: diagrams/q-day.svg, its title | "Hi, I'm Swarnim, and this is Opaque: the quantum-safe layer for Ethereum." |
+| 0:06 | diagrams/q-day.svg: the quantum computer at the top | "Every Ethereum account that has ever signed has put its public key on chain. A quantum computer turns that public key back into the private key." |
+| 0:16 | Same diagram: Wallets, Uniswap positions, ENS names, Protocol admin keys | "So wallets, Uniswap positions, ENS names and protocols' admin keys can all be taken." |
+| 0:24 | Same diagram: Stealth payments, SNARK privacy pools | "And privacy breaks backwards: stealth payments hidden with today's curves can be unmasked later, all at once. The data is already on chain." |
+| 0:32 | Same diagram: the orange Opaque box at the bottom | "Opaque moves every one of these to hash-based keys, today, without a fork." |
 
-## 2. The architecture (0:25–1:55)
-
-| Time | On screen | Voiceover |
-|---|---|---|
-| 0:25 | Core: GitHub: github.com/Opaque-wallet/opaque-wallet, the README top diagram (diagrams/ethereum.svg): the PQ auth core at the bottom | "Opaque is a post-quantum security layer. Every authorization is a FORS+C signature, built from hashes alone. A registry holds each key; only that key can replace it, and none signs more than eight times." |
-| 0:40 | Core: Same diagram: Path A (EIP-8141), then Path B (Sepolia) | "Two ways to send. On EIP-8141, the transaction itself is FORS+C, in 76,430 gas. On Sepolia, the key signs ERC-4337 operations." |
-| 0:50 | Core: Same diagram: the Opaque privacy layer | "Payments are private. Notes sit in fixed-size pools. A hash-based ring proof says a note is one of eight, not which. Three relays carry it, sealed with ML-KEM; our attester checks it, and the pool pays." |
-| 1:06 | Any protocol: GitHub: diagrams/any-protocol.svg (in the README): Before, then After one button | "Any protocol can plug in too. Its upgrade admin, owner and roles move to a PQAdmin, which acts only on a FORS+C signature the registry checks. A cracked ECDSA key then changes nothing." |
-| 1:21 | Uniswap: GitHub: diagrams/uniswap.svg: the 0xAA0 panel, then PQGuardHook | "For Uniswap: v4 hooks put this key in charge. Our pools admit only post-quantum accounts, and PQGuardHook gives any LP a hash-based second factor." |
-| 1:32 | ENS: GitHub: diagrams/ens.svg: PQNameController, then OpaqueNames | "For ENS: opaque.eth's token, and every role with it, sits in a contract obeying only FORS+C. Subnames are post-quantum, and pay stealth addresses." |
-| 1:42 | EF: GitHub: diagrams/ethereum-foundation.svg: the stealth loop, anon-rpc, the exit | "For the Ethereum Foundation: ML-KEM stealth on the standard ERC-5564 contracts, reads through anon-rpc, and every note can leave its pool with all our servers off." |
-
-## 3. The demo (1:55–4:13)
+## 2. The architecture (0:38–2:08)
 
 | Time | On screen | Voiceover |
 |---|---|---|
-| 1:55 | 3.1 The layer: opaque.credit/testnet/devnet → Activity → a Deposit transaction → Explorer ↗ (frames view) | "On the devnet, a deposit. Frame zero: the account checks its own FORS+C signature in 76,430 gas, under a 100,000 cap. The audited verifier needed 167,000, so we rewrote it in assembly. Seven frames follow, under that one signature." |
-| 2:10 | 3.2 Any protocol: Wallet's network drop-down → Keep what you have · Sepolia → Quantum-safe admin → Make a demo with roles → Make it quantum-safe → Take it back with the cracked key → Sign and upgrade | "Here it is, from the wallet's menu. This contract's beacon and three roles all sit on my MetaMask. One button hands every one to my PQAdmin. The cracked MetaMask key is refused on all four; a signed upgrade goes through." |
-| 2:32 | 3.3 Any LP: GitHub: diagrams/uniswap.svg, then the terminal output of uniswap-sepolia.ts | "On Uniswap's own Sepolia v4, removing guarded liquidity pays only the recipient its FORS+C signature names. In our pools, an ordinary wallet's swap reverts." |
-| 2:44 | 3.4 MetaMask: opaque.credit/sepolia/vault → Deposit → Withdraw with the cracked key → "Refused by the chain: BadSignature" | "Keep MetaMask: put money in the Q-Day vault. A thief with the cracked MetaMask key is refused. Only the guard key's signature takes it out." |
-| 2:56 | 3.5 Any dapp: opaque.credit/connect-opaque: Opaque beside MetaMask → connect → Send 0.0001 ETH → approve in Opaque | "Any dapp lists Opaque beside MetaMask. Each transaction is approved in Opaque and signed with a hash-based key." |
-| 3:05 | 3.6 Private payment: Split screen. Left: opaque.credit/sepolia/app → Send 5 tUSDC. Right: railway logs --service opaque-sepolia | "I pay five dollars privately. The proof is built in my browser, and my note's secret never leaves it." |
-| 3:12 | 3.6 Private payment: Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" | "It crosses three relays as onion layers and arrives still sealed." |
-| 3:19 | 3.6 Private payment: Right: "settler  opened payment…", then "ring proof verified in 2.0 s; attested with the attester's FORS+C key…" | "Our attester verifies the ring proof and signs with its own hash-based key." |
-| 3:26 | 3.6 Private payment: Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…". Click the link. | "The pool pays. On Etherscan, the sender is our settler: my account sent nothing." |
-| 3:33 | 3.7 A name: Sepolia wallet → Names → claim yourname.opaque.eth → Send → type the name | "One signature claims a real ENSv2 name and publishes my ML-KEM key. Paying the name pays a fresh one-time account no quantum computer can link later." |
-| 3:46 | 3.8 Leave: DevTools → Network → block *opaque* and *railway.app* → reload | "Now I block every Opaque server." |
-| 3:51 | 3.8 Leave: Privacy → Leave without Opaque → Find my notes, without Opaque | "The wallet still finds my notes, through EF's anon-rpc and a public bundler." |
-| 3:59 | 3.8 Leave: The withdrawal step (cut the 300-second wait in the edit) | "It announces the exit, waits, then reveals the note. The contract recomputes it with AES-128 on chain and pays. No permission needed, not even ours." |
+| 0:38 | The core: GitHub: diagrams/opaque.svg, the README top: the PQ auth core at the bottom | "This is all of Opaque. At the bottom is the core: every orange box acts only on a FORS+C signature, a hash-based key checked in one registry. No key signs more than eight times." |
+| 0:52 | How it is sent: Same diagram: Who, then How it's sent | "The Opaque wallet holds those keys. It signs EIP-8141 frame transactions on the devnet, ERC-4337 operations on Sepolia, and reads through EF's anon-rpc." |
+| 1:02 | Privacy: Same diagram: Private payments, left to right | "Payments: a ring proof shows a note is one of eight, three relays carry it sealed with ML-KEM, our attester verifies and signs, and the pool pays. The payer's account sends nothing." |
+| 1:16 | ENS · Stealth: Same diagram: ENS, then Stealth addresses | "Names: opaque.eth is held by a FORS+C-only controller, and name.opaque.eth goes only to post-quantum accounts. Paying a name pays a one-time account, hidden with ML-KEM." |
+| 1:28 | Any protocol · EIP-8141: Same diagram: Keep what you have, then EIP-8141 devnet | "Nobody has to switch: MetaMask keeps funds in the Q-Day vault, protocols hand their admin keys to PQAdmin, and dapps list Opaque beside MetaMask. On EIP-8141, accounts verify themselves." |
+| 1:41 | Uniswap · Exit: Same diagram: Uniswap v4, then Leave without Opaque | "On Uniswap v4, our hooks let only post-quantum accounts trade, and PQGuardHook protects any LP. And if Opaque disappears, every note still leaves its pool: announce, wait, reveal." |
+| 1:55 | The whole picture: Same diagram, whole | "One hash-based key under all of it: wallets, names, liquidity, admin keys and private payments." |
+
+## 3. The demo (2:08–4:13)
+
+| Time | On screen | Voiceover |
+|---|---|---|
+| 2:08 | 3.1 The layer: opaque.credit/testnet/devnet → Activity → a Deposit transaction → Explorer ↗ (frames view) | "On the devnet, a deposit. Frame zero: the account checks its own FORS+C signature in 76,430 gas, under the 100,000 cap; we rewrote the verifier in assembly to fit. Seven frames follow." |
+| 2:21 | 3.2 Any protocol: Wallet's network drop-down → Keep what you have · Sepolia → Quantum-safe admin → Make a demo with roles → Make it quantum-safe → Take it back with the cracked key → Sign and upgrade | "From the wallet's menu: this contract's beacon and three roles sit on my MetaMask. One button hands them all to my PQAdmin. The cracked key is refused on all four; a signed upgrade goes through." |
+| 2:41 | 3.3 Any LP: GitHub: diagrams/uniswap.svg, then the terminal output of uniswap-sepolia.ts | "On Uniswap's own Sepolia v4, removing guarded liquidity pays only the recipient its FORS+C signature names. In our pools, an ordinary wallet's swap reverts." |
+| 2:52 | 3.4 MetaMask: opaque.credit/sepolia/vault → Deposit → Withdraw with the cracked key → "Refused by the chain: BadSignature" | "Keep MetaMask: put money in the Q-Day vault. A thief with the cracked MetaMask key is refused. Only the guard key's signature takes it out." |
+| 3:03 | 3.5 Any dapp: opaque.credit/connect-opaque: Opaque beside MetaMask → connect → Send 0.0001 ETH → approve in Opaque | "Any dapp lists Opaque beside MetaMask. Each transaction is approved in Opaque and signed with a hash-based key." |
+| 3:11 | 3.6 Private payment: Split screen. Left: opaque.credit/sepolia/app → Send 5 tUSDC. Right: railway logs --service opaque-sepolia | "I pay five dollars privately. The proof is built in my browser, and my note's secret never leaves it." |
+| 3:18 | 3.6 Private payment: Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" | "It crosses three relays as onion layers and arrives still sealed." |
+| 3:24 | 3.6 Private payment: Right: "settler  opened payment…", then "ring proof verified in 2.0 s; attested with the attester's FORS+C key…" | "Our attester verifies the ring proof and signs with its own hash-based key." |
+| 3:30 | 3.6 Private payment: Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…". Click the link. | "The pool pays. On Etherscan, the sender is our settler: my account sent nothing." |
+| 3:37 | 3.7 A name: Sepolia wallet → Names → claim yourname.opaque.eth → Send → type the name | "One signature claims a real ENSv2 name and publishes my ML-KEM key. Paying the name pays a fresh one-time account no quantum computer can link later." |
+| 3:49 | 3.8 Leave: DevTools → Network → block *opaque* and *railway.app* → reload | "Now I block every Opaque server." |
+| 3:53 | 3.8 Leave: Privacy → Leave without Opaque → Find my notes, without Opaque | "The wallet still finds my notes, through EF's anon-rpc and a public bundler." |
+| 4:00 | 3.8 Leave: The withdrawal step (cut the 300-second wait in the edit) | "It announces the exit, waits, then reveals the note. The contract recomputes it with AES-128 on chain and pays. No permission needed, not even ours." |
 
 ## 4. The close (4:13–4:30)
 

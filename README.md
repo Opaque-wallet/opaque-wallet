@@ -23,7 +23,7 @@ It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumb
 
 [**Open the wallet**](https://www.opaque.credit/testnet/devnet) · [**ETHGlobal Mumbai submission**](docs/mumbai/README.md) · [The project page](https://www.opaque.credit/ethglobal-mumbai) · [Sepolia wallet](https://www.opaque.credit/sepolia/app) · [Keep MetaMask](https://www.opaque.credit/sepolia/vault) · [Make any protocol quantum-safe](https://www.opaque.credit/sepolia/quantum-safe) · [Opaque beside MetaMask](https://www.opaque.credit/connect-opaque) · [Partner pages](partner-docs/ethglobal-mumbai/README.md)
 
-![Opaque on Ethereum: the wallet, its two transaction paths (EIP-8141 frame transactions on the devnet, ERC-4337 on Sepolia), the privacy layer, and the post-quantum authorization core under all of it](diagrams/ethereum.svg)
+![The whole of Opaque: who uses it (the Opaque wallet, MetaMask users, protocol teams, dapps, Uniswap LPs), how it's sent (EIP-8141 frame transactions, ERC-4337, anon-rpc), what it does (private payments, ENS, stealth addresses, the Q-Day vault and PQAdmin, the EIP-8141 devnet, Uniswap v4, leaving without Opaque), and the post-quantum core under all of it](diagrams/opaque.svg)
 
 </div>
 
@@ -57,6 +57,8 @@ It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumb
 ---
 
 ## Why this is the need of the hour
+
+![Q-Day: a quantum computer derives private keys from public keys, so wallets are emptied, Uniswap positions removed, ENS names taken, protocol admin keys used to upgrade and drain, stealth payments unmasked and SNARK privacy pools forged; Opaque moves every one of these to hash-based keys](diagrams/q-day.svg)
 
 **1. Every Ethereum account that has ever signed has already published what a quantum computer needs.**
 - An ECDSA signature reveals its public key. From a public key, Shor's algorithm recovers the private key.
@@ -195,6 +197,8 @@ Nothing below rests on factoring or discrete logs.
 | **Digests** | Length-prefixed keccak over a domain, the chain, the account, the scheme, the use count and `keccak(payload)` ([`Canonical.sol`](contracts/src/opaque/lib/Canonical.sol), [`digest.ts`](packages/pq-wallet/src/digest.ts)) | | A separator that can occur inside a field lets two inputs hash alike, so every field carries its length. Each action gets its own domain (`opaque/v1/ens/execute`, `opaque/v1/pq-wallet/action`), so a signature for one is never valid as another. |
 
 ## Architecture: the moving parts
+
+![Opaque on Ethereum in detail: the wallet, its two transaction paths, the privacy layer, the contracts on each network, and the post-quantum core](diagrams/ethereum.svg)
 
 | Part | Runs | Does | Trusted for |
 |---|---|---|---|
