@@ -4,9 +4,9 @@
 
 # Opaque · ETHGlobal Mumbai
 
-### A private, post-quantum Ethereum wallet. Payments, names, swaps, liquidity and dapps, every one authorized by a hash-based key. Live today.
+### The post-quantum security layer for Ethereum. Accounts, payments, names, liquidity and any protocol's admin keys, moved to hash-based keys. Live today.
 
-[**Open the wallet**](https://www.opaque.credit/testnet/devnet) · [The project page](https://www.opaque.credit/ethglobal-mumbai) · [Sepolia wallet](https://www.opaque.credit/sepolia/app) · [Keep MetaMask](https://www.opaque.credit/sepolia/vault) · [Opaque beside MetaMask](https://www.opaque.credit/connect-opaque) · [Main README](../../README.md)
+[**Open the wallet**](https://www.opaque.credit/testnet/devnet) · [The project page](https://www.opaque.credit/ethglobal-mumbai) · [Sepolia wallet](https://www.opaque.credit/sepolia/app) · [Keep MetaMask](https://www.opaque.credit/sepolia/vault) · [Make any protocol quantum-safe](https://www.opaque.credit/sepolia/quantum-safe) · [Opaque beside MetaMask](https://www.opaque.credit/connect-opaque) · [Main README](../../README.md)
 
 ![Opaque on Ethereum](../../diagrams/ethereum.svg)
 
@@ -27,7 +27,7 @@
 
 ## In one line, and in one paragraph
 
-**Opaque is an Ethereum wallet whose every signature is hash-based and whose every payment is private, live on Sepolia and the EIP-8141 devnet.**
+**Opaque is the post-quantum security layer for Ethereum: everything ECDSA guards today moves to hash-based keys, and payments become private. Live on Sepolia and the EIP-8141 devnet.**
 
 Ethereum's accounts, names, LP positions and privacy all rest on elliptic curves, and a quantum computer breaks every one of them, including privacy already on chain. Opaque moves all of it to cryptography a quantum computer doesn't break:
 - **Signatures:** FORS+C, a hash-based scheme, for the account, the attester, the ENS controller and the LP guard.
@@ -42,6 +42,12 @@ It works with what Ethereum already has:
 - EIP-8141, where the transaction itself is signed by FORS+C alone, in 76,430 gas.
 
 Every note can leave its pool with all of Opaque's servers switched off.
+
+**It's more than a wallet.** The Opaque wallet is one way in, but most of the layer works for people who never switch:
+- `PQAdmin` makes any protocol's admin keys quantum-safe with one button;
+- `PQGuardHook` protects any Uniswap LP, MetaMask's included;
+- the Q-Day vault protects what's in any MetaMask wallet;
+- `PQNameController` holds any ENSv2 name.
 
 ## The problem
 
@@ -58,14 +64,22 @@ Every note can leave its pool with all of Opaque's servers switched off.
 
 ## What we built
 
+### For anyone, with the keys and contracts they already have
+
+| | |
+|---|---|
+| **Make any protocol quantum-safe** | One button hands a contract's admin keys (an Ownable owner, an OpenZeppelin ProxyAdmin, an AccessControl admin role) to `PQAdmin`, which acts only on a FORS+C signature. Upgrades, pauses and fee changes then need the hash-based key. |
+| **Uniswap v4 liquidity a quantum computer can't take** | `PQGuardHook`: a FORS+C second factor for *any* LP, MetaMask's included, which pays only the recipient it signed. Plus pools only post-quantum accounts can trade in, on Uniswap's own Sepolia v4 and on the devnet. |
+| **Keep MetaMask** | The Q-Day vault: MetaMask puts money in, and only a FORS+C signature takes it out. |
+| **ENSv2 names a quantum computer can't take** | opaque.eth is owned by `PQNameController`, which acts only on a FORS+C signature. `name.opaque.eth` can be claimed only by post-quantum accounts, in the same signature that turns on stealth payments, and it labels the account in the wallet. |
+
+### In Opaque's own post-quantum accounts
+
 | | |
 |---|---|
 | **Post-quantum accounts** | FORS+C keys from one recovery phrase. The phrase stays in your browser, sealed under your wallet password once you set one. Few-time keys hand over to a next key they committed to in advance. ERC-4337 on Sepolia; EIP-8141 frame transactions on the devnet. |
 | **Private payments, USDC and ETH** | Pools of fixed-size notes. A ring proof shows a note is one of 8 without saying which, carried by three relays, and the pool pays. ETH goes in as WETH notes, wrapped and deposited in one operation. |
 | **Post-quantum stealth addresses** | An ML-KEM-768 meta-address in ERC-6538's registry, ciphertexts on ERC-5564's Announcer. Every payment lands at a fresh FORS+C account only the payee can find, and the wallet sweeps it into their notes. |
-| **ENSv2 names a quantum computer can't take** | opaque.eth is owned by `PQNameController`, which acts only on a FORS+C signature. `name.opaque.eth` can be claimed only by post-quantum accounts, in the same signature that turns on stealth payments, and it labels the account in the wallet. |
-| **Uniswap v4 liquidity a quantum computer can't take** | `PQGuardHook`: a FORS+C second factor for *any* LP, MetaMask's included, which pays only the recipient it signed. Plus pools only post-quantum accounts can trade in, on Uniswap's own Sepolia v4 and on the devnet. |
-| **Keep MetaMask** | The Q-Day vault: MetaMask puts money in, and only a FORS+C signature takes it out. |
 | **Opaque beside MetaMask in any dapp** | An EIP-6963 provider in the extension. Every transaction a dapp asks for is approved in Opaque and signed by the post-quantum account. |
 | **Reads nobody can trace** | EF's anon-rpc (the Nox mixnet): for ENS always, and for the whole account with one switch. |
 | **Leave without us** | Exitable pools: announce, wait, reveal, and AES-128 on chain recomputes the note. It works with every Opaque server down, through anon-rpc and a public bundler. |
@@ -268,6 +282,7 @@ Every note can leave its pool with all of Opaque's servers switched off.
 | **Privacy** | ML-KEM stealth, anon-rpc, WETH notes |
 | **ENS and Uniswap** | `PQNameController`, `OpaqueNames` and the three v4 hooks |
 | **MetaMask users** | `PQVault`, and Connect with Opaque |
+| **Any protocol** | `PQAdmin` and its one-button page |
 
 The audited contracts were deployed unchanged; new behaviour lives in new contracts beside them.
 
@@ -275,12 +290,13 @@ The audited contracts were deployed unchanged; new behaviour lives in new contra
 
 | Check | Result |
 |---|---|
-| `cd contracts && forge test` | 142 passed |
+| `cd contracts && forge test` | 153 passed |
 | `cd backend && npm test` | 394 passed |
 | `scripts/e2e-sepolia.ts` | 33 checks against the live site and Sepolia: a private payment, a v4 swap, a name claimed and paid at a one-time address, the sweep, anon-rpc, and a note leaving its pool with every Opaque server blocked |
 | `scripts/e2e-sepolia-eth.ts` | 0.0015 ETH made private in one operation and sent privately. The payee holds exactly 0.0015 WETH, with no transfer from the wallet's address. |
 | `scripts/e2e-eth-connect.ts` | 19 checks: Opaque found by EIP-6963, connected, a mined transaction, a rejection returned as 4001 |
 | `scripts/e2e-vault.ts` | MetaMask's flow: register, deposit, the thief refused, a signed withdrawal |
+| `scripts/e2e-admin.ts` | Any protocol: two ECDSA admin keys handed to the `PQAdmin` with one button, the cracked key refused, a signed fee change and upgrade on chain |
 | `scripts/e2e-devnet-private.ts` | A private payment on the devnet, every signature FORS+C |
 | `scripts/e2e-devnet-page.ts` | The devnet account's life: created with no signature, a FORS+C-only send, a v4 swap |
 
@@ -300,6 +316,7 @@ Deployment addresses are in each partner page, and in [`deployments/eth-sepolia.
 ## In this folder
 
 - [`PLAN.md`](PLAN.md): the build, task by task, with every address checked on chain.
+- [`VIDEO.md`](VIDEO.md): the demo video's script, timed to three minutes.
 - [`anon-rpc-adopter.md`](anon-rpc-adopter.md): Opaque's entry for anon-rpc's adopters list.
 - [`erc-exitable-pools.md`](erc-exitable-pools.md): a draft ERC for exitable privacy pools.
 - [`opaque-ethereum.excalidraw`](opaque-ethereum.excalidraw), [`opaque-privacy-layer.excalidraw`](opaque-privacy-layer.excalidraw): the first sketches. The finished diagrams are in [`diagrams/`](../../diagrams/): `ethereum`, `uniswap`, `ens` and `ethereum-foundation`.

@@ -6,7 +6,8 @@
 import { decodeFunctionResult, encodeFunctionData, formatEther, isAddress, parseAbi, parseEther } from '../../../backend/ethereum/frame.ts';
 import { commitmentOf, masterKey, REGISTRY_ABI, signAction, signRotation, type RegistryKey } from '../../../backend/ethereum/ens/ens.ts';
 import { deployment, requireContract } from '../../../deployments/index.ts';
-import { accountKeys, isPhrase, newPhrase, normalizePhrase, stream } from '../lib/wallet-keys.ts';
+import { isPhrase, newPhrase, normalizePhrase } from '../lib/wallet-keys.ts';
+import { guardKeyAt, guardPhraseKey } from './guard.ts';
 
 type Hex = `0x${string}`;
 type Address = `0x${string}`;
@@ -49,8 +50,7 @@ async function sendTx(tx: { to: Address; data: Hex; value?: bigint }): Promise<H
 }
 const txLink = (hash: Hex) => `${deployment.network.explorer.replace(/\/$/, '')}/tx/${hash}`;
 
-/** Generation g of this phrase's guard key, its own secret: never derived from anything the ECDSA key signs. */
-const keyAt = (g: number): RegistryKey => masterKey(stream(accountKeys(phrase!, 0).key, 'opaque/v1/vault/guard')(32), 'opaque/v1/vault/guard', g);
+const keyAt = (g: number): RegistryKey => guardKeyAt(phrase!, g);
 const stateOf = async () => decodeFunctionResult({ abi: REGISTRY_ABI, functionName: 'stateOf', data: await call(REGISTRY, encodeFunctionData({ abi: REGISTRY_ABI, functionName: 'stateOf', args: [me!] })) }) as { pkCommitment: Hex; useCount: bigint; maxUses: bigint };
 const balance = async (token: Address) => decodeFunctionResult({ abi: VAULT_ABI, functionName: 'balanceOf', data: await call(VAULT, encodeFunctionData({ abi: VAULT_ABI, functionName: 'balanceOf', args: [me!, token] })) }) as bigint;
 const amountOf = (text: string, eth: boolean): bigint | undefined => {
@@ -60,7 +60,7 @@ const amountOf = (text: string, eth: boolean): bigint | undefined => {
   const [w, f = ''] = v.split('.');
   return f.length > 6 ? undefined : BigInt(w!) * 1_000_000n + BigInt((f + '000000').slice(0, 6));
 };
-const storeKey = () => `opaque:vault-phrase:${me!.toLowerCase()}`;
+const storeKey = () => guardPhraseKey(me!);
 const unlock = (id: string, on: boolean) => { el(id).classList.toggle('locked', !on); };
 
 async function refresh(): Promise<void> {

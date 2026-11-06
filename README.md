@@ -7,17 +7,21 @@
 [![Uniswap v4](https://img.shields.io/badge/Uniswap%20v4-post--quantum%20hooks-FF007A?style=flat-square)](partner-docs/ethglobal-mumbai/uniswap.md)
 [![ENSv2](https://img.shields.io/badge/ENSv2-names%20held%20by%20FORS%2BC-0080BC?style=flat-square)](partner-docs/ethglobal-mumbai/ens.md)
 [![EF](https://img.shields.io/badge/Ethereum%20Foundation-CROPS%20·%20anon--rpc%20·%20EIP--8141-627EEA?style=flat-square)](partner-docs/ethglobal-mumbai/ethereum-foundation.md)
-[![forge](https://img.shields.io/badge/forge-142%20passed-FF7A18?style=flat-square)](contracts/)
+[![forge](https://img.shields.io/badge/forge-153%20passed-FF7A18?style=flat-square)](contracts/)
 [![backend](https://img.shields.io/badge/backend-394%20passed-FF7A18?style=flat-square)](backend/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-FF7A18?style=flat-square)](LICENSE)
 
-**Opaque is an Ethereum wallet in which every authorization is a hash-based, post-quantum signature, and every payment is private by default.**
+**Opaque is the post-quantum security layer for Ethereum.** It moves everything ECDSA guards today to hash-based keys, and makes payments private:
+- accounts and payments;
+- ENS names;
+- Uniswap liquidity;
+- any protocol's admin keys.
 
-It covers paying and being paid, names, swaps and liquidity, any dapp, and keeping MetaMask.
+The Opaque wallet is one way in. MetaMask users, liquidity providers and protocols plug in without switching anything.
 
 It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumbai.
 
-[**Open the wallet**](https://www.opaque.credit/testnet/devnet) · [**ETHGlobal Mumbai submission**](docs/mumbai/README.md) · [The project page](https://www.opaque.credit/ethglobal-mumbai) · [Sepolia wallet](https://www.opaque.credit/sepolia/app) · [Keep MetaMask](https://www.opaque.credit/sepolia/vault) · [Opaque beside MetaMask](https://www.opaque.credit/connect-opaque) · [Partner pages](partner-docs/ethglobal-mumbai/README.md)
+[**Open the wallet**](https://www.opaque.credit/testnet/devnet) · [**ETHGlobal Mumbai submission**](docs/mumbai/README.md) · [The project page](https://www.opaque.credit/ethglobal-mumbai) · [Sepolia wallet](https://www.opaque.credit/sepolia/app) · [Keep MetaMask](https://www.opaque.credit/sepolia/vault) · [Make any protocol quantum-safe](https://www.opaque.credit/sepolia/quantum-safe) · [Opaque beside MetaMask](https://www.opaque.credit/connect-opaque) · [Partner pages](partner-docs/ethglobal-mumbai/README.md)
 
 ![Opaque on Ethereum: the wallet, its two transaction paths (EIP-8141 frame transactions on the devnet, ERC-4337 on Sepolia), the privacy layer, and the post-quantum authorization core under all of it](diagrams/ethereum.svg)
 
@@ -31,7 +35,8 @@ It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumb
 > - **On Sepolia:** it runs through ERC-4337, Uniswap's own v4 and ENSv2.
 > - **On the EIP-8141 devnet:** the transaction itself is signed by FORS+C alone, in 76,430 gas.
 > - **Leaving:** every note can leave its pool with every Opaque server switched off.
-> - **Tests:** 142 contract tests, 394 backend tests and six browser suites check it against the live chains.
+> - **Any protocol:** one button hands a contract's admin keys to a contract that acts only on a FORS+C signature.
+> - **Tests:** 153 contract tests, 394 backend tests and eight browser suites check it against the live chains.
 
 ## Contents
 
@@ -63,7 +68,7 @@ It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumb
 - That's "harvest now, decrypt later", and on a public ledger there is nothing left to harvest: it's all published.
 - **Privacy that must still hold in ten years has to be post-quantum on the day the payment is made.**
 
-**3. The cryptography is ready. Wallets aren't.**
+**3. The cryptography is ready. Ethereum isn't using it yet.**
 - NIST standardized ML-KEM (FIPS 203) and hash-based signatures (SLH-DSA, FIPS 205) in August 2024.
 - Published estimates of the hardware needed keep falling. Gidney (2025) puts RSA-2048 at under a million noisy qubits.
 - Moving a user base takes years. **The cheapest time to move is before anyone has to.** Opaque lets people move now:
@@ -79,6 +84,7 @@ What breaks on the day elliptic-curve discrete logs become computable, and what 
 |---|---|---|---|
 | An EOA, or a smart account with an ECDSA or passkey (P-256) owner | Elliptic-curve signatures. The public key is on chain after the first signature. | The private key is recovered and the account emptied. | The account's only authority is a FORS+C key: `PQAccount` on Sepolia, `FramePQAccount` on the devnet. |
 | A Uniswap LP position | The ECDSA key of the address that holds it | Removed by whoever recovers the key | `PQGuardHook`: a removal needs a FORS+C signature that names its recipient. |
+| A protocol's admin key: a proxy admin, an `owner()`, an admin role | The admin's ECDSA key, nearly always | The protocol is upgraded, paused or drained by whoever recovers the key | `PQAdmin`: one button hands every admin key to a contract that acts only on a FORS+C signature |
 | An ENS name | The owner's ECDSA key | Transferred, or pointed somewhere else | opaque.eth is held by `PQNameController`, which acts only on a FORS+C signature. |
 | A note in a SNARK privacy pool (Tornado Cash's and Railgun's Groth16 proofs over BN254, for example) | Pairing-based elliptic-curve assumptions | A forged proof can pass, so a note can be withdrawn by someone who never deposited it. | A ZKBoo ring proof, built from hashes and AES-128 only |
 | A secp256k1 stealth payment (ERC-5564 scheme 1) | secp256k1 Diffie-Hellman | Every announcement's shared secret is recomputed. Every payee, ever, is linked at once. | ML-KEM-768 (FIPS 203), on the same ERC-5564 and ERC-6538 contracts |
@@ -86,13 +92,23 @@ What breaks on the day elliptic-curve discrete logs become computable, and what 
 
 ## What we built, live today
 
+### For anyone, with the keys and contracts they already have
+
+| You want to… | Opaque does it with… | Live on |
+|---|---|---|
+| **Make any protocol quantum-safe** | **`PQAdmin`.** One button finds a contract's admin keys (an Ownable owner, an OpenZeppelin ProxyAdmin, an AccessControl admin role) and hands each to a contract that acts only on a FORS+C signature from your guard key. Upgrades, pauses and fee changes then need the hash-based key, and the guard key rotates without the admin changing. | [Sepolia](https://www.opaque.credit/sepolia/quantum-safe) |
+| **Protect any LP position** | **`PQGuardHook`**, a Uniswap v4 hook: a FORS+C second factor for any LP, MetaMask's included. A removal needs a signature that names its recipient, and the hook pays only that recipient. | Sepolia (Uniswap's v4) |
+| **Keep MetaMask** | **The Q-Day vault.** Your ECDSA key puts money in, and only your FORS+C key takes it out. | [Sepolia](https://www.opaque.credit/sepolia/vault) |
+| **Hold an ENS name with a post-quantum key** | **`PQNameController`.** Transfer an ENSv2 name to it, and every role moves with the token: from then on only a FORS+C signature changes its records. opaque.eth is held this way. | Sepolia |
+
+### In Opaque's own post-quantum accounts
+
 | You want to… | Opaque does it with… | Live on |
 |---|---|---|
 | **Pay privately** (USDC and ETH) | Pools of fixed-size notes. A hash-based ring proof shows you own one of 8 without saying which, sealed and carried by a three-hop relay mesh. ETH goes in as WETH notes, wrapped and deposited in one operation. | Sepolia, devnet |
 | **Be paid privately** | **Post-quantum stealth addresses.** An ML-KEM-768 meta-address in [ERC-6538](https://eips.ethereum.org/EIPS/eip-6538)'s registry, with announcements on [ERC-5564](https://eips.ethereum.org/EIPS/eip-5564)'s Announcer. Each payment lands at a fresh FORS+C account only you can find, and the wallet sweeps it into your notes. | Sepolia |
-| **Own a name** | **ENSv2.** opaque.eth is held by `PQNameController`, which acts only on a FORS+C signature. `name.opaque.eth` can be claimed only by post-quantum accounts, and it then labels your account in the wallet. | Sepolia |
-| **Swap and provide liquidity** | **Uniswap v4 hooks.** Pools only post-quantum accounts can use, plus `PQGuardHook`, a FORS+C second factor that protects *any* LP's position, MetaMask's included. | Sepolia (Uniswap's v4), devnet |
-| **Keep MetaMask** | **The Q-Day vault.** Your ECDSA key puts money in, and only your FORS+C key takes it out. | [Sepolia](https://www.opaque.credit/sepolia/vault) |
+| **Own a name** | **ENSv2.** `name.opaque.eth` can be claimed only by post-quantum accounts, and it then labels your account in the wallet. | Sepolia |
+| **Trade in pools a cracked key can't touch** | **Uniswap v4 hooks** (`PQAccountPoolHook`, `PQPoolHook`): pools only post-quantum accounts can swap in, add to or remove from. | Sepolia (Uniswap's v4), devnet |
 | **Use any dapp** | **Connect with Opaque.** An EIP-6963 provider, so dapps list Opaque beside MetaMask. Every transaction is approved in Opaque and signed by the post-quantum account. | [Sepolia](https://www.opaque.credit/connect-opaque) |
 | **Read without being watched** | **EF's anon-rpc** (the Nox mixnet): always for ENS, and for the whole account with one switch. | Sepolia |
 | **Leave without us** | **Exitable pools.** Every note can leave its pool with every Opaque server down: announce, wait, reveal, and AES-128 on chain recomputes the note. It runs through anon-rpc and a public bundler. | Sepolia |
@@ -287,7 +303,7 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 | Exit delay | 300 s on Sepolia (days for a real pool) |
 | anon-rpc read | About 1 s |
 | Pools | Sepolia: 7 tUSDC (1, 2, 5, 10, 20, 50, 100) and 3 WETH (0.0005, 0.001, 0.005 ETH). Devnet: 7 pqUSDC. |
-| Tests | 142 forge, 394 backend, six Playwright suites against the live chains |
+| Tests | 153 forge, 394 backend, eight Playwright suites against the live chains |
 
 ## Deployment addresses
 
@@ -301,6 +317,7 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 | `PQNameController` (holds opaque.eth) / `OpaqueNames` | [`0x4d4df91933bb30640908f5cd4a42e2cac546c131`](https://sepolia.etherscan.io/address/0x4d4df91933bb30640908f5cd4a42e2cac546c131) / [`0x01f3419d2c8747f6b72032caf21a02fd0db44a28`](https://sepolia.etherscan.io/address/0x01f3419d2c8747f6b72032caf21a02fd0db44a28) |
 | `PQGuardHook` / `PQAccountPoolHook` (at Uniswap's v4) | [`0xd0cfd61eb5ef783f6d70ea83b58d2c87fc034b01`](https://sepolia.etherscan.io/address/0xd0cfd61eb5ef783f6d70ea83b58d2c87fc034b01) / [`0xa68b63f17fe7926812d8591247b5a718a7244aa0`](https://sepolia.etherscan.io/address/0xa68b63f17fe7926812d8591247b5a718a7244aa0) |
 | `PQVault` (the Q-Day vault) | [`0x0316a466f3e14850a016883aa46b3d5187b9aeb0`](https://sepolia.etherscan.io/address/0x0316a466f3e14850a016883aa46b3d5187b9aeb0) |
+| `PQAdminFactory` (quantum-safe admin) | [`0xd5fd1bed7558d1cdad40461547aec57d43d0b490`](https://sepolia.etherscan.io/address/0xd5fd1bed7558d1cdad40461547aec57d43d0b490) |
 | Stealth registry / Announcer (the standard ones) | `0x6538…6538` / `0x5564…5564` |
 
 **EIP-8141 devnet, chain 1337** (full map in [`deployments/eth-devnet.json`](deployments/eth-devnet.json); explorer: [altmempoolexplorer.forshtat.com](https://altmempoolexplorer.forshtat.com)):
@@ -317,14 +334,16 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 
 | Check | Result |
 |---|---|
-| `cd contracts && forge test` | 142 passed, 1 skipped |
+| `cd contracts && forge test` | 153 passed, 1 skipped |
 | `cd backend && npm test` | 394 passed |
 | `scripts/e2e-sepolia.ts` (in `backend/`, with `node --use-system-ca`) | 33 checks in Chromium, against the live site and Sepolia: a private payment, a v4 swap, a name claimed and paid at a one-time address, the stealth sweep, anon-rpc, and **a note leaving its pool with every Opaque server blocked** |
 | `scripts/e2e-sepolia-eth.ts` | 0.0015 ETH made private as 0.001 + 0.0005 notes in one operation, then sent privately. The payee holds exactly 0.0015 WETH, with no transfer from the wallet's address. |
 | `scripts/e2e-eth-connect.ts` | 19 checks: the extension's provider found by EIP-6963, connected, a mined transaction, a rejection returned as 4001 |
 | `scripts/e2e-vault.ts` | MetaMask's flow: register, deposit, the thief refused, a signed withdrawal |
+| `scripts/e2e-admin.ts` | Any protocol: a demo protocol with two ECDSA admin keys, the button hands both to the `PQAdmin`, the cracked key is refused, and a signed fee change and upgrade land on chain |
 | `scripts/e2e-devnet-private.ts` | From an account with no ETH: deposit, then a private payment in which every signature is FORS+C |
 | `scripts/e2e-devnet-page.ts` | The devnet account's whole life: created with no signature, a FORS+C-only send, a v4 swap |
+| `scripts/e2e-devnet-received.ts` | Another account pays a fresh devnet account in a FORS-signed frame transaction, and Activity lists it under Received |
 
 **Try it in two minutes:**
 1. Open [opaque.credit/sepolia/app](https://www.opaque.credit/sepolia/app) and make a wallet (12 words, kept in your browser).
@@ -371,7 +390,7 @@ Each partner's code has folders of its own, one per layer, and every folder has 
 
 | Folder | What | README |
 |---|---|---|
-| [`contracts/src/ethereum/`](contracts/src/ethereum/) | Every Ethereum-only contract: uniswap, ens, vault, frame | [README](contracts/src/ethereum/README.md) |
+| [`contracts/src/ethereum/`](contracts/src/ethereum/) | Every Ethereum-only contract: uniswap, ens, vault, admin, frame | [README](contracts/src/ethereum/README.md) |
 | [`contracts/src/opaque/`](contracts/src/opaque/) | Shared with Arc: pools, `ExitableRingVerifier`, `AES128`, `PQAccount`, `PQKeyRegistry` | [README](contracts/README.md) |
 | [`packages/pq-wallet/`](packages/pq-wallet/) | FORS+C in TypeScript, and the signer's never-sign-twice state | [README](packages/pq-wallet/README.md) |
 | [`backend/zk/`](backend/zk/) | The ZKBoo ring proof over AES-128 | [README](backend/zk/README.md) |

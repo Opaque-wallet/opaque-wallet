@@ -228,7 +228,7 @@ Each pool's exit waits 300 s on Sepolia.
 ## Reproduce it
 
 ```bash
-cd contracts && forge test                                   # 142 pass, incl. LeanFors and ExitableRingVerifier
+cd contracts && forge test                                   # 153 pass, incl. LeanFors and ExitableRingVerifier
 cd backend && node --use-system-ca scripts/e2e-sepolia.ts    # 33 checks: stealth, anon-rpc, the exit with Opaque blocked
 cd backend && node --use-system-ca scripts/e2e-devnet-private.ts   # a private payment on the devnet, every signature FORS+C
 cd backend && node ethereum/frame-tx.ts send                 # a FORS+C-only frame transaction

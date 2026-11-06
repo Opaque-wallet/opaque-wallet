@@ -358,5 +358,22 @@
     "$comment": "The Q-Day vault (contracts/src/ethereum/vault/PQVault.sol): any wallet keeps ETH or tokens here that only its FORS+C key in PQKeyRegistry can take out.",
     "address": "0x0316a466f3e14850a016883aa46b3d5187b9aeb0",
     "deployedAtBlock": 12075986
+  },
+  "admin": {
+    "$comment": "Quantum-proof any protocol's admin keys (contracts/src/ethereum/admin/): PQAdminFactory makes each guardian a PQAdmin that calls out only on its FORS+C key in PQKeyRegistry. The demo is an OpenZeppelin TransparentUpgradeableProxy to try it on.",
+    "demo": {
+      "v1": "0x1c21de8c4ec284860ecd9df5d2d5b2e954943d52",
+      "v2": "0x93d1d3593d1607d61a91a0509fc49cb6ccbb349f",
+      "factory": "0xe093275c213795bf2689d02a86bd8fe92d53aa70"
+    },
+    "factory": "0xd5fd1bed7558d1cdad40461547aec57d43d0b490",
+    "deployedAtBlock": 12077233,
+    "example": {
+      "$comment": "The team wallet's demo protocol, both of whose admin keys its PQAdmin holds.",
+      "protocol": "0xbc8f8ff74223696dd76287330466d8d24f1687a0",
+      "proxyAdmin": "0x77c7e1b20347e90ccd4319282dde0d7ceec99256",
+      "pqAdmin": "0x0833a5525ecf0df46d69c8eb1a9a7f5e53d7dcfb",
+      "guardian": "0x006508975a5ce7901df571806d85218f320f8a36"
+    }
   }
 }
