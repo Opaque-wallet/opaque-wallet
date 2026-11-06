@@ -138,7 +138,7 @@ sequenceDiagram
   W->>W: pick the note, 7 decoys from the pool's own Deposited logs, sort the ring
   W->>W: ZKBoo proof in a Web Worker (1.08 MiB, 219 repetitions)
   W->>R: about 35 chunks, each in 3 ML-KEM-768 onion layers
-  R->>E: relay 1 knows your IP, not the payment; relay 3 knows the payment, not your IP
+  R->>E: relay 1 knows your IP, not the payment. Relay 3 knows the payment, not your IP
   E->>T: the reassembled spend
   T->>T: verify the proof (2.0 s), sign an attestation with its own FORS+C key
   T->>S: the attested spend
