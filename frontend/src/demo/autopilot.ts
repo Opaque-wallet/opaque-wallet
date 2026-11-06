@@ -15,11 +15,11 @@ import { ETHEREUM_COIN, resolveName } from '../ethereum/ens/ens-name.ts';
 
 const KEY = 'opaque-demo';
 const PASSWORD = 'opaque demo password';
-type Phase = 'aims' | 'wallet' | 'funds' | 'payment' | 'swap' | 'name' | 'named' | 'paid' | 'devnet' | 'leave' | 'withdraw' | 'qday' | 'done';
+type Phase = 'aims' | 'wallet' | 'funds' | 'payment' | 'swap' | 'name' | 'named' | 'paid' | 'devnet' | 'leave' | 'withdraw' | 'protocol' | 'qday' | 'done';
 interface State { phase: Phase; label: string; started: number; exitHost?: string; faucet?: boolean; block?: string; note?: string }
 const PAGE_OF: Record<Phase, string> = {
   aims: '/sepolia/app', wallet: '/sepolia/app', funds: '/sepolia/app', payment: '/sepolia/app', swap: '/sepolia/app', name: '/sepolia/app', named: '/sepolia/app', paid: '/sepolia/app',
-  devnet: '/testnet/devnet', leave: '/sepolia/app', withdraw: '/sepolia/app', qday: '/sepolia/q-day', done: '/sepolia/q-day',
+  devnet: '/testnet/devnet', leave: '/sepolia/app', withdraw: '/sepolia/app', protocol: '/sepolia/quantum-safe', qday: '/sepolia/q-day', done: '/sepolia/q-day',
 };
 const here = (path: string) => location.pathname.replace(/\.html$/, '').endsWith(path);
 
@@ -380,6 +380,55 @@ const STEPS: Record<Exclude<Phase, 'done'>, () => Promise<void>> = {
     await status('exit-status', /^Withdrawn/, /^Not done/, 'the withdrawal', 300_000);
     await sleep(4_000);
     delete state!.block;
+    next('protocol');
+  },
+
+  // Any protocol, from MetaMask: the page asks MetaMask for every transaction, and the person
+  // recording approves each one there; those waits are marked to cut.
+  async protocol() {
+    const metamask = 'your approval in MetaMask, then the chain';
+    await say('Any protocol', 'From MetaMask: deploy a protocol, find its admin keys, hand them to a FORS+C key');
+    clear('connect-status');
+    await press('#connect');
+    await status('connect-status', /^Connected/, /^(Not connected|No browser wallet|The quantum-safe admin is not)/, metamask, 300_000);
+    await sleep(2_000);
+    // A MetaMask account registers one guard key, once: a new one here, or the words this browser kept.
+    await until('the guard key', () => shown('#key-new') || !q('#s-contract')!.classList.contains('locked') || /different key/.test(text('key-reg')), 120_000);
+    if (/different key/.test(text('key-reg'))) throw new Error('this MetaMask account registered a guard key whose 12 words this browser does not have: switch MetaMask to a fresh account, or enter its words, then reload');
+    if (shown('#key-new')) {
+      await say('Any protocol', 'A guard key from 12 words, registered from MetaMask');
+      await press('#key-new');
+      await until('the 12 words', () => document.querySelectorAll('#words li').length === 12, 60_000);
+      await sleep(3_000);
+      clear('key-status');
+      await press('#key-register');
+      await status('key-status', /^Registered/, /^Not registered/, metamask, 600_000);
+      await until('the contract step', () => !q('#s-contract')!.classList.contains('locked'), 120_000);
+    }
+    await say('Any protocol', 'A protocol deployed from MetaMask: its owner and proxy admin are one ECDSA key');
+    clear('c-status');
+    await press('#demo-make');
+    waiting(metamask);
+    await until('the protocol and its admin keys', () => document.querySelectorAll('#c-keys li.yours').length >= 2 || /^(No demo|There is no contract)/.test(text('c-status')), 600_000, 1_000);
+    waiting();
+    if (document.querySelectorAll('#c-keys li.yours').length < 2) throw new Error(text('c-status'));
+    await sleep(4_000);
+    await say('Any protocol', 'One button: every admin key handed to PQAdmin, which acts only on a FORS+C signature');
+    clear('go-status');
+    await press('#go');
+    await status('go-status', /^Quantum-safe/, /^(Not handed|Handed over all but)/, metamask, 900_000);
+    await sleep(3_000);
+    await say('Any protocol', 'The cracked ECDSA key tries to take it back: refused');
+    clear('attack-status');
+    await press('#attack-go');
+    await status('attack-status', /^Refused/, /^The chain would/, '', 120_000);
+    await sleep(3_000);
+    await say('Any protocol', 'A fee change, signed by the guard key alone');
+    await type('#fee', '42');
+    clear('act-status');
+    await press('#fee-go');
+    await status('act-status', /^Done/, /^(Not done|Enter a whole)/, metamask, 600_000);
+    await sleep(4_000);
     next('qday');
   },
 

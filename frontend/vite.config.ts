@@ -10,7 +10,7 @@ import { defineConfig } from 'vite';
 // with VITE_DEMO=1 (npm run demo:on); any other build has no trace of it. Read the way
 // deployments/index.ts reads OPAQUE_NETWORK, so this config needs no Node types.
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
-const DEMO_PAGES: Record<string, RegExp> = { sepolia: /src\/(app|qday\/qday)\.ts/, testnet: /src\/ethereum\/devnet\.ts/ };
+const DEMO_PAGES: Record<string, RegExp> = { sepolia: /src\/(app|qday\/qday|admin\/admin)\.ts/, testnet: /src\/ethereum\/devnet\.ts/ };
 const demo = {
   name: 'opaque-demo',
   transformIndexHtml: {

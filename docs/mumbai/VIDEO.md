@@ -12,11 +12,11 @@ For recording the ETHGlobal Mumbai video. **Four and a half minutes at most**: t
 
 | Part | Time | Length |
 |---|---|---|
-| Hi guys, this is Opaque | 0:00–0:35 | 35 s |
-| What the demo shows | 0:35–0:47 | 12 s |
-| The demo | 0:47–2:15 | 88 s |
-| The architecture | 2:15–4:13 | 118 s |
-| The close | 4:13–4:30 | 17 s |
+| Hi guys, this is Opaque | 0:00–0:30 | 30 s |
+| What the demo shows | 0:30–0:40 | 10 s |
+| The demo | 0:40–2:17 | 97 s |
+| The architecture | 2:17–4:15 | 118 s |
+| The close | 4:15–4:30 | 15 s |
 
 ## The architecture, in parts
 
@@ -39,11 +39,11 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **How any protocol becomes quantum-safe.** Before: the protocol's admin powers (its owner, its ProxyAdmin or beacon, its AccessControl roles) are held by one ECDSA key, and whoever cracks it upgrades or drains the protocol. After one button on /sepolia/quantum-safe, every power the team's wallet held is held by its `PQAdmin`. `PQAdmin.execute(target, data, deadline, signature)` calls out only if `PQKeyRegistry.consume` accepts a FORS+C signature from the guard key over exactly that call; anyone may submit it. The ECDSA key is refused (`OwnableUnauthorizedAccount`), and the guard key rotates without the admin changing.
 
-## 1. Hi guys, this is Opaque (0:00–0:35)
+## 1. Hi guys, this is Opaque (0:00–0:30)
 
 **Say this, as one paragraph:**
 
-> Hi guys, this is Opaque, the post-quantum security layer for Ethereum. Every account that has signed has put its public key on chain, and a quantum computer turns that key back into the private key. Opaque moves everything that key guards to hash-based FORS+C keys: accounts, payments, ENS names, Uniswap liquidity and any protocol's admin keys. And it keeps payments private with cryptography a quantum computer has nothing to attack. It's more than a wallet, and it's live today on Sepolia and Ethereum's EIP-8141 devnet.
+> Hi guys, this is Opaque, the post-quantum security layer for Ethereum. Every account that has signed has put its public key on chain, and a quantum computer turns that key back into the private key. Opaque moves everything that key guards to hash-based FORS+C keys: accounts, payments, ENS names, Uniswap liquidity and any protocol's admin keys. It's more than a wallet: it keeps payments private with cryptography a quantum computer can't attack.
 
 **On screen:**
 
@@ -51,46 +51,46 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 |---|---|
 | 0:00 | The autopilot on opaque.credit/ethglobal-mumbai?demo=swarnim: press Play; the page reloads on Post-quantum. And unseen. |
 | 0:05 | The page scrolls by itself: Nobody sees who's asking, What your RPC sees, Four steps |
-| 0:15 | Still scrolling: names, stealth payments, the Uniswap pool and the LP guard |
-| 0:24 | Still scrolling: the Q-Day vault, Opaque beside MetaMask, What it doesn't hide, to the end |
+| 0:15 | Still scrolling: names, stealth payments, the Uniswap pool, the Q-Day vault, to the end |
 
-## 2. What the demo shows (0:35–0:47)
+## 2. What the demo shows (0:30–0:40)
 
 **Say this, as one paragraph:**
 
-> Today our demo aims are simple yet clear: a wallet, a private payment, a Uniswap swap, an ENS name, the EIP-8141 devnet, leaving without Opaque, and Q-Day.
+> Today our demo aims are simple yet clear: a wallet, a private payment, a Uniswap swap, an ENS name, the devnet, any protocol, and Q-Day.
 
 **On screen:**
 
 | Time | Show |
 |---|---|
-| 0:35 | The wallet opens by itself; the caption reads The demo: A wallet · a private payment · Uniswap v4 · an ENS name · the EIP-8141 devnet · leaving without Opaque · Q-Day |
+| 0:30 | The wallet opens by itself on the caption The demo: A wallet · a private payment · Uniswap v4 · an ENS name · the EIP-8141 devnet · leaving without Opaque · Q-Day |
 
-## 3. The demo (0:47–2:15)
+## 3. The demo (0:40–2:17)
 
 **Say this, as one paragraph:**
 
-> Twelve words make the wallet, and every FORS+C key comes from them; a password seals them in this browser. The faucet funds it, and the deposit is one ERC-4337 operation its FORS+C key signs. I pay five dollars privately; the ring proof is built in my browser. It crosses three relays and arrives still sealed. Our attester verifies it and signs with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. A swap in Uniswap v4's post-quantum pool: its hook lets in only FORS+C accounts. One signature claims swarnim.opaque.eth on ENSv2, and the wallet takes the name. Paying it pays a one-time address that only my ML-KEM key can find. On the EIP-8141 devnet, the account itself is FORS+C only: frame zero verifies its signature in 76,430 gas, thanks to LeanFors. Now every Opaque server is down. The wallet still finds my notes through anon-rpc, and after the pool's delay withdraws them, with no one's permission. Last, Q-Day. The page hands an attacker this wallet's private key: it takes the wallet and its protocol, and the chain refuses everything behind Opaque. Then the owner moves it all with the FORS+C key alone.
+> Twelve words make the wallet, and every FORS+C key comes from them; a password seals them in this browser. The faucet funds it, and the deposit is one ERC-4337 operation its FORS+C key signs. I pay five dollars privately; the ring proof is built in my browser. It crosses three relays sealed, and our attester signs it with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. A swap in Uniswap v4's post-quantum pool: its hook lets in only FORS+C accounts. One signature claims swarnim.opaque.eth on ENSv2, and the wallet takes the name. Paying it pays a one-time address that only my ML-KEM key can find. On the EIP-8141 devnet the account itself is FORS+C only; frame zero verifies it in 76,430 gas, thanks to LeanFors. Then every Opaque server goes down: the wallet finds my notes through anon-rpc and withdraws them, with no one's permission. From MetaMask, I deploy a protocol. The page finds its admin keys: an owner and a proxy admin, both one ECDSA key. One button hands them to PQAdmin. The cracked key is refused, and my guard key alone changes the fee. Last, Q-Day. The page hands an attacker this wallet's private key: it takes the wallet and its protocol, and the chain refuses everything behind Opaque. Then the owner moves it all with the FORS+C key alone.
 
 **On screen:**
 
 | Time | Show |
 |---|---|
-| 0:47 | Create a wallet, the 12 words, three typed back, a password |
-| 0:56 | Get test funds; the balance turns into 100 tUSDC of notes (cut the wait) |
-| 1:02 | Split screen. Left: Send 5 tUSDC typed in. Right: railway logs --service opaque-sepolia |
-| 1:07 | Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" |
-| 1:11 | Right: "settler … ring proof verified; attested with the attester's FORS+C key…" |
-| 1:16 | Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…" |
-| 1:21 | Swap: 0.001 ETH quoted, then Swapped on Uniswap v4 |
-| 1:27 | Names: the label typed, claimed; after a reload the header reads swarnim.opaque.eth |
-| 1:33 | Send 2 tUSDC to the name; Home: the payment found and swept into the notes (cut the wait) |
-| 1:39 | The devnet wallet: funded, created by its factory, a send through its signature request, a v4 swap |
-| 1:49 | Back on Sepolia, every Opaque server down: the exit card, Find my notes, announced, then Withdrawn (cut the delay) |
-| 2:00 | The Q-Day page: the victim set up (cut the wait), Run Q-Day, the attack log |
-| 2:10 | Move it all with the guard key: Done |
+| 0:40 | Create a wallet, the 12 words, three typed back, a password |
+| 0:49 | Get test funds; the balance turns into 100 tUSDC of notes (cut the wait) |
+| 0:55 | Split screen. Left: Send 5 tUSDC typed in. Right: railway logs --service opaque-sepolia |
+| 1:00 | Right: "mesh exit  a payment came out of the mesh…", then "settler … attested with the attester's FORS+C key" |
+| 1:06 | Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…" |
+| 1:11 | Swap: 0.001 ETH quoted, then Swapped on Uniswap v4 |
+| 1:17 | Names: the label typed, claimed; after a reload the header reads swarnim.opaque.eth |
+| 1:23 | Send 2 tUSDC to the name; Home: the payment found and swept into the notes (cut the wait) |
+| 1:29 | The devnet wallet: funded, created by its factory, a send through its signature request, a v4 swap |
+| 1:37 | Back on Sepolia, every Opaque server down: the exit card, Find my notes, announced, then Withdrawn (cut the delay) |
+| 1:45 | opaque.credit/sepolia/quantum-safe: Connect MetaMask, a guard key from 12 words, Make a demo protocol, its two ECDSA admin keys listed (approve each MetaMask popup; cut the waits) |
+| 1:54 | The button: Quantum-safe; the thief's try: Refused; Set fee 42: Done, as your PQAdmin |
+| 2:02 | The Q-Day page: the victim set up (cut the wait), Run Q-Day, the attack log |
+| 2:12 | Move it all with the guard key: Done |
 
-## 4. The architecture (2:15–4:13)
+## 4. The architecture (2:17–4:15)
 
 **Say this, as one paragraph:**
 
@@ -100,26 +100,26 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 | Time | Show |
 |---|---|
-| 2:15 | diagrams/opaque.svg: the PQ AUTH CORE box at the bottom, then up to the Opaque wallet |
-| 2:31 | Follow: signs → EIP-8141 frame tx → Alt mempool → devnet; signs → ERC-4337 UserOperation → Pimlico bundler → Sepolia; reads → anon-rpc → Public RPC |
-| 2:46 | Follow the row: Ring proof → Three relays → Attester → Note pool → Recipient, and the "or" arrow down to One-time account |
-| 3:04 | Follow: PQNameController → OpaqueNames ← UniversalResolverV2 → One-time account; then ERC-5564 and ERC-6538 |
-| 3:21 | Follow: MetaMask user → deposits → Q-Day vault; Protocol team → admin keys → PQAdmin → acts on FORS+C → Your protocol; Any dapp → EIP-6963 → Connect with Opaque |
-| 3:37 | The EIP-8141 devnet frame: FramePQAccount, Factory, pqUSDC pools |
-| 3:47 | Follow: Uniswap LP → add · remove → v4 PoolManager → PQ pool hooks, and the arrow round to PQGuardHook |
-| 4:01 | Follow: Exitable pools → AES-128 on chain; then back down to the PQ AUTH CORE |
+| 2:17 | diagrams/opaque.svg: the PQ AUTH CORE box at the bottom, then up to the Opaque wallet |
+| 2:33 | Follow: signs → EIP-8141 frame tx → Alt mempool → devnet; signs → ERC-4337 UserOperation → Pimlico bundler → Sepolia; reads → anon-rpc → Public RPC |
+| 2:48 | Follow the row: Ring proof → Three relays → Attester → Note pool → Recipient, and the "or" arrow down to One-time account |
+| 3:06 | Follow: PQNameController → OpaqueNames ← UniversalResolverV2 → One-time account; then ERC-5564 and ERC-6538 |
+| 3:23 | Follow: MetaMask user → deposits → Q-Day vault; Protocol team → admin keys → PQAdmin → acts on FORS+C → Your protocol; Any dapp → EIP-6963 → Connect with Opaque |
+| 3:39 | The EIP-8141 devnet frame: FramePQAccount, Factory, pqUSDC pools |
+| 3:49 | Follow: Uniswap LP → add · remove → v4 PoolManager → PQ pool hooks, and the arrow round to PQGuardHook |
+| 4:03 | Follow: Exitable pools → AES-128 on chain; then back down to the PQ AUTH CORE |
 
-## 5. The close (4:13–4:30)
+## 5. The close (4:15–4:30)
 
 **Say this, as one paragraph:**
 
-> Q-Day won't come with a warning, and every key that moves later has to be moved by the key that's breaking. With Opaque, you move today: your money, your name, your liquidity, your protocol. This is Opaque. Thanks for watching.
+> Q-Day won't come with a warning, and every key that moves later must be moved by the key that's breaking. With Opaque, your money, your name and your protocol move today. Be prepared for Q-Day. Thanks for watching.
 
 **On screen:**
 
 | Time | Show |
 |---|---|
-| 4:13 | The ETHGlobal Mumbai page's last section, Go post-quantum, then the Opaque logo |
+| 4:15 | The ETHGlobal Mumbai page's last section, Go post-quantum, then the Opaque logo |
 
 ## Before you record
 
@@ -128,7 +128,8 @@ What each part does, for reading before you record. The voiceover in part 2 cove
   - Start the screen recording, then press **Play**. The ETHGlobal Mumbai page reloads and scrolls to the end by itself (0:00 to 0:35). The wallet opens and holds 12 seconds on the demo's aims (0:35). Then it types and clicks through 3.1 to 3.7, across the Sepolia wallet, the devnet and the Q-Day page, with a cursor and a caption. Every transaction is real, and Opaque's faucet funds the new wallets.
   - While the chain works, a **Waiting · cut** tag shows in the corner: cut those stretches. Uncut, a run takes about 30 minutes.
   - **Esc** or **Stop** ends a run. If a step fails, the caption says why; reload the page to try that step again.
-  - Record the architecture (2:15) and the close (4:13) separately, over `diagrams/opaque.svg` and the README.
+  - **For 3.7, MetaMask:** the autopilot presses the quantum-safe page's buttons, and you approve each MetaMask popup (about seven: connect, the guard key, the protocol, the handover, the fee). Use a MetaMask account that has never registered a guard key and holds a little Sepolia ETH, and allow MetaMask in private windows (brave://extensions → MetaMask → Allow in Private).
+  - Record the architecture (2:17) and the close (4:15) separately, over `diagrams/opaque.svg` and the Mumbai page.
   - When the video is done: `cd frontend && npm run demo:off`. The site is deployed again with no demo code in it.
 - **The backend's logs, for 3.2.**
   - In a terminal beside the browser: `railway logs --service opaque-sepolia`. Or open the Railway dashboard → the `opaque-sepolia` service → **Logs**.
