@@ -464,9 +464,12 @@ const STEPS: Record<Exclude<Phase, 'done'>, () => Promise<void>> = {
     clear('c-status');
     await press('#demo-make');
     waiting(metamask);
-    await until('the protocol and its admin keys', () => document.querySelectorAll('#c-keys li.yours').length >= 2 || /^(No demo|There is no contract)/.test(text('c-status')), 600_000, 1_000);
+    const keysFound = () => document.querySelectorAll('#c-keys li.yours').length >= 2;
+    await until('the protocol and its admin keys', () => keysFound() || /^(No demo|There is no contract)/.test(text('c-status')), 600_000, 1_000);
+    // An error from a read after the deployment can come before the keys do: they are what counts.
+    if (!keysFound()) await maybe(until('the admin keys', keysFound, 30_000, 1_000));
     waiting();
-    if (document.querySelectorAll('#c-keys li.yours').length < 2) throw new Error(text('c-status'));
+    if (!keysFound()) throw new Error(text('c-status'));
     await sleep(4_000);
     await say('Any protocol', 'One button: every admin key handed to PQAdmin, which acts only on a FORS+C signature');
     clear('go-status');

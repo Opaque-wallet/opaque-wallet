@@ -87,7 +87,8 @@ interface Receipt { status: Hex; logs: { topics: Hex[]; data: Hex }[] }
 async function sendTx(to: Address, data: Hex): Promise<{ hash: Hex; receipt: Receipt }> {
   const hash = await rpc<Hex>('eth_sendTransaction', [{ from: me, to, data }]);
   for (let i = 0; i < 90; i++) {
-    const r = await rpc<Receipt | null>('eth_getTransactionReceipt', [hash]);
+    // A wallet's RPC fails a poll now and then (MetaMask: "Internal JSON-RPC error"): the next poll asks again.
+    const r = await rpc<Receipt | null>('eth_getTransactionReceipt', [hash]).catch(() => null);
     if (r !== null) { if (r.status !== '0x1') throw new Error(`reverted: ${hash}`); return { hash, receipt: r }; }
     await new Promise((res) => setTimeout(res, 2_000));
   }
@@ -255,7 +256,7 @@ async function inspect(address: string): Promise<void> {
   let code: Hex = '0x';
   // A load-balanced RPC's node can lag the one that just deployed it: asked a few times.
   for (let i = 0; i < 5 && code === '0x'; i++) {
-    code = await rpc<Hex>('eth_getCode', [address, 'latest']);
+    code = await rpc<Hex>('eth_getCode', [address, 'latest']).catch(() => '0x' as Hex);
     if (code === '0x') await new Promise((r) => setTimeout(r, 2_000));
   }
   if (code === '0x') { say('c-status', 'There is no contract at that address on Sepolia.'); return; }
