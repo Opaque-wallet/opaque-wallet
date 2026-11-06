@@ -7,8 +7,8 @@
 // send, a Uniswap v4 swap) is signed by the FORS key alone (backend/ethereum/
 // frame.ts, uniswap.ts, contracts/frame/).
 
-import { accountOf, balanceOf, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyFor, keyOf, MAX_FEE, MAX_USES, nonceOf, parseEther, pqUSDCFaucet, sendCalls, settled, txUrl, type Call, type ForsKey } from '../../../backend/ethereum/frame.ts';
-import { pqHook, quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswap/uniswap.ts';
+import { accountOf, balanceOf, call, createAccount, devnet, faucet, FIRST_NONCE, formatEther, forsKey, hasCode, isAddress, keyFor, keyOf, MAX_FEE, MAX_USES, nonceOf, parseEther, pqUSDCFaucet, sendCalls, settled, txUrl, type Call, type ForsKey } from '../../../backend/ethereum/frame.ts';
+import { pqHook, pqUSD, quote, swapCalls, tokenBalance } from '../../../backend/ethereum/uniswap/uniswap.ts';
 import { unlockGate } from '../lib/lock.ts';
 import { scoped } from '../lib/storage-name.ts';
 import { hasPrivacy, pqUSDC, startDevnetPrivacy, type DevnetPrivacy, type PrivateSend } from './devnet-private.ts';
@@ -63,6 +63,7 @@ function showView(name: View): void {
   window.scrollTo(0, 0);
   if (name === 'swap') void quoteSwap().catch(() => undefined);
   if (name === 'ring') void refreshRing();
+  if (name === 'activity') received();
   if (name === 'home' || name === 'activity' || name === 'send' || name === 'deposit') void refreshPrivate();
 }
 const HOME_TABS = [['hometab-assets', 'home-assets'], ['hometab-pq', 'home-pq']] as const;
@@ -175,16 +176,65 @@ const activityKey = (): string => scoped(`opaque:eth-devnet:${account.toLowerCas
 function activity(): Logged[] {
   try { return JSON.parse(localStorage.getItem(activityKey()) ?? '[]') as Logged[]; } catch { return []; }
 }
+const emptyRow = (text: string): HTMLElement => Object.assign(document.createElement('p'), { className: 'empty', textContent: text });
+function txRow(hash: `0x${string}`, what: string, detail: string): HTMLElement {
+  const row = Object.assign(document.createElement('a'), { className: 'asset', href: txUrl(hash), target: '_blank', rel: 'noopener' });
+  row.innerHTML = '<i class="tok tok-eth">E</i><span><b></b><small></small></span><span class="asset-value"><small>Explorer ↗</small></span>';
+  row.querySelector('span b')!.textContent = what;
+  row.querySelector('span small')!.textContent = detail;
+  return row;
+}
 function showActivity(): void {
   const all = activity();
-  el('sent-list').replaceChildren(...(all.length === 0 ? [Object.assign(document.createElement('p'), { className: 'empty', textContent: 'Nothing yet.' })] : all.map((l) => {
-    const row = Object.assign(document.createElement('a'), { className: 'asset', href: txUrl(l.hash), target: '_blank', rel: 'noopener' });
-    row.innerHTML = '<i class="tok tok-eth">E</i><span><b></b><small></small></span><span class="asset-value"><small>Explorer ↗</small></span>';
-    row.querySelector('span b')!.textContent = l.what;
-    row.querySelector('span small')!.textContent = `${short(l.hash)} · ${new Date(l.at).toLocaleString()}`;
-    return row;
+  el('sent-list').replaceChildren(...(all.length === 0 ? [emptyRow('Nothing yet.')] : all.map((l) => txRow(l.hash, l.what, `${short(l.hash)} · ${new Date(l.at).toLocaleString()}`))));
+}
+
+/**
+ * What reached this account from anyone, read from the chain: every Transfer log to it. ETH
+ * transfers log too on this devnet (EIP-7708, from the system address 0xff…fe), so one query
+ * finds ETH, pqUSDC (a private payment is a pool paying it) and pqUSD. What this page sent
+ * itself, a swap's output or a faucet it asked, is already under Transactions.
+ */
+const ETH_LOGGER = '0xfffffffffffffffffffffffffffffffffffffffe';
+const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+interface TransferLog { readonly address: string; readonly topics: readonly string[]; readonly data: string; readonly blockNumber: string; readonly transactionHash: `0x${string}` }
+async function showReceived(): Promise<void> {
+  const me = account?.toLowerCase();
+  if (me === undefined) return;
+  const d = devnet as unknown as {
+    contracts: { faucet?: string | null }; uniswap?: { poolManager?: string };
+    privacy?: { token: { address: string }; faucet?: string; pools: readonly { address: string }[] };
+  };
+  const low = (a?: string | null): string | undefined => a?.toLowerCase();
+  const pools = new Set(d.privacy?.pools.map((p) => p.address.toLowerCase()) ?? []);
+  const usdcAt = low(d.privacy?.token.address);
+  let usdAt: string | undefined;
+  try { usdAt = pqUSD().toLowerCase(); } catch { /* no pqUSD pool on this devnet */ }
+  // ponytail: the whole chain in one query, fine while the devnet is young; page it by block range if the node starts refusing.
+  const logs = (await call('eth_getLogs', [{
+    fromBlock: '0x0', toBlock: 'latest', address: [ETH_LOGGER, usdcAt, usdAt].filter((a) => a !== undefined),
+    topics: [TRANSFER, null, `0x${me.slice(2).padStart(64, '0')}`],
+  }])) as TransferLog[];
+  const mine = new Set(activity().map((l) => l.hash.toLowerCase()));
+  const fromOf = (l: TransferLog): string => `0x${l.topics[1]!.slice(26)}`;
+  const rows = logs.filter((l) => !mine.has(l.transactionHash.toLowerCase()) && fromOf(l) !== me).reverse().slice(0, 50);
+  const times = new Map(await Promise.all([...new Set(rows.map((l) => l.blockNumber))].map(async (n) =>
+    [n, Number(BigInt((await call('eth_getBlockByNumber', [n, false])).timestamp)) * 1000] as const)));
+  if (account?.toLowerCase() !== me) return; // another account was opened meanwhile
+  el('received-list').replaceChildren(...(rows.length === 0 ? [emptyRow('Nothing received yet.')] : rows.map((l) => {
+    const from = fromOf(l);
+    const value = BigInt(l.data);
+    const at = l.address.toLowerCase();
+    const [what, who] = at === ETH_LOGGER
+      ? [`Received ${amount(value)} ETH`, from === low(d.contracts.faucet) ? "from Opaque's faucet" : `from ${short(from)}`]
+      : at === usdcAt
+        ? pools.has(from) ? [`Received ${usdc(value)} pqUSDC privately`, "paid by Opaque's pools: the payer isn't on chain"]
+          : from === low(d.privacy?.faucet) ? [`Received ${usdc(value)} test pqUSDC`, 'from the faucet'] : [`Received ${usdc(value)} pqUSDC`, `from ${short(from)}`]
+        : [`Received ${amount(value)} pqUSD`, from === low(d.uniswap?.poolManager) ? 'from Uniswap v4' : `from ${short(from)}`];
+    return txRow(l.transactionHash, what, `${who} · ${new Date(times.get(l.blockNumber)!).toLocaleString()}`);
   })));
 }
+const received = (): void => void showReceived().catch(() => el('received-list').replaceChildren(emptyRow("The devnet didn't answer. Open Activity again to look once more.")));
 function logged(hash: `0x${string}`, what: string): void {
   // The newest 200: enough history for a devnet account, and a bound on what this browser keeps.
   try { localStorage.setItem(activityKey(), JSON.stringify([{ hash, what, at: Date.now() }, ...activity()].slice(0, 200))); } catch { /* shown below all the same */ }
@@ -648,6 +698,7 @@ if (open === null || open === 'browser') {
   key = keyAt(0);
   account = await accountOf(keyOf(key));
   showActivity();
+  received();
   await refresh();
   void refreshPrivate();
 }
