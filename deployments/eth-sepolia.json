@@ -353,5 +353,10 @@
       "deployedAtBlock": 12072949,
       "decoys": 8
     }
-  ]
+  ],
+  "vault": {
+    "$comment": "The Q-Day vault (contracts/src/ethereum/vault/PQVault.sol): any wallet keeps ETH or tokens here that only its FORS+C key in PQKeyRegistry can take out.",
+    "address": "0x0316a466f3e14850a016883aa46b3d5187b9aeb0",
+    "deployedAtBlock": 12075986
+  }
 }
