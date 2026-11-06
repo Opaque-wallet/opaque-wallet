@@ -13,7 +13,7 @@
 <a class="page-logo" href="/" aria-label="About opaque"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
 <main class="app">
   <header class="bar">
-    <button class="acct" id="account-button" type="button" aria-label="Your account's address"><span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><g fill="#070608"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg></span><span><b id="account-name">Ethereum Devnet</b><small id="account-short">Starting…</small></span></button>
+    <button class="acct" id="account-button" type="button" aria-label="Your accounts"><span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><g fill="#070608"><circle cx="20.00" cy="7.00" r="3.6"/><circle cx="29.19" cy="10.81" r="3.6"/><circle cx="33.00" cy="20.00" r="3.6"/><circle cx="29.19" cy="29.19" r="3.6"/><circle cx="20.00" cy="33.00" r="3.6"/><circle cx="10.81" cy="29.19" r="3.6"/><circle cx="7.00" cy="20.00" r="3.6"/><circle cx="10.81" cy="10.81" r="3.6"/></g></svg></span><span><b id="account-name">Ethereum Devnet</b><small id="account-short">Starting…</small></span></button>
     <div class="bar-right">
       <button class="net" id="network-switch" type="button" aria-label="Network">Network</button>
     </div>
@@ -186,6 +186,12 @@
   <form method="dialog" class="dialog-head"><h2>Send</h2><button value="close" aria-label="Close">×</button></form>
   <button class="net-row" id="asset-usdc" type="button"><i class="tok tok-usdc">U</i><span><b>pqUSDC</b><small>Private: the pool pays, nothing on chain names you</small></span></button>
   <button class="net-row" id="asset-eth" type="button"><i class="tok tok-eth">E</i><span><b>ETH</b><small>Public: a transfer from your account, signed with FORS+C</small></span></button>
+</dialog>
+<dialog id="account-dialog">
+  <form method="dialog" class="dialog-head"><div><p class="eyebrow">This wallet</p><h2>Accounts</h2></div><button value="close" aria-label="Close">×</button></form>
+  <div class="account-list" id="account-list"></div>
+  <div class="account-links"><button class="link add-account" id="account-add" type="button" hidden>+ Add account</button></div>
+  <p class="fine-print">The same accounts as on every chain, from your recovery phrase. Each has its own devnet address, key and notes.</p>
 </dialog>
 <dialog id="sign-dialog">
   <form method="dialog">

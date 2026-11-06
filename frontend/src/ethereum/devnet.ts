@@ -14,8 +14,8 @@ import { scoped } from '../lib/storage-name.ts';
 import { hasPrivacy, pqUSDC, startDevnetPrivacy, type DevnetPrivacy, type PrivateSend } from './devnet-private.ts';
 import { isName, resolveName } from './ens-name.ts';
 import { networkPicker } from '../lib/network-picker.ts';
-import { accountLabel, activeAccount, stream } from '../lib/wallet-keys.ts';
-import { copy, termsAccepted } from '../lib/wallet-ui.ts';
+import { accountKeys, accountLabel, activeAccount, importedAccounts, saveWalletState, storedPhrase, stream, walletState, type AccountKeys } from '../lib/wallet-keys.ts';
+import { copy, markOf, termsAccepted } from '../lib/wallet-ui.ts';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 /** Lets a status paint before a step that holds the page (signing takes about a second). */
@@ -274,7 +274,36 @@ el('action-deposit').addEventListener('click', () => { el('deposit-card').scroll
 el('action-privacy').addEventListener('click', () => showView('ring'));
 el('action-activity').addEventListener('click', () => showView('activity'));
 el('action-swap').addEventListener('click', () => showView('swap'));
-el('account-button').addEventListener('click', () => showView('receive'));
+// The wallet's accounts, as on every other chain's page: Account 1, 2… from the phrase, and any
+// brought in by key. Switching or adding one here switches it everywhere; the page starts again.
+// ponytail: no addresses in the list (each is a FORS key generation); the open one's is under its name.
+el('account-button').addEventListener('click', () => {
+  const phrase = storedPhrase();
+  const { count } = walletState();
+  const row = (key: AccountKeys, active: number | `imported:${number}`) => {
+    const open = openAccount !== undefined && openAccount.id === key.id;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'account-row';
+    b.setAttribute('aria-current', String(open));
+    b.innerHTML = `<span class="mark">${markOf(key.index)}</span><span><b></b><small></small></span>`;
+    b.querySelector('b')!.textContent = accountLabel(key);
+    b.querySelector('small')!.textContent = open ? `Open now${account ? ` · ${short(account)}` : ''}` : key.imported !== undefined ? 'Brought in by its key' : 'From your recovery phrase';
+    b.addEventListener('click', () => { if (!open) { saveWalletState({ active }); location.reload(); } });
+    return b;
+  };
+  el('account-list').replaceChildren(
+    ...(phrase === null ? [] : Array.from({ length: count }, (_, n) => row(accountKeys(phrase, n), n))),
+    ...importedAccounts().map((key, slot) => row(key, `imported:${slot}`)),
+  );
+  el('account-add').hidden = phrase === null;
+  el<HTMLDialogElement>('account-dialog').showModal();
+});
+el('account-add').addEventListener('click', () => {
+  const { count } = walletState();
+  saveWalletState({ count: count + 1, active: count });
+  location.reload();
+});
 el('address-copy').addEventListener('click', () => copy(account, 'Address'));
 el('refresh').addEventListener('click', () => void refresh().catch(() => undefined));
 el('promo-fund-go').addEventListener('click', fund('home-status'));
@@ -594,6 +623,7 @@ if (open === null || open === 'browser') {
   showView('home');
   openAccount = open;
   el('account-name').textContent = accountLabel(open);
+  document.querySelector('.acct .mark')!.innerHTML = markOf(open.index);
   await paint();
   keyAt = (i) => forsKey(stream(open.key, `eip8141/${devnet.chainId}/fors/${i}`)(32));
   // The address is fixed by the first key, whichever key the account answers to now.
