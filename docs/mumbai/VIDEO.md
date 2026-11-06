@@ -42,8 +42,8 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 | Time | On screen | Voiceover |
 |---|---|---|
-| 0:00 | You on camera, or GitHub: diagrams/q-day.svg, its title | "Hi, I'm Swarnim, and this is Opaque: the quantum-safe layer for Ethereum." |
-| 0:06 | diagrams/q-day.svg: the quantum computer at the top | "Every Ethereum account that has ever signed has put its public key on chain. A quantum computer turns that public key back into the private key." |
+| 0:00 | You on camera: no Opaque page on screen yet | "Hi, I'm Swarnim from Opaque. We're building the quantum-safe layer for Ethereum." |
+| 0:06 | Cut to GitHub: diagrams/q-day.svg, the quantum computer at the top | "Every Ethereum account that has ever signed has put its public key on chain. A quantum computer turns that public key back into the private key." |
 | 0:16 | Same diagram: Wallets, Uniswap positions, ENS names, Protocol admin keys | "So wallets, Uniswap positions, ENS names and protocols' admin keys can all be taken." |
 | 0:24 | Same diagram: Stealth payments, SNARK privacy pools | "And privacy breaks backwards: stealth payments hidden with today's curves can be unmasked later, all at once. The data is already on chain." |
 | 0:32 | Same diagram: the orange Opaque box at the bottom | "Opaque moves every one of these to hash-based keys, today, without a fork." |
