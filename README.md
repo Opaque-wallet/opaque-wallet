@@ -11,7 +11,16 @@ Keys are post-quantum: hash-based (FORS+C) on Ethereum and Arc, single-use on th
 |---|---|---|
 | Arc | Live on mainnet (not yet audited) and testnet | The rest of this README |
 | XRP Ledger | Live on testnet: XRP, RLUSD and USDC, built on Batch and Credentials | [docs/xrpl.md](docs/xrpl.md) |
-| Ethereum | Live on Sepolia (private payments, `name.opaque.eth`, an exit that needs nobody) and on an EIP-8141 devnet | [docs/mumbai/PLAN.md](docs/mumbai/PLAN.md) |
+| Ethereum | Live on Sepolia (private payments, `name.opaque.eth`, post-quantum stealth addresses, Uniswap v4 hooks, an exit that needs nobody) and on an EIP-8141 devnet | [docs/mumbai/PLAN.md](docs/mumbai/PLAN.md) |
+
+**Post-quantum, today** ([opaque.credit/post-quantum](https://www.opaque.credit/post-quantum), [opaque.credit/unseen](https://www.opaque.credit/unseen)):
+- **Names:** `opaque.eth` on ENSv2 is held by a controller that acts only on a FORS+C signature; subnames can be claimed only by post-quantum accounts.
+- **Stealth addresses:** an ML-KEM-768 meta-address in ERC-6538's registry, announcements on ERC-5564's Announcer ([`stealth.ts`](backend/chain/stealth.ts)).
+- **Uniswap v4** ([`contracts/src/ethereum/uniswap/`](contracts/src/ethereum/uniswap/)):
+  - `PQAccountPoolHook` (Sepolia) and `PQPoolHook` (EIP-8141 devnet): pools only post-quantum accounts can trade in or provide to. An ECDSA wallet's swap reverts with `NotPostQuantum`.
+  - `PQGuardHook` (Sepolia): a FORS+C second factor for any liquidity provider, ECDSA wallets included. A removal needs a FORS+C signature naming its recipient, and the hook pays only that recipient, so a cracked ECDSA key can neither withdraw nor front-run.
+  - Made and checked on chain by [`uniswap-sepolia.ts`](backend/ethereum/uniswap-sepolia.ts) and `frame-tx.ts pqpool`; the wallet swaps in the Sepolia pool.
+- **Reads through a mixnet:** EF's anon-rpc (Nox) for ENS always, and for the whole account with one switch.
 
 To run the whole site locally: `cd frontend && npm install && npm run preview:site`, then open http://localhost:5174 (the Sepolia wallet is at `/sepolia/app`). To run the XRPL wallet against a local stack: start `cd backend && npm run xrpl:stack`, then `cd frontend && npm run dev`, and open `/xrpl.html`. Contracts: `cd contracts && forge test`.
 

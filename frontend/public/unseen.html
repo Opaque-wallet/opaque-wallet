@@ -152,9 +152,48 @@
       <h2 class="display" id="through-title">Names, your account, your way out.</h2>
     </div>
     <div class="through">
-      <article class="card"><span class="when">Always</span><h3>ENS names</h3><p>Pay <b>alice.opaque.eth</b>: the lookup on ENSv2's UniversalResolver goes through Nox, so no provider learns who you're about to pay.</p></article>
-      <article class="card"><span class="when">One switch</span><h3>Your whole account</h3><p>Turn on Unseen in Privacy. Balances, key state, nonces and every UserOperation then reach a public RPC and bundler through the mixnet, with nothing of Opaque's in the path.</p></article>
-      <article class="card"><span class="when">If we're gone</span><h3>Your way out</h3><p>If Opaque's servers ever stop or refuse you, your notes still leave their pools, signed by your own post-quantum key, with every call through Nox.</p></article>
+      <article class="card">
+        <svg class="art art--ens" viewBox="0 0 300 118" aria-hidden="true">
+          <rect class="a-field" x="6" y="6" width="156" height="28" rx="8"/>
+          <text class="a-mono a-type" x="16" y="24">alice.opaque.eth</text>
+          <path class="a-line" d="M22 70 H232"/>
+          <circle class="a-hop" cx="84" cy="70" r="7"/><circle class="a-hop" cx="128" cy="70" r="7"/><circle class="a-hop" cx="172" cy="70" r="7"/>
+          <text x="128" y="94" text-anchor="middle">Nox</text>
+          <rect class="a-box" x="228" y="52" width="66" height="36" rx="8"/>
+          <text class="a-strong" x="261" y="67" text-anchor="middle">ENSv2</text><text x="261" y="80" text-anchor="middle">resolver</text>
+          <circle class="a-go" cx="22" cy="70" r="5"/><circle class="a-back" cx="228" cy="70" r="5"/>
+          <text class="a-mono a-result" x="6" y="112">→ 0x5cb6…3131</text>
+          <text class="a-sees" x="294" y="112" text-anchor="end">it sees: nox-exit</text>
+        </svg>
+        <span class="when">Always</span><h3>ENS names</h3><p>Pay <b>alice.opaque.eth</b>: the lookup on ENSv2's UniversalResolver goes through Nox, so no provider learns who you're about to pay.</p></article>
+      <article class="card">
+        <svg class="art art--acct" viewBox="0 0 300 118" aria-hidden="true">
+          <rect class="a-track" x="6" y="8" width="42" height="24" rx="12"/><circle class="a-knob" cx="19" cy="20" r="8"/>
+          <text class="a-strong" x="58" y="24">Opaque Unseen</text>
+          <text class="a-mono a-call a-c1" x="6" y="62">eth_getBalance</text>
+          <text class="a-mono a-call a-c2" x="6" y="80">stateOf</text>
+          <text class="a-mono a-call a-c3" x="6" y="98">eth_sendUserOperation</text>
+          <path class="a-line" d="M150 59 H216"/><path class="a-line" d="M150 95 H216"/>
+          <text x="183" y="81" text-anchor="middle">Nox</text>
+          <rect class="a-box" x="214" y="45" width="82" height="28" rx="7"/><text x="255" y="63" text-anchor="middle">public RPC</text>
+          <rect class="a-box" x="214" y="81" width="82" height="28" rx="7"/><text x="255" y="99" text-anchor="middle">public bundler</text>
+          <circle class="a-go a-c1" cx="150" cy="59" r="4"/><circle class="a-go a-c2" cx="150" cy="59" r="4"/><circle class="a-go a-c3" cx="150" cy="95" r="4"/>
+        </svg>
+        <span class="when">One switch</span><h3>Your whole account</h3><p>Turn on Unseen in Privacy. Balances, key state, nonces and every UserOperation then reach a public RPC and bundler through the mixnet, with nothing of Opaque's in the path.</p>
+        <p class="art-note"><b class="art-count">0</b> of this wallet's reads and operations answered through anon-rpc</p>
+      </article>
+      <article class="card">
+        <svg class="art art--way" viewBox="0 0 300 118" aria-hidden="true">
+          <g class="a-servers"><rect class="a-box" x="6" y="6" width="150" height="30" rx="8"/><text class="a-strong" x="16" y="25">Opaque's servers</text><circle class="a-hop" cx="118" cy="21" r="4"/><circle class="a-hop" cx="132" cy="21" r="4"/><circle class="a-hop" cx="146" cy="21" r="4"/></g>
+          <path class="a-strike" d="M8 21 H154"/>
+          <text class="a-off" x="166" y="25">offline</text>
+          <path class="a-line" d="M40 80 H262"/>
+          <circle class="a-step a-s1" cx="40" cy="80" r="8"/><circle class="a-step" cx="150" cy="80" r="8"/><circle class="a-step a-s3" cx="260" cy="80" r="8"/>
+          <text x="40" y="62" text-anchor="middle">announce</text><text class="a-mono a-clock" x="150" y="62" text-anchor="middle">5:00</text><text x="260" y="62" text-anchor="middle">withdraw</text>
+          <rect class="a-note" x="30" y="74" width="20" height="12" rx="3"/>
+          <text x="150" y="111" text-anchor="middle">over Nox · signed by FORS+C</text>
+        </svg>
+        <span class="when">If we're gone</span><h3>Your way out</h3><p>If Opaque's servers ever stop or refuse you, your notes still leave their pools, signed by your own post-quantum key, with every call through Nox.</p></article>
     </div>
   </section>
 
@@ -304,8 +343,28 @@
 // Steps animate as they come into view; the numbers count up once.
 (() => {
   const seen = new IntersectionObserver((entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('on'); seen.unobserve(e.target); } }), { threshold: 0.3 });
-  document.querySelectorAll('.step').forEach((s) => seen.observe(s));
+  document.querySelectorAll('.step, .card').forEach((s) => seen.observe(s));
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // The account card counts answered calls; the way-out card counts the pool's delay down.
+  const answered = document.querySelector('.art-count'), clock = document.querySelector('.a-clock');
+  if (reduced) answered.textContent = '24';
+  else {
+    let n = 0;
+    setInterval(() => { if (answered.closest('.card').classList.contains('on')) answered.textContent = String(++n); }, 900);
+    // 5:00 down to 0:00 between announce and withdraw: 30% to 68% of the note's 8 s loop.
+    const countdown = () => {
+      const t0 = performance.now() + 2400;
+      const tick = (now) => {
+        const k = Math.min(1, Math.max(0, (now - t0) / 3000)), s = Math.round(300 * (1 - k));
+        clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        if (k < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+    const note = document.querySelector('.a-note');
+    note.addEventListener('animationstart', countdown);
+    note.addEventListener('animationiteration', countdown);
+  }
   const count = new IntersectionObserver((entries) => entries.forEach((e) => {
     if (!e.isIntersecting) return;
     count.unobserve(e.target);

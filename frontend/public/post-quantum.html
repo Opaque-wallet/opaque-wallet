@@ -57,35 +57,109 @@
     </div>
   </section>
 
+  <section class="wrap sflow" id="stealth-flow" aria-labelledby="sflow-title">
+    <p class="eyebrow">How a post-quantum stealth payment works</p>
+    <h3 class="sflow__title" id="sflow-title">From Alice's key to Alice's notes, in five steps.</h3>
+    <div class="sflow__grid">
+      <ol class="sflow__steps" role="tablist" aria-label="Steps of a stealth payment">
+        <li><button type="button" role="tab" data-i="0" aria-selected="true"><b>1</b><span>Alice publishes one key.</span></button></li>
+        <li><button type="button" role="tab" data-i="1" aria-selected="false"><b>2</b><span>Bob makes a one-time address.</span></button></li>
+        <li><button type="button" role="tab" data-i="2" aria-selected="false"><b>3</b><span>The pool pays it.</span></button></li>
+        <li><button type="button" role="tab" data-i="3" aria-selected="false"><b>4</b><span>Announced, by nobody's account.</span></button></li>
+        <li><button type="button" role="tab" data-i="4" aria-selected="false"><b>5</b><span>Only Alice's key finds it.</span></button></li>
+      </ol>
+      <div class="sflow__stage">
+        <svg class="sflow__svg" viewBox="0 0 640 230" aria-hidden="true">
+          <g class="sf-step is-on">
+            <circle class="sf-node sf-node--me" cx="90" cy="120" r="30"/><text class="sf-t" x="90" y="125" text-anchor="middle">Alice</text>
+            <text class="sf-s" x="90" y="172" text-anchor="middle">alice.opaque.eth</text>
+            <rect class="sf-box sf-glow1" x="380" y="40" width="230" height="56" rx="12"/>
+            <text class="sf-t" x="495" y="64" text-anchor="middle">ERC-6538 registry</text><text class="sf-m" x="495" y="84" text-anchor="middle">0x6538…6538</text>
+            <g class="sf-fly1"><rect class="sf-chip" x="130" y="104" width="190" height="32" rx="9"/><text class="sf-c" x="225" y="125" text-anchor="middle">ML-KEM-768 key · 1,184 B</text></g>
+            <text class="sf-s" x="320" y="214" text-anchor="middle">one signature: claim alice.opaque.eth and publish the key</text>
+          </g>
+          <g class="sf-step">
+            <circle class="sf-node sf-node--me" cx="90" cy="120" r="30"/><text class="sf-t" x="90" y="125" text-anchor="middle">Alice</text>
+            <circle class="sf-node" cx="550" cy="120" r="30"/><text class="sf-t" x="550" y="125" text-anchor="middle">Bob</text>
+            <rect class="sf-box" x="215" y="14" width="210" height="40" rx="10"/><text class="sf-s" x="320" y="38" text-anchor="middle">ERC-6538 · Alice's key</text>
+            <path class="sf-path sf-draw" d="M425 34 C500 34 550 56 550 88"/>
+            <path class="sf-secret" d="M122 120 H518"/><text class="sf-s sf-pop2" x="320" y="112" text-anchor="middle">shared secret: only Alice and Bob can compute it</text>
+            <g transform="translate(90 74)"><g class="sf-lock sf-pop2"><rect x="-9" y="-2" width="18" height="14" rx="3"/><path d="M-5 -2 v-5 a5 5 0 0 1 10 0 v5"/></g></g><g transform="translate(550 74)"><g class="sf-lock sf-pop1"><rect x="-9" y="-2" width="18" height="14" rx="3"/><path d="M-5 -2 v-5 a5 5 0 0 1 10 0 v5"/></g></g>
+            <g class="sf-pop1"><rect class="sf-chip" x="462" y="160" width="168" height="28" rx="8"/><text class="sf-c" x="546" y="179" text-anchor="middle">ciphertext · 1,088 B</text></g>
+            <g class="sf-pop3"><rect class="sf-box sf-box--hot" x="205" y="150" width="230" height="50" rx="12"/><text class="sf-t" x="320" y="171" text-anchor="middle">one-time FORS+C account</text><text class="sf-m" x="320" y="189" text-anchor="middle">0xbbb6…312b</text></g>
+          </g>
+          <g class="sf-step">
+            <circle class="sf-ring" cx="320" cy="105" r="52"/><circle class="sf-dot" cx="372" cy="105" r="5"/><circle class="sf-dot" cx="356.8" cy="141.8" r="5"/><circle class="sf-dot" cx="320" cy="157" r="5"/><circle class="sf-dot" cx="283.2" cy="141.8" r="5"/><circle class="sf-dot" cx="268" cy="105" r="5"/><circle class="sf-dot sf-dot--me" cx="283.2" cy="68.2" r="5"/><circle class="sf-dot" cx="320" cy="53" r="5"/><circle class="sf-dot" cx="356.8" cy="68.2" r="5"/>
+            <text class="sf-t" x="320" y="101" text-anchor="middle">pool</text><text class="sf-s" x="320" y="118" text-anchor="middle">8 notes</text>
+            <rect class="sf-box" x="14" y="86" width="196" height="40" rx="10"/><text class="sf-m" x="112" y="111" text-anchor="middle">Alice · 0x65b7…65c0</text>
+            <text class="sf-s sf-pop3" x="112" y="148" text-anchor="middle">receives nothing</text>
+            <rect class="sf-box sf-box--hot" x="430" y="86" width="196" height="40" rx="10"/><text class="sf-m" x="528" y="111" text-anchor="middle">0xbbb6…312b</text>
+            <text class="sf-t sf-pop3" x="528" y="148" text-anchor="middle">+2 tUSDC</text>
+            <g class="sf-coin"><circle cx="372" cy="105" r="10"/></g>
+            <text class="sf-s" x="320" y="200" text-anchor="middle">the sender is one of the 8; nobody can say which</text>
+          </g>
+          <g class="sf-step">
+            <rect class="sf-box" x="24" y="34" width="200" height="54" rx="12"/><text class="sf-t" x="124" y="58" text-anchor="middle">Opaque's exit</text><text class="sf-s" x="124" y="76" text-anchor="middle">posts it, pays its gas</text>
+            <rect class="sf-box sf-box--hot sf-glow4" x="416" y="34" width="200" height="54" rx="12"/><text class="sf-t" x="516" y="58" text-anchor="middle">ERC-5564 Announcer</text><text class="sf-m" x="516" y="76" text-anchor="middle">0x5564…5564</text>
+            <g class="sf-fly4"><rect class="sf-chip" x="232" y="48" width="120" height="26" rx="8"/><text class="sf-c" x="292" y="66" text-anchor="middle">ciphertext</text></g>
+            <circle class="sf-node sf-node--dim" cx="220" cy="160" r="22"/><text class="sf-s" x="220" y="164" text-anchor="middle">Alice</text>
+            <circle class="sf-node sf-node--dim" cx="420" cy="160" r="22"/><text class="sf-s" x="420" y="164" text-anchor="middle">Bob</text>
+            <text class="sf-s" x="320" y="214" text-anchor="middle">not Bob's account, not Alice's: neither appears beside it</text>
+          </g>
+          <g class="sf-step">
+            <circle class="sf-node sf-node--me" cx="80" cy="110" r="30"/><text class="sf-t" x="80" y="115" text-anchor="middle">Alice</text><text class="sf-s" x="80" y="160" text-anchor="middle">her ML-KEM key</text>
+            <rect class="sf-chip2" x="190" y="24" width="150" height="26" rx="7"/><text class="sf-m" x="202" y="41">ciphertext 0x3f1a…</text><text class="sf-tag sf-tag0" x="352" y="41">view tag: skip</text><rect class="sf-chip2" x="190" y="58" width="150" height="26" rx="7"/><text class="sf-m" x="202" y="75">ciphertext 0xc02e…</text><text class="sf-tag sf-tag1" x="352" y="75">view tag: skip</text><rect class="sf-chip2 sf-hit" x="190" y="92" width="150" height="26" rx="7"/><text class="sf-m" x="202" y="109">ciphertext 0x9b7d…</text><text class="sf-tag sf-tag2" x="352" y="109">match</text><rect class="sf-chip2" x="190" y="126" width="150" height="26" rx="7"/><text class="sf-m" x="202" y="143">ciphertext 0x51e8…</text><text class="sf-tag sf-tag3" x="352" y="143">view tag: skip</text><rect class="sf-chip2" x="190" y="160" width="150" height="26" rx="7"/><text class="sf-m" x="202" y="177">ciphertext 0xa4c6…</text><text class="sf-tag sf-tag4" x="352" y="177">view tag: skip</text>
+            <rect class="sf-scan" x="184" y="20" width="268" height="34" rx="8"/>
+            <path class="sf-path sf-draw5" d="M456 105 H476"/>
+            <g class="sf-pop5"><rect class="sf-box sf-box--hot" x="478" y="82" width="150" height="48" rx="12"/><text class="sf-t" x="553" y="103" text-anchor="middle">Alice's notes</text><text class="sf-m" x="553" y="121" text-anchor="middle">+2 tUSDC, swept</text></g>
+          </g>
+        </svg>
+        <p class="sflow__cap" id="sflow-cap" aria-live="polite"></p>
+      </div>
+    </div>
+    <div class="contrast">
+      <div class="contrast__row">
+        <span class="contrast__who">secp256k1 stealth addresses · ERC-5564 scheme 1</span>
+        <svg viewBox="0 0 300 60" aria-hidden="true"><path class="c-link c-link0" d="M24 12 L276 36"/><path class="c-link c-link1" d="M24 24 L276 12"/><path class="c-link c-link2" d="M24 36 L276 48"/><path class="c-link c-link3" d="M24 48 L276 24"/><circle class="c-dot" cx="24" cy="12" r="4"/><circle class="c-dot" cx="276" cy="12" r="4"/><circle class="c-dot" cx="24" cy="24" r="4"/><circle class="c-dot" cx="276" cy="24" r="4"/><circle class="c-dot" cx="24" cy="36" r="4"/><circle class="c-dot" cx="276" cy="36" r="4"/><circle class="c-dot" cx="24" cy="48" r="4"/><circle class="c-dot" cx="276" cy="48" r="4"/></svg>
+        <p>A quantum computer reading old announcements recomputes every shared secret, and links each payment to its recipient.</p>
+      </div>
+      <div class="contrast__row contrast__row--pq">
+        <span class="contrast__who">ML-KEM-768 · this scheme</span>
+        <svg viewBox="0 0 300 60" aria-hidden="true"><path class="c-fail c-fail0" d="M24 12 L276 36"/><path class="c-fail c-fail1" d="M24 24 L276 12"/><path class="c-fail c-fail2" d="M24 36 L276 48"/><path class="c-fail c-fail3" d="M24 48 L276 24"/><circle class="c-dot" cx="24" cy="12" r="4"/><circle class="c-dot" cx="276" cy="12" r="4"/><circle class="c-dot" cx="24" cy="24" r="4"/><circle class="c-dot" cx="276" cy="24" r="4"/><circle class="c-dot" cx="24" cy="36" r="4"/><circle class="c-dot" cx="276" cy="36" r="4"/><circle class="c-dot" cx="24" cy="48" r="4"/><circle class="c-dot" cx="276" cy="48" r="4"/><path class="c-x" d="M144 22 l12 12 M156 22 l-12 12"/></svg>
+        <p>It can't. ML-KEM has no known quantum attack, so the announcements stay sealed, old ones included.</p>
+      </div>
+    </div>
+    <p class="sflow__note">Until Alice sweeps, Bob also holds the one-time account's keys: hash-based keys can't be tweaked the way elliptic-curve ones can. Her wallet sweeps as soon as the payment lands.</p>
+  </section>
+
   <section class="wrap feature feature--flip" id="names" aria-labelledby="names-title">
     <div class="feature__copy">
       <p class="eyebrow">Names · ENSv2 · Live on Sepolia</p>
       <h2 class="display" id="names-title">A name no quantum computer can take.</h2>
-      <p class="lede">Claim <b>yourname.opaque.eth</b> in the wallet. ENSv2's resolver points it at your account, and only a post-quantum account can hold one. opaque.eth itself is held by a controller that acts only on a FORS+C signature, so a cracked ECDSA key changes nothing.</p>
+      <p class="lede">opaque.eth is held by <b>PQNameController</b>, the sole holder of every role on the name, and it acts only on a FORS+C signature. Under it, <b>yourname.opaque.eth</b> can be claimed only by a post-quantum account. ENSv2's own UniversalResolver walks the tree and returns that account, so paying a name pays a key a quantum computer can't take.</p>
       <ul class="facts">
-        <li><b>Pay by name:</b> ENSv2's UniversalResolver, read through anon-rpc</li>
-        <li><b>ECDSA writes revert:</b> the old owner's key has no power over the name</li>
-        <li><b>Rotation built in:</b> a key signs up to 32 times, then hands over to the next</li>
+        <li><b>Every write is signed with FORS+C:</b> the target, the exact calldata and a deadline, at the key's use count in PQKeyRegistry, so each signature works once. ECDSA writes revert, the original owner's <code>setResolver</code> included</li>
+        <li><b>Subnames for PQ accounts only:</b> OpaqueNames, opaque.eth's subregistry, checks the claimant's code hash. One name per account, and <code>release()</code> frees it</li>
+        <li><b>Rotation built in:</b> a key signs up to 32 times, then the registry hands the name to the key committed next</li>
+        <li><b>Claiming a name publishes your stealth key</b> in the same signature, so payments to it land at one-time addresses. Lookups go through anon-rpc</li>
       </ul>
     </div>
-    <div class="feature__stage ens" aria-hidden="true">
-      <div class="ens__card">
-        <span class="ens__tag">ENSv2 · Sepolia</span>
-        <b class="ens__name">alice.opaque.eth</b>
-        <span class="ens__row"><i>resolves to</i> 0x5cb6…3131</span>
-        <span class="ens__row"><i>held by</i> FORS+C key · <em class="ens__uses">12</em> of 32 used</span>
-        <div class="ens__seal">post-quantum</div>
-      </div>
-      <div class="ens__attack">
-        <span class="ens__who">ECDSA key, cracked on Q-Day</span>
-        <code>setResolver(alice.opaque.eth, 0xbad…)</code>
-        <span class="ens__stamp">reverted</span>
-      </div>
-      <div class="ens__ok">
-        <span class="ens__who">FORS+C signature</span>
-        <code>setAddr(alice.opaque.eth, 0x5cb6…)</code>
-        <span class="ens__stamp ens__stamp--ok">done</span>
-      </div>
+    <div class="feature__stage ens trio" aria-hidden="true">
+      <svg class="tree" viewBox="0 0 360 150">
+        <text class="t-label" x="10" y="18">UNIVERSALRESOLVERV2 · RESOLVE("ALICE.OPAQUE.ETH")</text>
+        <path class="t-edge" d="M44 58 H316"/>
+        <rect class="t-node" x="10" y="44" width="68" height="28" rx="8"/><text x="44" y="62" text-anchor="middle">root</text>
+        <rect class="t-node" x="96" y="44" width="68" height="28" rx="8"/><text x="130" y="62" text-anchor="middle">eth</text>
+        <rect class="t-node t-node--pq" x="182" y="44" width="78" height="28" rx="8"/><text x="221" y="62" text-anchor="middle">opaque.eth</text>
+        <rect class="t-node" x="278" y="44" width="72" height="28" rx="8"/><text x="314" y="62" text-anchor="middle">alice</text>
+        <rect class="t-lock" x="172" y="82" width="98" height="32" rx="6"/><text class="t-lock-text" x="221" y="95" text-anchor="middle">PQNameController</text><text class="t-lock-text t-lock-sub" x="221" y="107" text-anchor="middle">acts on FORS+C only</text>
+        <text class="t-small" x="314" y="92" text-anchor="middle">OpaqueNames</text><text class="t-small" x="314" y="104" text-anchor="middle">PQ accounts only</text>
+        <circle class="t-go" cx="44" cy="58" r="5"/>
+        <text class="t-result" x="10" y="140">→ 0x5cb6…3131, a post-quantum account</text>
+      </svg>
+      <div class="ens__attack trio__r1"><span class="ens__who">ECDSA key, cracked on Q-Day</span><code>setResolver(opaque.eth, 0xbad…)</code><span class="ens__stamp">reverted</span></div>
+      <div class="ens__attack trio__r2"><span class="ens__who">An ECDSA wallet</span><code>OpaqueNames.claim("bob")</code><span class="ens__stamp">PQ accounts only</span></div>
+      <div class="ens__ok trio__r3"><span class="ens__who">FORS+C signature · use <em class="ens__uses">12</em> of 32</span><code>controller.execute(setAddr, deadline, sig)</code><span class="ens__stamp ens__stamp--ok">done</span><span class="trio__then">works once; at 32 the next key takes over</span></div>
     </div>
   </section>
 
@@ -125,6 +199,58 @@
     </div>
   </section>
 
+  <section class="wrap feature feature--flip" id="sepolia-pool" aria-labelledby="sepolia-pool-title">
+    <div class="feature__copy">
+      <p class="eyebrow">Uniswap v4 · Uniswap's own deployment · Live on Sepolia</p>
+      <h2 class="display" id="sepolia-pool-title">Liquidity a cracked key can't take.</h2>
+      <p class="lede">On Sepolia, at Uniswap's own v4 PoolManager, the same rule runs for Opaque's ERC-4337 accounts. <b>PQAccountPoolHook</b> lets only PQ accounts swap in, add to, remove from or donate to its pool. Each one is a clone of one PQAccount implementation whose only authority is a FORS+C key, so its code hash says what it is, and there's nothing to register.</p>
+      <ul class="facts">
+        <li><b>Funded by a PQ account:</b> its first UserOperation deployed it and minted the position, signed with FORS+C. <a href="https://sepolia.etherscan.io/tx/0xe98d4bf727dc0df2f402a61975852ad9da94e1fdc6d07dfa46a5ec82ac621a2c" target="_blank" rel="noopener">See it</a></li>
+        <li><b>0.001 ETH → 1.813221 tUSDC:</b> a PQ account's swap, exactly the quote. <a href="https://sepolia.etherscan.io/tx/0xfbfec1bcedfb76507912d6b536170db65a508a819abdfecc2faa6c4d19ec1a03" target="_blank" rel="noopener">See the swap</a></li>
+        <li><b>The same swap from an ECDSA wallet</b> reverts with <code>NotPostQuantum(wallet)</code></li>
+        <li><b>Hook 0xa68b…4aa0</b> at Uniswap's PoolManager 0xe03a…3543</li>
+      </ul>
+    </div>
+    <div class="feature__stage ens" aria-hidden="true">
+      <div class="ens__card">
+        <span class="ens__tag">Uniswap v4 · Sepolia</span>
+        <b class="ens__name">ETH / tUSDC</b>
+        <span class="ens__row"><i>hook</i> PQAccountPoolHook 0xa68b…4aa0</span>
+        <span class="ens__row"><i>admits</i> Opaque's PQ accounts, by code hash</span>
+        <div class="ens__seal">post-quantum</div>
+      </div>
+      <div class="ens__attack swap__attack"><span class="ens__who">An ECDSA wallet</span><code>UniversalRouter.execute(V4_SWAP)</code><span class="ens__stamp">NotPostQuantum</span></div>
+      <div class="ens__ok"><span class="ens__who">A PQ account · one FORS+C UserOperation</span><code>swap 0.001 ETH → 1.813221 tUSDC</code><span class="ens__stamp ens__stamp--ok">done</span></div>
+    </div>
+  </section>
+
+  <section class="wrap feature" id="guard" aria-labelledby="guard-title">
+    <div class="feature__copy">
+      <p class="eyebrow">Liquidity guard · Any wallet · Live on Sepolia</p>
+      <h2 class="display" id="guard-title">Still on ECDSA? Add a post-quantum key.</h2>
+      <p class="lede"><b>PQGuardHook</b> protects liquidity anyone provides, ECDSA wallets included. Register a FORS+C key once, with an ordinary transaction. From then on, every removal from your position, fees too, needs that key's signature over the exact amount, a recipient and a deadline. The hook pays the recipient it names itself, so whoever cracks your ECDSA key can't take the liquidity, or redirect a removal you sign.</p>
+      <ul class="facts">
+        <li><b>The guard key</b>, registered in PQKeyRegistry by an ordinary ECDSA wallet. <a href="https://sepolia.etherscan.io/tx/0x1c3d955bb76b9e566b0669fee308c318803d46427b3a47a3d83a3aef68598230" target="_blank" rel="noopener">See it</a></li>
+        <li><b>Position #41441, the cracked key</b> with a FORS+C signature from another key: refused, <code>BadSignature</code></li>
+        <li><b>The real signature, replayed</b> with a front-runner's own recipient: refused, <code>BadSignature</code></li>
+        <li><b>The signed removal:</b> 0.002 ETH and 3.999999 tUSDC to the recipient it signed, 0 to the caller. <a href="https://sepolia.etherscan.io/tx/0x4b2ec8478af4d8397cea943ec3b79a0d51893f757a1d12ec64c0047274f7f15b" target="_blank" rel="noopener">See it</a></li>
+        <li><b>Hook 0xd0cf…4b01.</b> 15 contract tests across the three hooks</li>
+      </ul>
+    </div>
+    <div class="feature__stage ens trio" aria-hidden="true">
+      <div class="ens__card">
+        <span class="ens__tag">Uniswap v4 · Sepolia · PQGuardHook</span>
+        <b class="ens__name">Position #41441</b>
+        <span class="ens__row"><i>owner</i> 0x9cdb…40aA, an ECDSA wallet</span>
+        <span class="ens__row"><i>guard</i> a FORS+C key in PQKeyRegistry</span>
+        <div class="ens__seal">guarded</div>
+      </div>
+      <div class="ens__attack trio__r1"><span class="ens__who">ECDSA key cracked · another key's signature</span><code>decreaseLiquidity(#41441, all)</code><span class="ens__stamp">BadSignature</span></div>
+      <div class="ens__attack trio__r2"><span class="ens__who">Front-runner · your signature, their recipient</span><code>decreaseLiquidity(#41441, sig, to: 0xbad…)</code><span class="ens__stamp">BadSignature</span></div>
+      <div class="ens__ok trio__r3"><span class="ens__who">Your FORS+C signature</span><code>decreaseLiquidity(#41441, sig, to: 0x78de…)</code><span class="ens__stamp ens__stamp--ok">paid</span><span class="trio__then">0.002 ETH + 3.999999 tUSDC to the recipient it signed · the caller: 0</span></div>
+    </div>
+  </section>
+
   <section class="wrap" id="now" aria-labelledby="now-title">
     <div class="head">
       <p class="eyebrow">Available now</p>
@@ -135,7 +261,8 @@
       <a class="trow" role="row" href="/sepolia/app"><span role="cell"><b>Private payments</b> in rings of eight notes, with a way out that needs no Opaque server</span><span role="cell">Sepolia · Arc · XRPL testnet</span><span role="cell">FORS+C</span></a>
       <a class="trow" role="row" href="/sepolia/app"><span role="cell"><b>Stealth addresses</b>, ML-KEM-768</span><span role="cell">Sepolia</span><span role="cell">FORS+C · ML-KEM</span></a>
       <a class="trow" role="row" href="/sepolia/app"><span role="cell"><b>ENSv2 names</b>: claim, resolve, pay by name</span><span role="cell">Sepolia</span><span role="cell">FORS+C</span></a>
-      <a class="trow" role="row" href="/testnet/devnet"><span role="cell"><b>Uniswap v4</b>: a pool only post-quantum accounts can trade in (PQPoolHook)</span><span role="cell">EIP-8141 devnet</span><span role="cell">FORS+C only</span></a>
+      <a class="trow" role="row" href="#sepolia-pool"><span role="cell"><b>Uniswap v4</b>: pools only post-quantum accounts can trade in</span><span role="cell">EIP-8141 devnet · Sepolia (Uniswap's v4)</span><span role="cell">FORS+C</span></a>
+      <a class="trow" role="row" href="#guard"><span role="cell"><b>Liquidity guard</b> for any wallet: a FORS+C second factor on every removal</span><span role="cell">Sepolia (Uniswap's v4)</span><span role="cell">ECDSA + FORS+C</span></a>
       <a class="trow" role="row" href="/unseen"><span role="cell"><b>Reads through a mixnet</b>, with EF's anon-rpc</span><span role="cell">Sepolia</span><span role="cell">n/a: nobody sees who asked</span></a>
     </div>
   </section>
@@ -281,6 +408,34 @@ function stage(canvas, draw) {
       ctx.strokeStyle = `rgba(${ORANGE}, 0.6)`; ctx.beginPath(); ctx.moveTo(0, scanY); ctx.lineTo(W, scanY); ctx.stroke();
     }
   });
+})();
+
+// ── the stealth payment, a step at a time: auto-advancing while on screen, or clicked ──
+(() => {
+  const root = document.getElementById('stealth-flow');
+  const tabs = [...root.querySelectorAll('[data-i]')], steps = [...root.querySelectorAll('.sf-step')], cap = document.getElementById('sflow-cap');
+  const tx = (h, label) => `<a href="https://sepolia.etherscan.io/${h}" target="_blank" rel="noopener">${label}</a>`;
+  const CAPS = [
+    "Her wallet writes one 1,184-byte ML-KEM-768 key to ERC-6538's registry (0x6538…6538), in the same signature that claims alice.opaque.eth.",
+    'Bob\'s wallet reads her key and encapsulates to it: a 1,088-byte ciphertext, and a shared secret only the two of them can compute. The secret draws the keys of a fresh FORS+C account, so Bob knows its address: 0xbbb6…312b.',
+    `Bob pays privately, his note one of 8 in the pool. The pool pays 2 tUSDC to ${tx('address/0xbbb6e4ef9ef84ab37561f093e008dcd4186a312b', '0xbbb6…312b')}; Alice's own address, 0x65b7…65c0, receives nothing.`,
+    "Opaque's exit, not Bob and not Alice, posts the ciphertext on ERC-5564's Announcer (0x5564…5564). Neither of their accounts appears beside it.",
+    `Alice's wallet decapsulates each announcement; a one-byte view tag skips 255 in 256. Hers makes its own address: a match. She sweeps it into her own notes, with gas from the exit. ${tx('tx/0x1051a97b48698037e0ee37d49101fcbe5ed52886148896ca188086dbb019d425', 'See the sweep')}`,
+  ];
+  let at = 0, timer;
+  const show = (n) => {
+    at = n;
+    // Off, a layout, on: the step's CSS animations start again from the top.
+    steps.forEach((g, k) => { g.classList.remove('is-on'); if (k === n) { void g.getBoundingClientRect(); g.classList.add('is-on'); } });
+    tabs.forEach((b, k) => b.setAttribute('aria-selected', String(k === n)));
+    cap.innerHTML = `<b>${tabs[n].querySelector('span').textContent}</b> ${CAPS[n]}`;
+  };
+  const play = () => { clearInterval(timer); if (!reduced) timer = setInterval(() => show((at + 1) % steps.length), 5600); };
+  tabs.forEach((b) => b.addEventListener('click', () => { show(Number(b.dataset.i)); play(); }));
+  show(0);
+  new IntersectionObserver(([e]) => { if (e.isIntersecting) { show(at); play(); } else clearInterval(timer); }, { threshold: 0.3 }).observe(root);
+  const contrast = root.querySelector('.contrast');
+  new IntersectionObserver(([e]) => contrast.classList.toggle('on', e.isIntersecting), { threshold: 0.3 }).observe(contrast);
 })();
 
 // ── ENS and the swap: CSS loops, started once on screen ───────────────────

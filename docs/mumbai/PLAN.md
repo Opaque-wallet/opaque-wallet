@@ -194,7 +194,12 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
 - Hook `0x3B288a191c20c0333c06E90b386b611d2AC3caa0` (salt mined for bits 0xaa0), made by `node ethereum/frame-tx.ts pqpool` in one atomic FORS-signed transaction: deploy, register, initialize ETH/pqUSD under the hook, 0.1 ETH of liquidity (`0x64034d55…f6f4`).
 - An ECDSA wallet's swap through the router reverts with `NotPostQuantum(wallet)`; the account's swap bought 1.974316 pqUSD for 0.001 ETH, the exact quote (`0x6dbf99f3…2e4b`).
 - The devnet page's Swap trades in this pool and registers the account in the same signature on its first swap.
-- Still open: the Sepolia version (ERC-4337 PQ accounts: admit by the PQAccount clone and PQKeyRegistry) and the FORS-signed `hookData` second factor for ECDSA LPs.
+
+**Built (Sepolia, 6 November), at Uniswap's own v4 (`deployments/eth-sepolia.json` `uniswap`; `OPAQUE_NETWORK=sepolia node ethereum/uniswap-sepolia.ts`):**
+- **`PQAccountPoolHook`** `0xa68b63f17fe7926812d8591247b5a718a7244aa0`: only PQ accounts (EIP-1167 clones of the PQAccount implementation, by code hash) trade or provide. A PQ account's first UserOperation deployed it and funded the pool (`0xe98d4bf7…`); its swap bought exactly the quote (`0xfbfec1bc…`); an ECDSA wallet's swap reverts with `NotPostQuantum(wallet)`.
+- **`PQGuardHook`** `0xd0cfd61eb5ef783f6d70ea83b58d2c87fc034b01`: a FORS+C second factor for any LP. The ECDSA deployer registered a guard key (`0x1c3d955b…`) and opened #41441. Another key's signature and the real one replayed to another recipient are both refused (`BadSignature`); the signed removal paid only its signed recipient (`0x4b2ec847…`).
+- **The wallet's swap card** (Sepolia Home): a quote from the pool's state across the mesh (the exit allows `PoolManager.extsload`), one UserOperation the account's FORS+C key signs.
+- Tests: 7 (`PQPoolHook.t.sol`) and 8 (`PQGuardHook.t.sol`).
 
 ### T9. The EIP-8141 transaction (devnet)
 
