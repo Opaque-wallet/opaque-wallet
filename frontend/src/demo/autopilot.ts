@@ -266,12 +266,22 @@ const STEPS: Record<Exclude<Phase, 'done'>, () => Promise<void>> = {
     await press('#tab-names');
     await until('Names', () => shown('#sub-claim') || shown('#sub-release'), 120_000);
     if (shown('#sub-claim')) {
-      await type('#sub-label', state!.label);
-      clear('sub-status');
-      await press('#sub-claim');
-      await status('sub-status', /is yours/, /^Not done/, 'the claim');
+      for (let n = 1; ; n++) {
+        await type('#sub-label', state!.label);
+        clear('sub-status');
+        await press('#sub-claim');
+        const said = await status('sub-status', /is yours|is taken/, /^(Not done|Use 3 to|Opaque is still)/, 'the claim');
+        if (!/is taken/.test(said)) break;
+        if (n >= 5) throw new Error(said);
+        // Taken, by an earlier take's wallet: the next label, as a person would try one.
+        state!.label = `${state!.label.replace(/-\d+$/, '')}-${n + 1}`; save();
+        await say('A name', `${name()} on ENSv2, claimed with one FORS+C signature`);
+      }
       await sleep(3_000);
     }
+    // The name this wallet holds is the one shown and paid, whatever the run asked for.
+    const held = text('sub-name').replace(/\.opaque\.eth$/, '');
+    if (held !== '' && held !== state!.label) { state!.label = held; save(); }
     waiting('ENS to resolve the name');
     await until(`${name()} to resolve`, async () => (await resolveName(name(), ETHEREUM_COIN).catch(() => undefined))?.address.toLowerCase() === account(), 600_000, 5_000);
     waiting();
