@@ -150,7 +150,7 @@ Never use the devnet's published genesis or deployer keys: one of them is the no
   - its masters' only other copies are `backend/.stack/eth-sepolia/*`. Never delete them.
 - **No subgraph.** The stack runs without The Graph (`services.graphUrl` unset): rings are read from pool logs.
 - **Faucet** (`FAUCET=1`) at `/v1/faucet`:
-  - pays 0.01 ETH and 100 tUSDC, once an hour per address and 60 an hour in all;
+  - pays 0.03 ETH and 100 tUSDC, once an hour per address and 60 an hour in all;
   - the egress pays it, and settlements too: keep it above about 0.1 ETH.
 - **Names:** `/v1/ens/claim` (with `ENS_CLAIM_CODE`) hands opaque.eth's key to a wallet, and `/v1/ens/execute` relays FORS-signed controller calls.
 

@@ -51,7 +51,9 @@ import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
 import { ARC_AUTHORITY, checkSwapCall, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../../backend/chain/pq-wallet-chain.ts';
 import { browserPayer, createBrowserPool, createMeshChainObserver, type DepositMany } from '../../../backend/chain/wallet-chain.ts';
 import { capabilitiesOf } from '../../../backend/chain/pool.ts';
-import { ethBalance, readOne, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
+import { createWalletRpcAnswerer, ethBalance, readOne, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
+import { exitClient } from '../../../backend/chain/ring-exit.ts';
+import { anonFetch, anonReadsOn } from './anon-rpc.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
 import { createNoteVault, createRingClient } from '../../../packages/ring-client/src/index.ts';
 import type { RingProver } from '../../../packages/ring-client/src/ring-client.ts';
@@ -60,7 +62,7 @@ import type { WalletStateStore } from '../../../packages/pq-wallet/src/wallet-st
 import { SealedSignerStore } from './lock.ts';
 import { adoptWallet, createPqWallet } from '../../../packages/pq-wallet/src/wallet.ts';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
-import { deployment, meshTrustRoot, requireService, type SwapToken } from '../../../deployments/index.ts';
+import { deployment, meshTrustRoot, NETWORK, requireService, type SwapToken } from '../../../deployments/index.ts';
 import { exportBackup, keyStoreName, NOTES_KEY, restoreBackup, WALLET_ID } from './backup.ts';
 import { arcState, arcStorageOf, findNotes, forsSeed, noteCounters, noteSecret, saveArcState } from './arc-keys.ts';
 import type { AccountKeys } from './wallet-keys.ts';
@@ -260,8 +262,28 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
   const browserPool = createBrowserPool(undefined, cfg.capabilities);
   // Every read that names this wallet's account or notes, and every
   // UserOperation, crosses the mesh (§7.5): see backend/chain/wallet-rpc.ts.
-  const walletRpc: WalletRpcSend = async (operation, encodedRequest) =>
+  const viaMesh: WalletRpcSend = async (operation, encodedRequest) =>
     (await query<Hex>({ kind: 'WALLET_RPC', operation, encodedRequest })).value;
+  // With the Privacy view's switch on, the account's reads and UserOperations leave
+  // this browser through EF's anon-rpc (Nox) for a public RPC and the public bundler,
+  // answered by the same code our exit runs, here. Only what our exit pays for or
+  // asks on the wallet's behalf (a relayed rotation, a stealth announcement or its
+  // gas, a LI.FI quote) still crosses the mesh, beside the payments themselves.
+  const viaAnon = NETWORK === 'sepolia' && anonReadsOn() ? (() => {
+    const fetchFn = anonFetch();
+    return createWalletRpcAnswerer({
+      publicClient: exitClient(fetchFn), bundlerUrl: ARC_AUTHORITY.bundlerUrl, entryPoint: ARC_AUTHORITY.entryPoint,
+      accountImplementation: ARC_AUTHORITY.accountImplementation, factory: ARC_AUTHORITY.factory, fetch: fetchFn, bundlerTimeoutMs: 90_000,
+    });
+  })() : undefined;
+  const ANON_OPERATIONS = new Set(['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT']);
+  const walletRpc: WalletRpcSend = async (operation, encodedRequest) => {
+    if (viaAnon === undefined || !ANON_OPERATIONS.has(operation)) return viaMesh(operation, encodedRequest);
+    const answer = await viaAnon(operation, encodedRequest);
+    // Counted where the page can show it: the Privacy view says how many calls anon-rpc answered.
+    if (typeof dispatchEvent === 'function') dispatchEvent(new Event('opaque:anon-read'));
+    return answer;
+  };
   // The account's FORS keys, encrypted under a non-extractable key, in this
   // browser and nowhere else. Back them up (exportBackup), or clearing site
   // data loses the account.

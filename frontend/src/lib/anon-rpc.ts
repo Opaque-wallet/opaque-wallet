@@ -6,11 +6,14 @@
 // an RPC provider or bundler answering through it sees the network's exit, never
 // this browser, and the worker never sees the page, its storage or its keys.
 //
-// Opaque uses it where nothing of ours should be in the path: ENS lookups, and the
+// Opaque uses it where nothing of ours should be in the path: ENS lookups; the
 // wallet's reads and UserOperations when Opaque's own servers are switched off
-// (lib/without-opaque.ts). Networks from anon-rpc's adopters.json5.
+// (lib/without-opaque.ts); and, with the Privacy view's switch on, the wallet's reads
+// and UserOperations all the time (lib/runtime.ts). Networks from anon-rpc's adopters.json5.
 
 import { AnonRpcWorker } from '@anon-rpc/browser-harness';
+
+import { scoped } from './storage-name.ts';
 
 export interface AnonNetwork {
   readonly id: 'nox' | 'tor' | 'nym';
@@ -68,3 +71,8 @@ export async function anonRpc<T>(url: string, method: string, params: readonly u
   if (body.error !== undefined) throw Object.assign(new Error(body.error.message), { data: body.error.data });
   return body.result as T;
 }
+
+const READS_KEY = scoped('opaque:anon-reads');
+/** The Privacy view's switch: the account's reads and UserOperations through anon-rpc, not Opaque's relays. */
+export const anonReadsOn = (): boolean => { try { return localStorage.getItem(READS_KEY) === 'on'; } catch { return false; } };
+export const setAnonReads = (on: boolean): void => { try { localStorage.setItem(READS_KEY, on ? 'on' : 'off'); } catch { /* a private window: off */ } };

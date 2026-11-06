@@ -472,8 +472,10 @@ const namesHandler = (url: string, req: Parameters<RequestListener>[0], res: Par
 // for settlements: so a wallet on Sepolia needs no faucet of anyone else's.
 // Once an hour per address, and at most 60 an hour in all.
 const FAUCET = process.env['FAUCET'] === '1';
-// A new account's first operation deploys it too: 0.01 ETH covers that and many after.
-const FAUCET_ETH = parseEther(process.env['FAUCET_ETH'] ?? '0.01');
+// A new account's first operation deploys it too (~0.0035 ETH at Pimlico's ~1.2 gwei), and
+// claiming a name also publishes its 1,184-byte stealth key (~37 new storage slots): the
+// bundler wants each operation's whole gas limit up front, so 0.01 ran out by the claim.
+const FAUCET_ETH = parseEther(process.env['FAUCET_ETH'] ?? '0.03');
 const FAUCET_USDC = 100n * 10n ** BigInt(deployment.tokens.usdc.decimals);
 const FAUCET_FLOOR = parseEther('0.1');
 const dripped = new Map<string, number>();

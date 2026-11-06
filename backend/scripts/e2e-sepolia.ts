@@ -22,7 +22,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'no
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { createPublicClient, createWalletClient, encodeFunctionData, http, parseAbi, type Hex } from 'viem';
+import { createPublicClient, createWalletClient, encodeFunctionData, fallback, http, parseAbi, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 
@@ -35,7 +35,9 @@ import { ANNOUNCEMENT, ANNOUNCER, CIPHERTEXT_BYTES, META_ADDRESS_BYTES, META_REG
 
 const SITE = process.env['SITE'] ?? 'http://localhost:5174';
 const d = JSON.parse(readFileSync(new URL('../../deployments/eth-sepolia.json', import.meta.url), 'utf8'));
-const pub = createPublicClient({ chain: sepolia, transport: http(d.network.rpcUrl) });
+// The test's own reads, from this machine's IP: publicnode rate-limits a test polling every
+// few seconds, so they back off and fall over to the network's other public RPC.
+const pub = createPublicClient({ chain: sepolia, transport: fallback([d.network.rpcUrl, ...d.network.rpcFallbacks].map((u) => http(u, { retryCount: 4, retryDelay: 2_000 }))) });
 const STACK = new URL('../.stack/eth-sepolia/', import.meta.url);
 /** The test wallet's phrase and the stack generation to hand opaque.eth back to, kept until the hand-back is done. */
 const NAME_FILE = new URL('e2e-name.json', STACK);
@@ -106,6 +108,16 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const errors: string[] = [];
 page.on('pageerror', (e: Error) => errors.push(e.message));
 const check = (ok: unknown, what: string) => { if (!ok) throw new Error(what); console.log(`ok  ${what}`); };
+const TRANSFER = parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])[0];
+/** An address announced under the PQ stealth scheme since `fromBlock` that the token paid `amount`. */
+const paidAtOneTimeAddress = async (amount: bigint, fromBlock: bigint): Promise<`0x${string}` | undefined> => {
+  const announced = (await pub.getLogs({ address: ANNOUNCER, event: ANNOUNCEMENT, args: { schemeId: SCHEME_ID }, fromBlock }))
+    .map((a) => a.args.stealthAddress!.toLowerCase() as `0x${string}`);
+  if (announced.length === 0) return undefined;
+  // One query for every announced address at once: an OR over the indexed `to`.
+  const paid = await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { to: announced }, fromBlock });
+  return paid.find((l) => l.args.value === amount)?.args.to?.toLowerCase() as `0x${string}` | undefined;
+};
 const until = async (what: string, test: () => Promise<boolean>, ms = 300_000) => {
   for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 5_000))) if (await test().catch(() => false)) return;
   throw new Error(`timed out: ${what}`);
@@ -179,16 +191,8 @@ try {
   await page.fill('#send-amount', '2');
   await page.click('#arm');
   // The name's wallet receives privately: the pool pays a one-time address, announced under the PQ scheme.
-  const TRANSFER = parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])[0];
   let oneTime: `0x${string}` | undefined;
-  await until(`${label}.opaque.eth to be paid at a one-time address`, async () => {
-    const announced = await pub.getLogs({ address: ANNOUNCER, event: ANNOUNCEMENT, args: { schemeId: SCHEME_ID }, fromBlock: before });
-    for (const a of announced) {
-      const to = a.args.stealthAddress!.toLowerCase() as `0x${string}`;
-      if ((await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { to }, fromBlock: before })).some((l) => l.args.value === 2_000_000n)) oneTime = to;
-    }
-    return oneTime !== undefined;
-  }, 600_000).catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
+  await until(`${label}.opaque.eth to be paid at a one-time address`, async () => (oneTime = await paidAtOneTimeAddress(2_000_000n, before)) !== undefined, 600_000).catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
   check(oneTime !== account.toLowerCase(), `paid ${label}.opaque.eth by name: 2 tUSDC from the pool to a one-time address, ${oneTime}`);
   check(!(await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { to: account }, fromBlock: before })).some((l) => l.args.value === 2_000_000n), 'the wallet\'s own address received nothing: the chain does not show who was paid');
   const announcement = (await pub.getLogs({ address: ANNOUNCER, event: ANNOUNCEMENT, args: { schemeId: SCHEME_ID, stealthAddress: oneTime }, fromBlock: before }))[0]!;
@@ -235,17 +239,34 @@ try {
   await until('ENS to name the wallet', async () => { const r = await resolveName('opaque.eth', ETHEREUM_COIN); return r.address.toLowerCase() === account.toLowerCase() && r.pq; }, 120_000);
   check(true, `ENSv2's UniversalResolver: opaque.eth → ${account}, a name a FORS+C key holds`);
 
-  // Paid by name: the wallet looks opaque.eth up and pays the address it names, privately.
+  // Paid by name: the wallet looks opaque.eth up, and the wallet it names receives privately
+  // (turned on with its subname), so the pool pays a one-time address, not the one ENS names.
   const from = await pub.getBlockNumber();
-  const TRANSFER = parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])[0];
   await page.click('#tab-send');
   await page.fill('#recipient', 'opaque.eth');
   await page.fill('#send-amount', '5');
   await page.click('#arm');
-  await until('opaque.eth to be paid', async () => (await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { to: account }, fromBlock: from })).some((l) => l.args.value === 5_000_000n), 600_000)
+  let oneTime5: `0x${string}` | undefined;
+  await until('opaque.eth to be paid at a one-time address', async () => (oneTime5 = await paidAtOneTimeAddress(5_000_000n, from)) !== undefined, 600_000)
     .catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
-  check(true, 'paid opaque.eth by name: 5 tUSDC from the pool to the address ENS names');
+  check(oneTime5 !== account.toLowerCase(), `paid opaque.eth by name: ENS names this wallet, which receives privately, so the pool paid 5 tUSDC to a one-time address, ${oneTime5}`);
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
+
+  // ── anon-rpc: the wallet's reads and operations through EF's mixnet, not our relays ──
+  const straight: string[] = [];
+  const watch = (r: any) => { if (/publicnode|pimlico/.test(r.url())) straight.push(`${r.url()} ${(r.postData() ?? '').slice(0, 160)}`); };
+  page.on('request', watch);
+  await page.click('#tab-home');
+  await page.click('#tile-privacy');
+  await page.check('#anon-reads');
+  await page.waitForLoadState('load');
+  await unlockIfAsked(page);
+  await page.waitForFunction(() => Number(/^(\d+) of/.exec(document.getElementById('anon-reads-count')?.textContent ?? '')?.[1] ?? 0) >= 3, undefined, { timeout: 300_000 });
+  await page.waitForFunction(() => Number(document.getElementById('balance')?.textContent) > 0, undefined, { timeout: 300_000 });
+  check(true, `with anon-rpc on, the wallet reads its account through Nox: ${await page.textContent('#anon-reads-count')} Balance ${await page.textContent('#balance')} USDC`);
+  const namedStraight = straight.filter((r) => r.toLowerCase().includes(account.slice(2).toLowerCase()));
+  check(namedStraight.length === 0, `and no RPC or bundler request from this browser named the account (${straight.length} direct, anon-rpc's bootstrap among them)${namedStraight.length ? `: ${namedStraight[0]}` : ''}`);
+  page.off('request', watch);
 
   // ── Without Opaque: every server of ours refuses; a note still leaves its pool ──
   const OURS = new URL(d.services.meshExitUrl).host;

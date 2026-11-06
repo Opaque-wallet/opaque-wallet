@@ -22,6 +22,7 @@ import { runPaymentLanes } from './lib/payment-lanes.js';
 import { backupTransport, hasBrowserAccount, startWallet, type WalletRuntime } from './lib/runtime.js';
 import { addressOfKey, arcAddressOf, arcState, arcStorageOf, deployerKey, saveArcState } from './lib/arc-keys.ts';
 import { withoutOpaque, type WithoutOpaque } from './lib/without-opaque.ts';
+import { anonReadsOn, setAnonReads } from './lib/anon-rpc.ts';
 import { exitablePools } from '../../backend/chain/ring-exit.ts';
 import { keyStoreName } from './lib/backup.ts';
 import { asHexBytes, CREATE2_FACTORY, deployment as deployOf, MAX_INITCODE, newSalt, riskOfCall } from './lib/contracts.ts';
@@ -1718,6 +1719,15 @@ async function init(): Promise<void> {
     el('exit-link').addEventListener('click', () => { offerExit(account as AccountKeys); showView('home'); el('exit-card').scrollIntoView({ behavior: 'smooth' }); });
   }
   if (NETWORK === 'sepolia') {
+    el('anon-reads-wrap').hidden = false;
+    const anon = el<HTMLInputElement>('anon-reads');
+    anon.checked = anonReadsOn();
+    anon.addEventListener('change', () => { setAnonReads(anon.checked); location.reload(); });
+    let answered = 0;
+    addEventListener('opaque:anon-read', () => {
+      answered++;
+      el('anon-reads-count').textContent = `${answered} of this wallet's reads and operations answered through anon-rpc since the page opened.`;
+    });
     el<HTMLInputElement>('recipient').placeholder = '0x… or an ENS name, like opaque.eth';
     el('recipient').nextElementSibling!.textContent = 'A Sepolia address or an ENS name.';
     if (account !== 'browser') setupNameCard(account);
