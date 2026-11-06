@@ -154,3 +154,57 @@ test('an_eth_balance_read_is_allowed_only_where_gas_is_eth', async () => {
   if (deployment.network.nativeCurrency.symbol === 'USDC') assert.equal(multicall, undefined, 'Arc reads its USDC, never Multicall3');
   else assert.deepEqual([...multicall!], [toFunctionSelector('getEthBalance(address)')], 'only getEthBalance, nothing else Multicall3 can do');
 });
+
+test('stealth_the_exit_pays_only_for_a_well_formed_announcement_and_a_sweep_it_can_check', async () => {
+  const { deployment } = await import('../../../deployments/index.ts');
+  const { CIPHERTEXT_BYTES } = await import('../stealth.ts');
+  const written: unknown[] = [];
+  const sent: unknown[] = [];
+  let code = '0x';
+  let announced: unknown[] = [];
+  const publicClient = {
+    getCode: async () => code,
+    getBlockNumber: async () => BigInt(deployment.stealth?.fromBlock ?? 0) + 100n,
+    getLogs: async () => announced,
+    readContract: async () => 5_000_000n,
+    getBalance: async () => 0n,
+    simulateContract: async (request: unknown) => ({ request }),
+    extend: () => ({
+      writeContract: async (request: unknown) => { written.push(request); return `0x${'99'.repeat(32)}`; },
+      sendTransaction: async (request: unknown) => { sent.push(request); return `0x${'98'.repeat(32)}`; },
+    }),
+    waitForTransactionReceipt: async () => ({ status: 'success' }),
+  };
+  const send = createWalletRpcAnswerer({
+    publicClient: publicClient as never, bundlerUrl: 'https://bundler.invalid', entryPoint: entryPoint() as Address,
+    accountImplementation: implementation, payer: { address: `0x${'ee'.repeat(20)}` } as never,
+  });
+  if (deployment.stealth === undefined) {
+    assert.match((await ask(send, 'STEALTH', { action: 'scan' })).error.message, /no stealth payments/);
+    return;
+  }
+  const ct = `0x${'ab'.repeat(CIPHERTEXT_BYTES)}`;
+  const to = `0x${'44'.repeat(20)}`;
+  assert.match((await ask(send, 'STEALTH', { action: 'announce', stealthAddress: to, ephemeralPubKey: '0xabcd', metadata: '0x01' })).error.message, /ciphertext/);
+  assert.ok((await ask(send, 'STEALTH', { action: 'announce', stealthAddress: to, ephemeralPubKey: ct, metadata: '0x01' })).result.txHash);
+  assert.equal(written.length, 1, 'one announcement paid for');
+
+  // Gas: never for an address nobody announced, once for one that was.
+  assert.match((await ask(send, 'STEALTH', { action: 'gas', account: to })).error.message, /no stealth payment was announced/);
+  assert.equal(sent.length, 0);
+  announced = [{ args: { stealthAddress: to, ephemeralPubKey: ct, metadata: '0x01' }, blockNumber: 1n }];
+  assert.ok((await ask(send, 'STEALTH', { action: 'gas', account: to })).result.txHash);
+  assert.match((await ask(send, 'STEALTH', { action: 'gas', account: to })).error.message, /already/);
+  assert.equal(sent.length, 1, 'one gas transfer paid for');
+  // An address that is already an account is neither announced nor given gas.
+  code = cloneCode;
+  assert.match((await ask(send, 'STEALTH', { action: 'announce', stealthAddress: `0x${'45'.repeat(20)}`, ephemeralPubKey: ct, metadata: '0x01' })).error.message, /already an account/);
+
+  // Scans come a page at a time, so an answer stays inside the mesh's largest message.
+  announced = Array.from({ length: 10 }, (_, i) => ({ args: { stealthAddress: to, ephemeralPubKey: ct, metadata: '0x01' }, blockNumber: BigInt(i) }));
+  const first = (await ask(send, 'STEALTH', { action: 'scan' })).result;
+  assert.equal(first.announcements.length, 8);
+  assert.deepEqual([first.next.skip, first.done], [8, false]);
+  const second = (await ask(send, 'STEALTH', { action: 'scan', ...first.next })).result;
+  assert.equal(second.announcements.length, 2);
+});

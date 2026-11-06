@@ -972,11 +972,12 @@ function setupSubname(): void {
       : `This wallet's name. Anyone can pay ${held}.opaque.eth: it resolves to this wallet's address, and only its post-quantum key holds the name.`;
   };
   /** One call from the account, signed by its key; then the read waits out a public RPC a block behind. */
-  const run = async (data: `0x${string}`, doing: string, done: (tx: string) => string, changed: () => boolean) => {
+  const run = async (data: `0x${string}`, doing: string, done: (tx: string) => string, changed: () => boolean, also: readonly { to: `0x${string}`; data: `0x${string}` }[] = []) => {
     if (!runtimeReady || opaqueAddress === '') { setStatus('sub-status', 'Opaque is still starting.'); return; }
     setStatus('sub-status', doing);
     try {
-      const tx = await rt.execute(opaqueAddress as `0x${string}`, [{ to: names, data }]);
+      const tx = await rt.execute(opaqueAddress as `0x${string}`, [{ to: names, data }, ...also]);
+      if (also.length > 0) void refreshStealth();
       for (let tries = 0; tries < 20 && (await refreshSubname(), !changed()); tries++) await new Promise((r) => setTimeout(r, 3_000));
       setStatus('sub-status', done(tx));
       void refreshTokens().catch(() => undefined);
@@ -987,9 +988,11 @@ function setupSubname(): void {
     const label = el<HTMLInputElement>('sub-label').value.trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(label)) { setStatus('sub-status', 'Use 3 to 32 of a to z, 0 to 9 and hyphens, not at either end.'); return; }
     if (!await opaqueNameFree(label).catch(() => true)) { setStatus('sub-status', `${label}.opaque.eth is taken. Try another.`); return; }
+    // A name is for being paid by: receiving privately is turned on with it, under the same signature.
+    const stealth = rt.stealth !== undefined && !(await rt.stealth.isOn(opaqueAddress as `0x${string}`).catch(() => true)) ? [rt.stealth.turnOnCall] : [];
     await run(encodeFunctionData({ abi: NAMES_ABI, functionName: 'claim', args: [label] }),
       `Claiming ${label}.opaque.eth: this wallet's post-quantum key signs it…`,
-      (tx) => `${label}.opaque.eth is yours: ${tx}`, () => held === label);
+      (tx) => `${label}.opaque.eth is yours${stealth.length > 0 ? ', and payments to it land at one-time addresses' : ''}: ${tx}`, () => held === label, stealth);
   })());
   el('sub-release').addEventListener('click', () => void (async () => {
     const was = held;
@@ -997,6 +1000,75 @@ function setupSubname(): void {
     await run(encodeFunctionData({ abi: NAMES_ABI, functionName: 'release' }),
       `Releasing ${was}.opaque.eth…`, () => `${was}.opaque.eth is free again.`, () => held === '');
   })());
+}
+
+// ── receive privately (post-quantum stealth payments) ─────────────────────
+// lib/stealth.ts. Payments to this wallet land at one-time PQ accounts that only its
+// ML-KEM key can find; each is swept into notes once its balance stops changing.
+
+let refreshStealth = async (): Promise<void> => undefined;
+function setupStealth(): void {
+  const s = rt.stealth;
+  if (s === undefined || opaqueAddress === '') return;
+  const me = opaqueAddress as `0x${string}`;
+  el('stealth-card').hidden = false;
+  let on = false;
+  let sweeping = false;
+  // A payment of several notes lands one settlement at a time: swept once two looks agree.
+  const lastHeld = new Map<string, number>();
+  const render = () => {
+    const rows = s.payments().slice().reverse().map((p) => {
+      const row = document.createElement('div');
+      row.className = 'stealth-row';
+      const held = lastHeld.get(p.stealthAddress) ?? 0;
+      row.innerHTML = '<code></code><span></span>';
+      row.querySelector('code')!.textContent = shortAddress(p.stealthAddress);
+      row.querySelector('code')!.title = p.stealthAddress;
+      row.querySelector('span')!.textContent = held >= 1 ? `${held} USDC arrived: moving it into your notes…`
+        : p.state === 'swept' ? `${p.usdc ?? ''} USDC, in your notes` : 'Announced; the payment has not landed yet';
+      return row;
+    });
+    el('stealth-list').replaceChildren(...rows);
+  };
+  refreshStealth = async () => {
+    on = await s.isOn(me).catch(() => on);
+    el('stealth-on').hidden = on;
+    el('stealth-copy').textContent = on
+      ? 'On. Every payment to this wallet or its name lands at a one-time address only this wallet can find, then moves into your notes by itself. Nobody reading the chain can tell those payments are yours, even with a quantum computer.'
+      : 'Payments to this wallet can land at one-time addresses only it can find: nobody reading the chain, now or with a quantum computer, can tell they are yours. Turning it on publishes one post-quantum key (ML-KEM-768) in the standard stealth-address registry.';
+    if (!on) return;
+    await s.scan();
+    for (const p of s.payments()) {
+      const held = await s.held(p).catch(() => 0);
+      const settled = held >= 1 && lastHeld.get(p.stealthAddress) === held;
+      lastHeld.set(p.stealthAddress, held);
+      if (!settled || sweeping) continue;
+      sweeping = true;
+      render();
+      try {
+        await refreshPools();
+        const counts = makeAmount(held, readySizes())!;
+        const parts = rt.scopes.filter((x) => counts.has(Number(x.denomination) / 1e6)).map((x) => ({ scope: x, count: counts.get(Number(x.denomination) / 1e6)! }));
+        const tx = await s.sweep(p, (depositMany) => rt.depositFrom(depositMany, parts));
+        lastHeld.set(p.stealthAddress, 0);
+        setStatus('stealth-status', `${held} USDC paid to a one-time address is now in your notes: ${tx}`);
+        await refreshNotes();
+      } catch (error) { setStatus('stealth-status', `Could not move a payment into your notes yet: ${gasWhy(error)}`); }
+      finally { sweeping = false; }
+    }
+    render();
+  };
+  el('stealth-on').addEventListener('click', () => void (async () => {
+    setStatus('stealth-status', 'Publishing this wallet\'s post-quantum stealth key: its FORS+C key signs it…');
+    try {
+      const tx = await rt.execute(me, [s.turnOnCall]);
+      for (let tries = 0; tries < 20 && !(await s.isOn(me).catch(() => false)); tries++) await new Promise((r) => setTimeout(r, 3_000));
+      setStatus('stealth-status', `On: ${tx}`);
+      await refreshStealth();
+    } catch (error) { setStatus('stealth-status', `Not turned on: ${gasWhy(error)}`); }
+  })());
+  const tick = () => void refreshStealth().catch(() => undefined).finally(() => setTimeout(tick, 30_000));
+  tick();
 }
 
 // ── your way out (exitable pools) ─────────────────────────────────────────
@@ -1167,6 +1239,7 @@ async function onSend(event: SubmitEvent): Promise<void> {
   status.textContent = '';
   let done = 0;
   let count = 0;
+  let stealthPaid = false;
   try {
     // Only notes whose pool already holds a ring's worth of deposits.
     progressLog.textContent = 'Checking which of your notes their pools can hide…';
@@ -1183,6 +1256,17 @@ async function onSend(event: SubmitEvent): Promise<void> {
     }
     const queue = [...pick].flatMap(([usdc, n]) => ready.filter((note) => usdcOf(note) === usdc).slice(0, n));
     count = queue.length;
+
+    // A payee that receives privately is paid at a one-time address only it can find.
+    if (rt.stealth !== undefined) {
+      progressLog.textContent = 'Checking whether the payee receives privately…';
+      const oneTime = await rt.stealth.addressFor(recipient as `0x${string}`);
+      if (oneTime !== undefined) {
+        progressLog.textContent = 'The payee receives privately: paying a one-time address only they can find, announced on chain…';
+        stealthPaid = true;
+        recipient = oneTime;
+      }
+    }
 
     // Out of band, BEFORE paying: the authority learns a recipient, never a
     // payment, and cannot tie the credential to the moment it is used.
@@ -1220,7 +1304,7 @@ async function onSend(event: SubmitEvent): Promise<void> {
     }
     progressLog.textContent = 'Transfer submitted across the mesh.';
     progressDialog.close();
-    status.textContent = 'Sent across the mesh. It usually settles within seconds. Check the Activity tab to see when it lands.';
+    status.textContent = `Sent across the mesh${stealthPaid ? ' to a one-time address only the payee can find' : ''}. It usually settles within seconds. Check the Activity tab to see when it lands.`;
     el<HTMLInputElement>('recipient').value = '';
     await refreshNotes();
     showView('activity');
@@ -1665,6 +1749,7 @@ async function init(): Promise<void> {
   }
   runtimeReady = true;
   void refreshSubname();
+  setupStealth();
 
   // One failed read must not stop the rest of the page from starting.
   await Promise.all([

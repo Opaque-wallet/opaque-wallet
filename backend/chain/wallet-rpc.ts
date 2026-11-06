@@ -17,6 +17,12 @@
 //                           from here, so LI.FI sees the exit, not the wallet;
 //                           the wallet checks the answer calls only LI.FI's
 //                           pinned contract (deployments/: swap.router)
+//   STEALTH                 stealth payments (chain/stealth.ts): scan reads this
+//                           scheme's ERC-5564 announcements a page at a time;
+//                           announce posts one for a sender, and gas gives a
+//                           found stealth account the ETH for its one sweep,
+//                           both PAID FOR BY THIS EXIT, so neither the sender's
+//                           nor the recipient's own account ever touches it
 //
 // Bundler calls must name the pinned v0.7 EntryPoint and come from a PQ
 // account clone, or deploy one: an initCode is accepted only as the pinned
@@ -43,11 +49,12 @@ import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 import { deployment, entryPoint, requireContract } from '../../deployments/index.ts';
 import { rateLimit } from '../mesh/limit.ts';
 import { writeInTurn } from './pool.ts';
+import { ANNOUNCEMENT, ANNOUNCER, ANNOUNCER_ABI, CIPHERTEXT_BYTES, META_REGISTRY, SCHEME_ID } from './stealth.ts';
 
 /** The one thing the page hands the mesh: an operation and its JSON, as hex. */
 export type WalletRpcSend = (operation: WalletRpcOperation, encodedRequest: Hex) => Promise<Hex>;
 
-export const WALLET_RPC_OPERATIONS: readonly WalletRpcOperation[] = ['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE', 'SWAP_QUOTE'];
+export const WALLET_RPC_OPERATIONS: readonly WalletRpcOperation[] = ['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE', 'SWAP_QUOTE', 'STEALTH'];
 
 const BUNDLER_METHODS: Readonly<Record<string, readonly string[]>> = {
   ESTIMATE: ['eth_estimateUserOperationGas', 'pimlico_getUserOperationGasPrice'],
@@ -63,6 +70,7 @@ export const STATE_ABI = parseAbi([
   'function getNonce(address, uint192) view returns (uint256)',
   'function capabilities() view returns ((uint8 proofMode, uint8 ringSize, bytes32 verifierId, uint256 denomination, bool requiresCommitReveal))',
   'function getEthBalance(address) view returns (uint256)',
+  'function stealthMetaAddressOf(address registrant, uint256 schemeId) view returns (bytes)',
 ]);
 /** Multicall3, at this address on every EVM chain: its getEthBalance makes an ETH balance a view call STATE can make. */
 const MULTICALL3 = '0xca11bde05977b3631167028862be2a173976ca11';
@@ -80,6 +88,8 @@ export function walletRpcAllowlist(): ReadonlyMap<string, ReadonlySet<string>> {
   add(entryPoint(), 'balanceOf(address)', 'getNonce(address,uint192)');
   // Where gas is ETH (Sepolia), the account's ETH is one of its assets. On Arc the native balance is the USDC read above.
   if (deployment.network.nativeCurrency.symbol !== 'USDC') add(MULTICALL3, 'getEthBalance(address)');
+  // A payee's stealth meta-address, read before paying it.
+  if (deployment.stealth !== undefined) add(META_REGISTRY, 'stealthMetaAddressOf(address,uint256)');
   return allow;
 }
 
@@ -91,6 +101,18 @@ export function walletRpcAllowlist(): ReadonlyMap<string, ReadonlySet<string>> {
 const USER_OPERATION_REQUEST = parseAbiParameters('string method, address entryPoint, (address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature) op');
 
 const REGISTRY_ROTATE = parseAbi(['function rotate(address, bytes32, uint64, uint64, bytes)']);
+
+/** Announcements a scan answers with: each carries a 1,088-byte ciphertext, and an answer is at most 64 KB. */
+const STEALTH_PAGE = 8;
+const STEALTH_RANGE = 10_000n;
+/**
+ * Blocks a scan stays behind the head. A load-balanced RPC's lagging node
+ * answers getLogs without its last few blocks, and a page the wallet moved past
+ * would never be read again: a payment lost from view.
+ */
+const STEALTH_LAG = 6n;
+/** ETH a found stealth account is given for its one sweep: a deploy and a few deposits, about 3M gas. */
+export const STEALTH_GAS_WEI = 8n * 10n ** 15n;
 /** At most one relayed rotation per account per minute, so a loop cannot drain the egress. */
 const ROTATE_COOLDOWN_MS = 60_000;
 
@@ -119,6 +141,8 @@ export function createWalletRpcAnswerer(options: {
   readonly quotesPerMinute?: number;
   /** How long a bundler call may take before the answer is an error. */
   readonly bundlerTimeoutMs?: number;
+  /** STEALTH announcements and gas this exit pays for a minute, whoever asks. */
+  readonly stealthPerMinute?: number;
 }): WalletRpcSend {
   const { publicClient } = options;
   const allowlist = options.allowlist ?? walletRpcAllowlist();
@@ -131,6 +155,8 @@ export function createWalletRpcAnswerer(options: {
   const rotatedAt = new Map<string, number>();
   // A flood of quote requests is refused here, rather than spending the LI.FI quota every swap needs.
   const quoteAllowance = rateLimit(options.quotesPerMinute ?? 60);
+  const stealthAllowance = rateLimit(options.stealthPerMinute ?? 20);
+  const gassed = new Set<string>();
 
   const refuse = (message: string): never => { throw new ProtocolFailure('INVALID_INPUT', message); };
   /** Only a deployed PQAccount clone. Cached: a clone's code never changes. */
@@ -262,6 +288,89 @@ export function createWalletRpcAnswerer(options: {
     return { txHash: hash };
   }
 
+  /**
+   * Stealth payments. What the exit pays for here is all it can lose, and each
+   * is bounded: an announcement needs a ciphertext of the scheme's size for an
+   * address with no code, and gas goes once to an address that holds USDC, has
+   * no code yet, and was announced under this scheme.
+   */
+  async function stealth(request: Record<string, unknown>): Promise<unknown> {
+    const start = deployment.stealth?.fromBlock;
+    if (start === undefined) throw new ProtocolFailure('INVALID_INPUT', 'this network has no stealth payments');
+    const action = request['action'];
+    const addressOf = (key: string): Address => {
+      const a = String(request[key] ?? '').toLowerCase();
+      if (!/^0x[0-9a-f]{40}$/.test(a)) refuse(`${key} must be an address`);
+      return a as Address;
+    };
+    const fresh = async (a: Address) => { if ((await publicClient.getCode({ address: a }) ?? '0x') !== '0x') refuse('that address is already an account'); };
+
+    if (action === 'scan') {
+      const from = BigInt(String(request['fromBlock'] ?? start));
+      const skip = Number(request['skip'] ?? 0);
+      if (from < BigInt(start) || !Number.isSafeInteger(skip) || skip < 0 || skip > 10_000) refuse('a scan names a block from this scheme\'s start, and a count to skip');
+      const head = (await publicClient.getBlockNumber()) - STEALTH_LAG;
+      const to = from + STEALTH_RANGE - 1n < head ? from + STEALTH_RANGE - 1n : head;
+      if (to < from) return { announcements: [], next: { fromBlock: from.toString(), skip: 0 }, done: true };
+      const logs = await publicClient.getLogs({ address: ANNOUNCER, event: ANNOUNCEMENT, args: { schemeId: SCHEME_ID }, fromBlock: from, toBlock: to });
+      const page = logs.slice(skip, skip + STEALTH_PAGE);
+      const more = logs.length > skip + STEALTH_PAGE;
+      return {
+        announcements: page.map((l) => ({ stealthAddress: l.args.stealthAddress!.toLowerCase(), ephemeralPubKey: l.args.ephemeralPubKey, metadata: l.args.metadata, blockNumber: l.blockNumber.toString() })),
+        next: more ? { fromBlock: from.toString(), skip: skip + STEALTH_PAGE } : { fromBlock: (to + 1n).toString(), skip: 0 },
+        done: !more && to === head,
+      };
+    }
+
+    if (signer === undefined) throw new ProtocolFailure('INVALID_INPUT', 'this exit does not pay for stealth payments');
+    const payer = options.payer!;
+
+    if (action === 'announce') {
+      const stealthAddress = addressOf('stealthAddress');
+      const ct = String(request['ephemeralPubKey'] ?? '');
+      const metadata = String(request['metadata'] ?? '');
+      if (!new RegExp(`^0x[0-9a-fA-F]{${CIPHERTEXT_BYTES * 2}}$`).test(ct)) refuse('an announcement carries an ML-KEM-768 ciphertext');
+      if (!/^0x([0-9a-fA-F]{2}){1,32}$/.test(metadata)) refuse('an announcement\'s metadata is 1 to 32 bytes, its view tag first');
+      if (!stealthAllowance()) throw new ProtocolFailure('MESH_UNAVAILABLE', 'stealth announcements are busy: try again in a minute', true);
+      await fresh(stealthAddress);
+      const { request: tx } = await publicClient.simulateContract({
+        address: ANNOUNCER, abi: ANNOUNCER_ABI, functionName: 'announce', args: [SCHEME_ID, stealthAddress, ct as Hex, metadata as Hex], account: payer,
+      } as never);
+      const hash = await writeInTurn(payer.address, () => signer.writeContract(tx as never)) as TxHash;
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== 'success') throw new ProtocolFailure('SETTLEMENT_REVERTED', `announce reverted in ${hash}`);
+      return { txHash: hash };
+    }
+
+    if (action === 'gas') {
+      const account = addressOf('account');
+      // Taken before the first await, like a rotation's cooldown (F-57), and given back if nothing is sent.
+      if (gassed.has(account)) refuse('that stealth account was given its gas already');
+      gassed.add(account);
+      try {
+        if (!stealthAllowance()) throw new ProtocolFailure('MESH_UNAVAILABLE', 'stealth gas is busy: try again in a minute', true);
+        await fresh(account);
+        const [usdc, eth, announced] = await Promise.all([
+          publicClient.readContract({ address: deployment.tokens.usdc.address, abi: STATE_ABI, functionName: 'balanceOf', args: [account] }),
+          publicClient.getBalance({ address: account }),
+          // ponytail: one getLogs from the scheme's start; page it once Sepolia's RPC refuses the range.
+          publicClient.getLogs({ address: ANNOUNCER, event: ANNOUNCEMENT, args: { schemeId: SCHEME_ID, stealthAddress: account }, fromBlock: BigInt(start) }),
+        ]);
+        if (announced.length === 0) refuse('no stealth payment was announced for that address');
+        if ((usdc as bigint) < 10n ** BigInt(deployment.tokens.usdc.decimals)) refuse('that stealth account holds nothing to sweep yet');
+        if (eth >= STEALTH_GAS_WEI) return { txHash: null };
+        const hash = await writeInTurn(payer.address, () => signer.sendTransaction({ account: payer, chain: publicClient.chain, to: account, value: STEALTH_GAS_WEI } as never)) as TxHash;
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== 'success') throw new ProtocolFailure('SETTLEMENT_REVERTED', `the gas transfer reverted in ${hash}`);
+        return { txHash: hash };
+      } catch (error) {
+        gassed.delete(account);
+        throw error;
+      }
+    }
+    return refuse('STEALTH does scan, announce or gas');
+  }
+
   /** An ABI UserOperation request, as the bundler's JSON-RPC params. */
   function unpack(encoded: Hex): { method: string; params: unknown[] } {
     const [method, entry, op] = decodeAbiParameters(USER_OPERATION_REQUEST, encoded);
@@ -324,7 +433,8 @@ export function createWalletRpcAnswerer(options: {
       const result = operation === 'STATE' ? await state(request)
         : operation === 'ROTATE' ? await rotate(request)
           : operation === 'SWAP_QUOTE' ? await swapQuote(request)
-            : await bundler(operation, request);
+            : operation === 'STEALTH' ? await stealth(request)
+              : await bundler(operation, request);
       return json({ result });
     } catch (error) {
       // Public messages only: nothing here carries a secret.
@@ -365,6 +475,9 @@ export async function ethBalance(send: WalletRpcSend, account: Address): Promise
 /** LI.FI's best route, asked through the mesh. */
 export const swapQuote = (send: WalletRpcSend, request: { from: Address; to: Address; amount: bigint; account: Address }): Promise<SwapQuote> =>
   call(send, 'SWAP_QUOTE', { from: request.from.toLowerCase(), to: request.to.toLowerCase(), amount: request.amount.toString(), account: request.account.toLowerCase() }) as Promise<SwapQuote>;
+
+/** A STEALTH request through the mesh: { action: 'scan' | 'announce' | 'gas', ... }. */
+export const stealthCall = (send: WalletRpcSend, request: Record<string, unknown>): Promise<unknown> => call(send, 'STEALTH', request);
 
 async function call(send: WalletRpcSend, operation: WalletRpcOperation, request: unknown): Promise<unknown> {
   return answerOf(await send(operation, json(request)));

@@ -3,7 +3,9 @@
 // faucet, a deposit its FORS key signs (an ERC-4337 operation, made into notes by
 // itself), a private payment through the mesh, and the recipient's tUSDC on chain;
 // the account's ETH listed and sent publicly from Send; a name.opaque.eth claimed
-// by the wallet, resolved by ENS (through anon-rpc), paid by name and released; then
+// by the wallet (turning on post-quantum stealth payments in the same signature),
+// resolved by ENS (through anon-rpc), paid by name at a one-time address only the
+// wallet finds, swept into its notes, and released; then
 // every Opaque server refused, and a note leaving its pool anyway (announce, wait the
 // pool's delay, withdraw) through anon-rpc and a public bundler;
 // then opaque.eth claimed from the page with the stack's claim code, pointed at the
@@ -29,6 +31,7 @@ import { ARC_READY, createWallet, unlockIfAsked } from './wallet-page.ts';
 import { commitmentOf, masterKey, REGISTRY_ABI, CONTROLLER_ABI, signExecute, signRotation } from '../ethereum/ens.ts';
 import { accountKeys, stream } from '../../frontend/src/lib/wallet-keys.ts';
 import { dnsEncode, ETHEREUM_COIN, resolveName } from '../../frontend/src/ethereum/ens-name.ts';
+import { ANNOUNCEMENT, ANNOUNCER, CIPHERTEXT_BYTES, META_ADDRESS_BYTES, META_REGISTRY, META_REGISTRY_ABI, SCHEME_ID } from '../chain/stealth.ts';
 
 const SITE = process.env['SITE'] ?? 'http://localhost:5174';
 const d = JSON.parse(readFileSync(new URL('../../deployments/eth-sepolia.json', import.meta.url), 'utf8'));
@@ -134,7 +137,8 @@ try {
   await page.fill('#recipient', recipient);
   await page.fill('#send-amount', '3');
   await page.click('#arm');
-  await until('the pool to pay the recipient', async () => (await tusdc(recipient)) === 3_000_000n, 600_000);
+  await until('the pool to pay the recipient', async () => (await tusdc(recipient)) === 3_000_000n, 600_000)
+    .catch(async (e: Error) => { throw new Error(`${e.message}; it holds ${await tusdc(recipient)}; send says: ${await page.textContent('#send-status')}; activity: ${(await page.textContent('#view-activity').catch(() => ''))?.slice(0, 400)}`); });
   check(true, `paid privately: ${recipient} holds exactly 3 tUSDC, from the pool`);
 
   // ETH, public, from the same account: Home lists it, Send picks it, the account's PQ key signs the transfer.
@@ -163,6 +167,9 @@ try {
   await page.click('#sub-claim');
   await page.waitForFunction(() => /is yours|^Not done/.test(document.getElementById('sub-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
   check((await page.textContent('#sub-status'))?.includes('is yours'), `claimed from the page: ${await page.textContent('#sub-status')}`);
+  check((await page.textContent('#sub-status'))?.includes('one-time addresses'), 'the claim turned on receiving privately, under the same signature');
+  await until('the registry to hold the wallet\'s stealth key', async () => ((await pub.readContract({ address: META_REGISTRY, abi: META_REGISTRY_ABI, functionName: 'stealthMetaAddressOf', args: [account, SCHEME_ID] })).length - 2) / 2 === META_ADDRESS_BYTES, 120_000);
+  check(true, `ERC-6538's registry holds the wallet's ML-KEM-768 key (${META_ADDRESS_BYTES} bytes) under the PQ scheme`);
   await until('ENS to resolve the new name', async () => { const r = await resolveName(`${label}.opaque.eth`, ETHEREUM_COIN); return r.address.toLowerCase() === account.toLowerCase() && r.pq; }, 120_000);
   check(true, `ENSv2's UniversalResolver: ${label}.opaque.eth → ${account}, held by a PQ account`);
   const before = await pub.getBlockNumber();
@@ -171,9 +178,31 @@ try {
   await page.fill('#recipient', `${label}.opaque.eth`);
   await page.fill('#send-amount', '2');
   await page.click('#arm');
-  await until(`${label}.opaque.eth to be paid`, async () => (await pub.getLogs({ address: d.tokens.usdc.address, event: parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])[0], args: { to: account }, fromBlock: before })).some((l) => l.args.value === 2_000_000n), 600_000)
-    .catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
-  check(true, `paid ${label}.opaque.eth by name: 2 tUSDC from the pool to the wallet that holds it`);
+  // The name's wallet receives privately: the pool pays a one-time address, announced under the PQ scheme.
+  const TRANSFER = parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])[0];
+  let oneTime: `0x${string}` | undefined;
+  await until(`${label}.opaque.eth to be paid at a one-time address`, async () => {
+    const announced = await pub.getLogs({ address: ANNOUNCER, event: ANNOUNCEMENT, args: { schemeId: SCHEME_ID }, fromBlock: before });
+    for (const a of announced) {
+      const to = a.args.stealthAddress!.toLowerCase() as `0x${string}`;
+      if ((await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { to }, fromBlock: before })).some((l) => l.args.value === 2_000_000n)) oneTime = to;
+    }
+    return oneTime !== undefined;
+  }, 600_000).catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
+  check(oneTime !== account.toLowerCase(), `paid ${label}.opaque.eth by name: 2 tUSDC from the pool to a one-time address, ${oneTime}`);
+  check(!(await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { to: account }, fromBlock: before })).some((l) => l.args.value === 2_000_000n), 'the wallet\'s own address received nothing: the chain does not show who was paid');
+  const announcement = (await pub.getLogs({ address: ANNOUNCER, event: ANNOUNCEMENT, args: { schemeId: SCHEME_ID, stealthAddress: oneTime }, fromBlock: before }))[0]!;
+  check(announcement.args.caller!.toLowerCase() !== account.toLowerCase() && (announcement.args.ephemeralPubKey!.length - 2) / 2 === CIPHERTEXT_BYTES,
+    `announced on ERC-5564's Announcer by the exit, not the wallet, with a ${CIPHERTEXT_BYTES}-byte ML-KEM-768 ciphertext`);
+
+  // The wallet finds it with its ML-KEM key and sweeps it into its notes: gas from the exit, signed by the one-time account's key.
+  await page.click('#tab-home');
+  // The card retries on its own every 30 seconds, so a passing error is not the end.
+  await page.waitForFunction(() => /is now in your notes/.test(document.getElementById('stealth-status')?.textContent ?? ''), undefined, { timeout: 600_000 })
+    .catch(async (e: Error) => { throw new Error(`${e.message}; the card says: ${await page.textContent('#stealth-card')}`); });
+  check((await page.textContent('#stealth-status'))?.includes('is now in your notes'), `found and swept: ${await page.textContent('#stealth-status')}`);
+  await until('the one-time address to be empty', async () => (await tusdc(oneTime!)) === 0n, 120_000);
+  check(((await pub.getCode({ address: oneTime! })) ?? '0x').length > 2, 'the one-time address is now a PQ account its sweep deployed, and holds no tUSDC');
   page.once('dialog', (dialog: any) => void dialog.accept());
   await page.click('#tab-home');
   await page.click('#sub-release');

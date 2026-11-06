@@ -26,6 +26,16 @@ To run the whole site locally: `cd frontend && npm install && npm run preview:si
 - **The wallet does this with every Opaque server unreachable.** Reads and UserOperations go to a public RPC and the public bundler through EF's [anon-rpc](https://ethereum.github.io/anon-rpc/) (the Nox mixnet), signed by the account's own FORS+C key ([`without-opaque.ts`](frontend/src/lib/without-opaque.ts)).
 - **The proof:** [`backend/scripts/e2e-sepolia.ts`](backend/scripts/e2e-sepolia.ts) blocks every Opaque host and still takes a note out of its pool, end to end.
 
+**Also new: P. Who was paid is hidden too, against quantum computers as well.**
+- **Before:** the ring hid who paid, but the pool paid the recipient's own address in public. Anyone could list everything a wallet or a name received.
+- **Now (Sepolia):** post-quantum stealth payments ([`stealth.ts`](backend/chain/stealth.ts)):
+  - a wallet publishes one ML-KEM-768 key in the standard [ERC-6538](https://eips.ethereum.org/EIPS/eip-6538) registry, done in the same signature as claiming `name.opaque.eth`;
+  - a payer encapsulates to it; the shared secret draws the keys of a fresh FORS+C account, which the pool pays, and the ciphertext goes on [ERC-5564](https://eips.ethereum.org/EIPS/eip-5564)'s Announcer;
+  - the payee's wallet opens each announcement with its key and sweeps the payment into its own notes.
+- **Why ML-KEM:** ERC-5564's secp256k1 scheme hides the payee today, but a quantum computer reading the announcements later recomputes every shared secret and links every payment. This scheme's cannot be.
+- **The cost of hash-based keys:** an elliptic-curve stealth key is the payee's own key plus a tweak. FORS+C keys have no such algebra, so the payer also holds the one-time account's keys until the payee sweeps it. The wallet sweeps as soon as the payment lands, and shows which payments are final.
+- **The proof:** the same e2e pays a wallet by name and checks that the pool paid a one-time address, that the wallet's own address received nothing, and that the wallet found the payment and swept it into notes.
+
 **C: what users depend on, and what happens without it.**
 - **What we run:** the site (opaque.credit; also the extension, and buildable from this repo), the relay mesh and its exit, the attester and the settler (Railway), and the test faucet.
 - **If those go away or refuse you:**
@@ -45,12 +55,13 @@ To run the whole site locally: `cd frontend && npm install && npm run preview:si
   - never sees your IP (three hops away);
   - does see which account's state is read.
 - **The attester:** the ring proof, not which of the 8 notes is yours.
-- **The chain:** the payer is hidden among 8 deposits; the recipient and amount are public.
+- **The chain:** the payer is hidden among 8 deposits. The amount is public. The recipient is public too, unless it receives privately (stealth, above): then the chain shows a one-time address and a ciphertext.
 - **Public RPCs and the bundler:** our exit's address, or the mixnet's (anon-rpc), never yours.
 - **ENS lookups** in the wallet go through anon-rpc.
 - **Leaks to know about:**
   - anon-rpc's bootstrap reads its network's specifier contract directly, once;
   - an exit makes that one note public, because its secret is revealed;
+  - our exit posts stealth announcements and gives each one-time account the gas for its sweep, so it sees which one-time addresses exist, never whose they are;
   - the homepage and docs load Google Fonts (the wallet pages load nothing third-party).
 - No analytics, no trackers.
 

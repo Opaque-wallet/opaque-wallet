@@ -383,7 +383,9 @@ export type WalletRpcOperation =
   /** A key rotation the account already signed, submitted and paid for by the exit. */
   | 'ROTATE'
   /** A swap quote from LI.FI, asked by the exit: LI.FI sees the exit, never the wallet. */
-  | 'SWAP_QUOTE';
+  | 'SWAP_QUOTE'
+  /** Stealth payments (backend/chain/stealth.ts): announcements read and posted, and a found account's gas. */
+  | 'STEALTH';
 
 /**
  * XRPL's questions for a pool's attesters, answered at the exit like

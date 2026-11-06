@@ -97,6 +97,8 @@ export interface Deployment {
   readonly services: Readonly<Record<ServiceName, string | null>>;
   /** Swaps at the account's address through LI.FI: its contract here, and the tokens offered. */
   readonly swap: { readonly router: Address | null; readonly tokens: readonly SwapToken[] };
+  /** Post-quantum stealth payments (backend/chain/stealth.ts), where the network has them. */
+  readonly stealth?: { readonly fromBlock: number };
 }
 
 export interface SwapToken { readonly symbol: string; readonly address: Address; readonly decimals: number }

@@ -17,7 +17,9 @@ import {
 import { asAddress, asChainId, spendHash } from '@opaque/protocol-types/codecs.js';
 import { utf8 } from '@opaque/pq-wallet';
 
-import { assertSpendable } from '../../chain/pool.ts';
+import { assertSpendable, setRereadMs } from '../../chain/pool.ts';
+
+setRereadMs(0);
 import type { AttesterIdentity } from '../attest.ts';
 import { attesterCommitment, createAttesterKeys } from '../attester-keys.ts';
 import { issueCredential } from '../credential.ts';
@@ -108,6 +110,16 @@ const turns = (n: number) => new Promise<void>((resolve) => {
 });
 
 // ── F-45: the attester's key ──────────────────────────────────────────────
+
+test('a_deposit_a_lagging_node_has_not_seen_yet_is_asked_again_not_refused', async () => {
+  // Sepolia's public RPC is load-balanced: the payer's own note, deposited a
+  // block ago, reads unknown on a node behind it, then known.
+  let asked = 0;
+  const lagging = { readContract: async ({ functionName }: { functionName: string }) => functionName === 'isNullifierSpent' ? false : ++asked > 2 };
+  const spend = { scope: { pool: '0x00000000000000000000000000000000000000aa' }, nullifier: `0x${'11'.repeat(32)}`, recipient: `0x${'22'.repeat(20)}`, ring: commitments, proof: '0x' };
+  await assertSpendable(lagging as never, spend as never);
+  assert.ok(asked > 2, 'the unknown member was read again');
+});
 
 test('F45_a_spend_the_pool_would_revert_is_refused_before_anything_is_signed', async () => {
   // The PoC: intents for an already-spent note, or a ring of commitments never

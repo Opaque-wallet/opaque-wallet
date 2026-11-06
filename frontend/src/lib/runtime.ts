@@ -68,6 +68,7 @@ import { createWorkerProver } from './prover.ts';
 import { createPaymentApplication, type AdapterPorts } from './protocol/index.ts';
 import { localNoteStorage } from './note-storage.ts';
 import { scoped } from './storage-name.ts';
+import { createStealth, type Stealth } from './stealth.ts';
 
 export interface StackConfig {
   /** From the pinned root to the directory in force. Older stacks sent only signedDirectory. */
@@ -141,6 +142,10 @@ export interface WalletRuntime {
   execute(address: `0x${string}`, calls: readonly { readonly to: `0x${string}`; readonly data: `0x${string}`; readonly value?: bigint }[]): Promise<TxHash>;
   /** The account's ETH, where gas is ETH (Sepolia). */
   ethBalance(address: `0x${string}`): Promise<bigint>;
+  /** Post-quantum stealth payments (lib/stealth.ts), where the network has them, for a phrase's account. */
+  readonly stealth?: Stealth;
+  /** Notes made as a deposit makes them, paid for by `depositMany` instead of this account: a stealth sweep. */
+  depositFrom(depositMany: DepositMany, parts: readonly { readonly scope: PoolScope; readonly count: number }[]): Promise<unknown>;
   /** The account open: one of the recovery phrase's, or this browser's own from before phrases. */
   readonly account: AccountKeys | 'browser';
   /** Where this account's sent payments are kept. */
@@ -330,7 +335,19 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
     transport: bootstrap.transport,
     executor: {
       // Chunked automatically when the sealed intent is too big for one message.
-      submit: async (intent): Promise<IntentRef> => bootstrap.transport.submitIntent(intent, await bootstrap.pathFor()),
+      // A relay that drops the ~1 MB upload is tried again, on a fresh path, with
+      // the SAME sealed intent: its idempotency key and spend hash let the
+      // executor answer with the intent it already has if the first got through.
+      submit: async (intent): Promise<IntentRef> => {
+        for (let attempt = 1; ; attempt++) {
+          try { return await bootstrap.transport.submitIntent(intent, await bootstrap.pathFor()); }
+          catch (error) {
+            const e = error as { code?: string; retryable?: boolean };
+            if (attempt >= 3 || e.code !== 'MESH_UNAVAILABLE' || e.retryable === false) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
+          }
+        }
+      },
       getStatus: async (handle) => (await query<IntentStatus>({ kind: 'INTENT_STATUS', handle })).value,
     },
     pathPolicy: new MarkovPathPolicy(),
@@ -389,6 +406,16 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
     withdraw: (address, to) => opsFor(address).withdraw(to.toLowerCase() as never),
     execute: (address, calls) => opsFor(address).execute(calls.map((c) => ({ to: c.to.toLowerCase() as never, data: c.data, ...(c.value === undefined ? {} : { value: c.value }) }))),
     ethBalance: (address) => ethBalance(walletRpc, address as never),
+    // ponytail: phrase accounts only; this browser's own pre-phrase account has no key to draw it from.
+    ...(account === 'browser' || deployment.stealth === undefined ? {} : {
+      stealth: createStealth({ account, walletRpc, keys, publicClient: browserPool.publicClient as never, storageKey: `${names.notes}:stealth` }),
+    }),
+    async depositFrom(depositMany, parts) {
+      // Notes drawn from the phrase: catch up with any another device made first, so no index is used twice.
+      if (account !== 'browser') await recover(false);
+      const from = { ...pool, depositMany, deposit: async ({ scope, commitment }: { scope: PoolScope; commitment: never }) => depositMany([{ scope, commitments: [commitment] }]) };
+      return createPaymentApplication({ ...ports, pool: from as never }).depositNotes(parts);
+    },
     account,
     sentKey: names.sent,
     async open() {

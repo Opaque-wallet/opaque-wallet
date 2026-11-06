@@ -9,6 +9,16 @@ import type { Address, Bytes32, Hex } from '@opaque/protocol-types';
 import { fromHex, toHex } from '@opaque/protocol-types/codecs.js';
 import { canonical, utf8 } from '@opaque/pq-wallet';
 
+/** Per key. FORS+C is few-time; two of these are held back for rotate and disable. */
+export const ACCOUNT_MAX_USES = 32n;
+
+/**
+ * The first deadline of an account drawn from a recovery phrase (2100-01-01).
+ * It is part of the account's address, so it cannot be the clock's: the
+ * phrase alone must give the address back. The registry only records it.
+ */
+export const PHRASE_ROTATION_DEADLINE = 4_102_444_800n;
+
 /** PQValidator.USER_OPERATION_DOMAIN. */
 export const USER_OPERATION_DOMAIN = 'opaque/v1/pq-account/user-operation';
 

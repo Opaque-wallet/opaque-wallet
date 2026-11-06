@@ -47,7 +47,7 @@ import { userActionPayload, type RegistryPolicy } from '../../packages/pq-wallet
 import type { SignerStore } from '../../packages/pq-wallet/src/signer-state.ts';
 import type { WalletStateStore } from '../../packages/pq-wallet/src/wallet-state.ts';
 
-import { accountSalt, predictAccount, userOperationPayload } from './pq-account.ts';
+import { ACCOUNT_MAX_USES, accountSalt, PHRASE_ROTATION_DEADLINE, predictAccount, userOperationPayload } from './pq-account.ts';
 import { ERC20_ABI } from './pool.ts';
 import { bundlerCall, readOne, readState, relayRotation, STATE_ABI, userOperationCall, type WalletRpcSend } from './wallet-rpc.ts';
 import type { DepositGroup } from './wallet-chain.ts';
@@ -255,15 +255,7 @@ export function createLiveWalletChain(options: LiveWalletChainOptions): WalletCh
 }
 
 const YEAR = 365n * 86_400n;
-/** Per key. FORS+C is few-time; two of these are held back for rotate and disable. */
-export const ACCOUNT_MAX_USES = 32n;
-
-/**
- * The first deadline of an account drawn from a recovery phrase (2100-01-01).
- * It is part of the account's address, so it cannot be the clock's: the
- * phrase alone must give the address back. The registry only records it.
- */
-export const PHRASE_ROTATION_DEADLINE = 4_102_444_800n;
+export { ACCOUNT_MAX_USES, PHRASE_ROTATION_DEADLINE };
 
 export interface LivePqWalletOptions {
   readonly signerStore: SignerStore;

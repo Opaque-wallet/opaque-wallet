@@ -33,6 +33,9 @@ const CHAIN = deployment.network.chainId;
 /** The seed of the account's PQ key at `epoch`. */
 export const forsSeed = (account: AccountKeys, epoch: bigint): Uint8Array => stream(account.key, `arc/${CHAIN}/fors/${epoch}`)(32);
 
+/** The seed of the account's ML-KEM-768 stealth key (backend/chain/stealth.ts): from the phrase, so it comes back with it. */
+export const stealthSeed = (account: AccountKeys): Uint8Array => stream(account.key, `arc/${CHAIN}/stealth/ml-kem-768`)(64);
+
 /** The secret of the account's i-th note in this pool. */
 export const noteSecret = (account: AccountKeys, scope: PoolScope, i: number): Uint8Array =>
   stream(account.key, `arc/${CHAIN}/note/${scope.pool.toLowerCase()}/${i}`)(SECRET_BYTES);

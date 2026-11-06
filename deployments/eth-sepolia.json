@@ -212,6 +212,10 @@
     "resolver": "0x9320d93186255e122214bd22270d168d5d8f676f",
     "names": "0x01f3419d2c8747f6b72032caf21a02fd0db44a28"
   },
+  "stealth": {
+    "$comment": "Post-quantum stealth payments (backend/chain/stealth.ts): ML-KEM-768 meta-addresses in ERC-6538's registry, announcements on ERC-5564's Announcer, both the standard deployments. fromBlock: where a wallet starts looking for announcements.",
+    "fromBlock": 12075232
+  },
   "retiredPools": [
     {
       "address": "0xac3944e5f40eeae02a216008dfc4939827b75fd9",

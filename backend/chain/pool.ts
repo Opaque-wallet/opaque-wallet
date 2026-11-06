@@ -369,16 +369,26 @@ export function createPoolClient(options: PoolClientOptions): OpaquePoolClient {
  * land still costs the attester's few-time key a use. Throws a final refusal.
  * One read at a time: Arc refuses bursts.
  */
+const UNKNOWN_REREADS = 5;
+let REREAD_MS = 2_000;
+/** Tests only: no real waits. */
+export const setRereadMs = (ms: number): void => { REREAD_MS = ms; };
 export async function assertSpendable(publicClient: Pick<PublicClient, 'readContract'>, spend: PrivateSpend): Promise<void> {
   // The pool's first check, and one a credential for 0x0 got straight past (F-68).
   if (/^0x0{40}$/i.test(String(spend.recipient))) {
     throw new ProtocolFailure('PROOF_REJECTED', 'the recipient is the zero address, which the pool never pays');
   }
   const pool = getAddress(spend.scope.pool);
+  const known = (member: `0x${string}`) => publicClient.readContract({ address: pool, abi: POOL_ABI, functionName: 'isCommitmentKnown', args: [member] });
   for (const member of new Set(ringOf(spend))) {
-    if (!(await publicClient.readContract({ address: pool, abi: POOL_ABI, functionName: 'isCommitmentKnown', args: [member] }))) {
-      throw new ProtocolFailure('PROOF_REJECTED', 'a ring member is not a deposit in this pool');
+    // A load-balanced RPC's lagging node has not seen a deposit made seconds ago
+    // (the payer's own note, typically): ask again before refusing for good.
+    let found = await known(member);
+    for (let i = 0; !found && i < UNKNOWN_REREADS; i++) {
+      await new Promise((resolve) => setTimeout(resolve, REREAD_MS));
+      found = await known(member);
     }
+    if (!found) throw new ProtocolFailure('PROOF_REJECTED', 'a ring member is not a deposit in this pool');
   }
   if (await publicClient.readContract({ address: pool, abi: POOL_ABI, functionName: 'isNullifierSpent', args: [spend.nullifier as `0x${string}`] })) {
     throw new ProtocolFailure('NULLIFIER_SPENT', 'this note is already spent');
@@ -397,7 +407,9 @@ export const poolSubmitter = (client: PrivatePoolContract) => ({
     // (the RPC, say) is worth another try.
     const reverted = error instanceof BaseError ? error.walk((e) => e instanceof ContractFunctionRevertedError) : null;
     if (reverted instanceof ContractFunctionRevertedError) {
-      throw new ProtocolFailure('SETTLEMENT_REVERTED', `the pool refuses this spend (${reverted.reason ?? reverted.data?.errorName ?? 'reverted'})`, false);
+      const why = reverted.reason ?? reverted.data?.errorName ?? 'reverted';
+      // UnknownCommitment from a node behind the deposit: another try sees it.
+      throw new ProtocolFailure('SETTLEMENT_REVERTED', `the pool refuses this spend (${why})`, why === 'UnknownCommitment');
     }
     throw error;
   }),

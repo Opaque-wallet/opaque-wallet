@@ -697,3 +697,7 @@ dialog.terms:not([open]) { display: none; }
 .exit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); }
 .exit-row span { display: grid; gap: 2px; min-width: 0; }
 .exit-row small { color: var(--muted); }
+#stealth-list { display: grid; gap: 8px; }
+#stealth-list:empty { display: none; }
+.stealth-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); }
+.stealth-row span { color: var(--muted); text-align: right; min-width: 0; }

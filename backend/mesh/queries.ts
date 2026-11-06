@@ -54,7 +54,7 @@ const ANSWERED = new Set<MeshQuery['kind']>([
   'BACKUP',
   'CREDENTIAL',
 ]);
-const WALLET_OPERATIONS = new Set<WalletRpcOperation>(['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE', 'SWAP_QUOTE']);
+const WALLET_OPERATIONS = new Set<WalletRpcOperation>(['STATE', 'ESTIMATE', 'SUBMIT_USER_OPERATION', 'USER_OPERATION_RECEIPT', 'ROTATE', 'SWAP_QUOTE', 'STEALTH']);
 const XRPL_OPERATIONS = new Set<XrplOperation>(['REGISTER_TAG', 'TAG_STATUS', 'NULLIFIER_SPENT', 'ONRAMP_URL', 'FAUCET', 'READ', 'SUBMIT']);
 export const BACKUP_OPERATIONS = new Set<BackupOperation>(['GET', 'PUT', 'DELETE']);
 
