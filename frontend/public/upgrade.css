@@ -603,3 +603,112 @@ section[id] { scroll-margin-top: calc(var(--nav-h) + 64px); }
 .badge { margin-left: 6px; padding: 3px 7px; border-radius: 6px; background: var(--orange); color: var(--ink); font: 700 10px/1 var(--mark); letter-spacing: 0.1em; text-transform: uppercase; vertical-align: 2px; }
 .menu__link .badge { color: var(--ink); }
 @media (max-width: 420px) { .nav__bar { gap: 4px; } .nav__cta { padding: 0 14px; } }
+
+/* ethglobal-mumbai.html: the landing page's "Go private." banner and its two cards (site/style.css
+   .final and .duo). .final is taken on this page, so the banner is .go here. */
+.btn--dark { background: var(--ink); color: var(--cream); }
+.btn--dark:hover { background: #221b24; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.can-reveal [data-reveal] { opacity: 0; transform: translateY(32px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); transition-delay: calc(var(--d, 0) * 110ms); }
+.can-reveal [data-reveal].is-in { opacity: 1; transform: none; }
+
+/* At the top of the page, so the panel fills the first screen under the nav. */
+.go { padding: 8px clamp(12px, 2vw, 32px) clamp(24px, 4vw, 64px); }
+.go__panel {
+  --t: 0;
+  position: relative; overflow: hidden; isolation: isolate;
+  min-height: min(calc(100svh - var(--nav-h) - 16px), 940px);
+  display: grid; place-items: center; align-content: center; text-align: center;
+  padding: 80px var(--gutter) 96px;
+  border: 1px solid rgba(255, 122, 24, 0.2); border-radius: 36px;
+  background: radial-gradient(80% 60% at 50% 115%, rgba(255, 122, 24, 0.42), transparent 70%), #0f0b0d;
+}
+.go__ring { width: min(100%, 560px); height: clamp(180px, 26vh, 300px); pointer-events: none; }
+.go__copy { position: relative; z-index: 1; display: grid; gap: 32px; justify-items: center; }
+.go__title { font-size: clamp(64px, 10vw, 184px); }
+.fine { margin: 0; color: var(--faint); font: 700 12px/1.4 var(--mark); letter-spacing: 0.14em; text-transform: uppercase; text-wrap: balance; }
+.go__note, .go__phone { position: absolute; z-index: 0; pointer-events: none; will-change: transform; }
+.go__note {
+  left: 3%; top: 26%;
+  width: clamp(240px, 22vw, 340px); aspect-ratio: 1.586;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 22px 24px;
+  border-radius: 22px; text-align: left; color: var(--ink);
+  background: linear-gradient(135deg, #ffb46e, var(--orange) 45%, #b84a00);
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: translateY(calc(var(--t) * -90px)) rotate(calc(-24deg + var(--t) * 10deg));
+}
+.go__note-top, .go__note-foot { display: flex; justify-content: space-between; align-items: center; }
+.go__note-top img { display: block; width: auto; height: 18px; filter: brightness(0); }
+.go__note em { font: 700 10px/1 var(--mark); font-style: normal; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }
+.go__note-ring { align-self: center; width: 64px; }
+.go__note-ring svg { display: block; width: 100%; animation: spin 20s linear infinite; }
+.go__note-foot b { font: 700 26px/1 var(--mark); }
+.go__phone { right: 3%; bottom: -18%; transform: translateY(calc(var(--t) * -110px)) rotate(calc(14deg - var(--t) * 8deg)); }
+.go__phone .phone { --pw: clamp(220px, 19vw, 280px); }
+
+/* The wallet's home screen, from the landing page's phone. */
+.phone {
+  position: relative; flex: none;
+  width: var(--pw); aspect-ratio: 9 / 19.2;
+  padding: calc(var(--pw) * 0.028);
+  border: 2px solid #2c2730; border-radius: calc(var(--pw) * 0.14);
+  background: rgb(22 19 24); box-shadow: 0 40px 90px rgb(0 0 0 / 0.55);
+  font-size: calc(var(--pw) / 23); line-height: 1.35; text-align: left; user-select: none;
+}
+.phone__screen { position: relative; height: 100%; overflow: hidden; border-radius: calc(var(--pw) * 0.115); background: #0b090c; }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; background: #0b090c; }
+.screen__status, .screen__tabs { position: relative; z-index: 1; background: #0b090c; }
+.screen__status { display: flex; justify-content: space-between; align-items: center; padding: 1.1em 1.9em 0.5em; font-size: 0.8em; }
+.screen__status b { font-weight: 600; }
+.screen__bars { display: flex; align-items: flex-end; gap: 0.2em; }
+.screen__bars i { width: 0.26em; border-radius: 1px; background: var(--cream); }
+.screen__bars i:nth-child(1) { height: 0.4em; } .screen__bars i:nth-child(2) { height: 0.6em; } .screen__bars i:nth-child(3) { height: 0.8em; } .screen__bars i:nth-child(4) { height: 1em; }
+.screen__body { flex: 1; min-height: 0; padding: 0.6em 1.2em 0; }
+.screen b { font-weight: 600; }
+.screen small { color: var(--muted); font-size: 0.75em; }
+.screen em { font-style: normal; }
+.screen__account { display: flex; align-items: center; gap: 0.6em; }
+.screen__account > span:nth-child(2), .screen__card > span, .screen__list li > span { display: grid; line-height: 1.3; }
+.screen__account em { margin-left: auto; color: var(--muted); }
+.screen__mark { display: grid; flex: none; width: 2.3em; height: 2.3em; padding: 0.3em; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 0.2em rgba(255, 122, 24, 0.12); }
+.screen__mark svg { width: 100%; height: 100%; animation: spin 24s linear infinite; }
+.screen__eyebrow { margin: 1.5em 0 0; color: var(--muted); font: 700 0.72em/1 var(--mark); letter-spacing: 0.12em; text-transform: uppercase; }
+.screen__balance { margin: 0.25em 0 0; font: 600 2.6em/1 var(--display); letter-spacing: -0.03em; }
+.screen__balance small { font-size: 0.42em; letter-spacing: 0; }
+.screen__hint { margin: 0.5em 0 0; color: var(--soft); font-size: 0.8em; }
+.screen__actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.45em; margin-top: 1.3em; }
+.screen__actions span { display: grid; justify-items: center; gap: 0.25em; padding: 0.75em 0 0.65em; border-radius: 0.8em; background: #18141a; font-size: 0.76em; }
+.screen__actions i { color: var(--orange); font-size: 1.35em; font-style: normal; }
+.screen__card { display: flex; align-items: center; margin-top: 0.9em; padding: 0.85em 1em; border-radius: 0.9em; background: #18141a; }
+.screen__card em { margin-left: auto; padding: 0.45em 0.9em; border-radius: 0.6em; background: #272028; font-size: 0.8em; }
+.screen__head { margin: 1.3em 0 0.3em; font-weight: 600; }
+.screen__head em { color: var(--muted); }
+.screen__list { margin: 0; padding: 0; list-style: none; }
+.screen__list li { display: flex; align-items: center; gap: 0.75em; padding: 0.55em 0; }
+.screen__list li > span:last-child { margin-left: auto; text-align: right; }
+.screen__list b { font-weight: 500; font-size: 0.95em; }
+.coin { display: grid; place-items: center; flex: none; width: 2.4em; height: 2.4em; border-radius: 50%; background: var(--orange); color: var(--ink); font: 700 0.9em/1 var(--mark); font-style: normal; }
+.coin--dark { background: #241d26; color: var(--soft); }
+.screen__tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end; padding: 0.7em 0.4em 1.5em; border-top: 1px solid rgba(244, 239, 233, 0.06); color: var(--muted); font-size: 0.66em; }
+.screen__tabs span { display: grid; justify-items: center; gap: 0.2em; }
+.screen__tabs i { font-size: 1.55em; font-style: normal; }
+.screen__tabs .is-on { color: var(--cream); }
+.screen__fab { align-self: center; justify-self: center; display: grid; width: 4.6em; height: 4.6em; margin-top: -2.2em; padding: 0.7em; border-radius: 50%; background: var(--orange); box-shadow: 0 0.8em 1.6em rgba(255, 122, 24, 0.35); }
+.screen__fab svg { width: 100%; height: 100%; animation: spin 14s linear infinite; }
+
+/* Two cards to start from, before the footer. */
+.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 0 clamp(12px, 2vw, 32px) clamp(48px, 6vw, 96px); }
+.duo__card { position: relative; overflow: hidden; isolation: isolate; display: grid; align-content: start; gap: 24px; min-height: 520px; padding: clamp(32px, 4vw, 56px); border-radius: 32px; }
+.duo__card h2 { max-width: 8.5em; font-size: clamp(40px, 4.6vw, 76px); }
+.duo__card p { max-width: 26rem; margin: 0; font-size: 18px; }
+.duo__card .btn { justify-self: start; margin-top: 8px; }
+.duo__card--orange { background: var(--orange); color: var(--ink); }
+.duo__card--orange p { color: rgba(7, 6, 8, 0.75); }
+.duo__card--dark { border: 1px solid var(--line); background: var(--surface); }
+.duo__card--dark p { color: var(--muted); }
+.duo__art { position: absolute; z-index: -1; right: -14%; bottom: -26%; width: 60%; aspect-ratio: 1; pointer-events: none; animation: spin 48s linear infinite; }
+.duo__art svg { display: block; width: 100%; height: 100%; }
+.duo__card--dark .duo__art { opacity: 0.45; animation-direction: reverse; }
+@media (max-width: 1180px) { .go__note, .go__phone { display: none; } }
+@media (max-width: 960px) { .duo { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .duo__card { min-height: 460px; } }

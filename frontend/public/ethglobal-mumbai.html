@@ -15,6 +15,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&family=Quicksand:wght@600;700&display=swap">
 <link rel="stylesheet" href="/upgrade.css">
+<!-- Before the first paint, so [data-reveal] blocks start hidden only when the script will show them. -->
+<script>document.documentElement.classList.add('can-reveal');</script>
 </head>
 <body>
 <header class="nav" id="nav">
@@ -86,6 +88,53 @@
 </header>
 
 <main>
+  <section class="go" aria-labelledby="go-title">
+    <div class="go__panel">
+      <div class="go__note" aria-hidden="true">
+        <span class="go__note-top"><img src="/logo.png" alt="" width="942" height="200"><em>Private note</em></span>
+        <span class="go__note-ring" data-dots="#070608"></span>
+        <span class="go__note-foot"><b>1 ETH</b><em>1 of 8 · spends once</em></span>
+      </div>
+      <div class="go__phone" aria-hidden="true">
+        <div class="phone">
+          <div class="phone__screen">
+            <div class="screen">
+              <div class="screen__status"><b>9:41</b><span class="screen__bars"><i></i><i></i><i></i><i></i></span></div>
+              <div class="screen__body">
+                <div class="screen__account"><span class="screen__mark" data-dots="#070608"></span><span><b>Account 1 ⌄</b><small>Notes in this browser</small></span><em>☰</em></div>
+                <p class="screen__eyebrow">Private balance</p>
+                <p class="screen__balance">2.84 <small>ETH</small></p>
+                <p class="screen__hint">Hidden on chain · 17 notes</p>
+                <div class="screen__actions"><span><i>↗</i>Send</span><span><i>↙</i>Deposit</span><span><i>◫</i>Apps</span><span><i>◷</i>Activity</span></div>
+                <div class="screen__card"><span><small>Apps on their own accounts</small><b>3 connected</b></span><em>Open</em></div>
+                <p class="screen__head">Your private notes <em>›</em></p>
+                <ul class="screen__list">
+                  <li><i class="coin">E</i><span><b>ETH</b><small>14 notes</small></span><span><b>2.84</b><small>2×1 · 8×0.1 · 4×0.01</small></span></li>
+                  <li><i class="coin coin--dark">U</i><span><b>USDC</b><small>3 notes</small></span><span><b>120.00</b><small>1×100 · 2×10</small></span></li>
+                </ul>
+                <p class="screen__head">Apps <em>›</em></p>
+                <ul class="screen__list">
+                  <li><i class="coin coin--dark">D</i><span><b>DEX</b><small>Its own account</small></span><span><b>0x4f…9c1e</b><small>funded by the pool</small></span></li>
+                  <li><i class="coin coin--dark">N</i><span><b>NFT market</b><small>Its own account</small></span><span><b>0x2d…e51b</b><small>funded by the pool</small></span></li>
+                  <li><i class="coin coin--dark">G</i><span><b>Game</b><small>Its own account</small></span><span><b>0xb8…7c4a</b><small>funded by the pool</small></span></li>
+                </ul>
+              </div>
+              <div class="screen__tabs"><span class="is-on"><i>⌂</i>Overview</span><span><i>↗</i>Send</span><span class="screen__fab" data-dots="#070608"></span><span><i>◷</i>Activity</span><span><i>◫</i>Apps</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <canvas class="go__ring" aria-hidden="true"></canvas>
+      <div class="go__copy" data-reveal>
+        <h2 class="display go__title" id="go-title">Go<br> private.</h2>
+        <div class="actions">
+          <a class="btn btn--primary" href="/sepolia/app">Open the wallet</a>
+        </div>
+        <p class="fine">Testnet today. Test tokens have no value.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="hero wrap" aria-labelledby="hero-title">
     <div class="hero__copy">
       <a class="pill rise" style="--d: 0" href="#now"><b>ETHGlobal Mumbai</b> What Opaque built, live today</a>
@@ -554,6 +603,21 @@
     <p class="lede">Make a wallet on Sepolia: free test funds, a name under opaque.eth, private payments in and out, a swap in the post-quantum pool. Every signature it makes is post-quantum, and one switch in Privacy sends every read through the mixnet.</p>
     <div class="actions"><a class="btn btn--primary" href="/sepolia/app">Open the wallet</a><a class="btn btn--ghost" href="/testnet/devnet">Try the devnet</a></div>
   </section>
+
+  <section class="duo" aria-label="Get started">
+    <article class="duo__card duo__card--orange" data-reveal>
+      <span class="duo__art" data-dots="#070608"></span>
+      <h2 class="display">Try it on Sepolia.</h2>
+      <p>Take free test tokens on Sepolia and send some privately. They have no value, so nothing is at stake.</p>
+      <a class="btn btn--dark" href="/sepolia/app">Get test tokens</a>
+    </article>
+    <article class="duo__card duo__card--dark" data-reveal style="--d: 1">
+      <span class="duo__art" data-dots="#ff7a18"></span>
+      <h2 class="display">New to private payments?</h2>
+      <p>Follow one payment from deposit to app in five short scenes, told with eight dots.</p>
+      <a class="btn btn--primary" href="/#story">Follow a payment</a>
+    </article>
+  </section>
 </main>
 <footer class="wrap"><span>Opaque · Apache-2.0</span><span><a href="/docs">Docs</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>
 
@@ -859,6 +923,90 @@ function stage(canvas, draw) {
     requestAnimationFrame(tick);
   }), { threshold: 0.6 });
   document.querySelectorAll('[data-to]').forEach((n) => count.observe(n));
+})();
+</script>
+<script>
+// ── the "Go private." banner and the two cards: the landing page's motion, from site/main.js ──
+(() => {
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  // Small rings of eight: the note, the phone's mark and button, the cards, the updates.
+  const eight = (fill) => `<svg viewBox="0 0 40 40" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => {
+    const a = (i * Math.PI) / 4 - Math.PI / 2;
+    return `<circle cx="${(20 + 13 * Math.cos(a)).toFixed(2)}" cy="${(20 + 13 * Math.sin(a)).toFixed(2)}" r="3.6" fill="${fill}"/>`;
+  }).join('')}</svg>`;
+  for (const el of document.querySelectorAll('[data-dots]')) el.innerHTML = eight(el.dataset.dots);
+
+  // The ring above the headline: site/ring.js's idle scene. Eight notes turn on a tilted circle,
+  // a pulse chasing round, and lean toward the pointer anywhere over the banner.
+  const banner = document.querySelector('.go'), canvas = banner.querySelector('.go__ring'), ctx = canvas.getContext('2d');
+  const TAU = Math.PI * 2, SIZE = 0.34, DOT = 0.12;
+  const notes = Array.from({ length: 8 }, () => ({ x: 0, y: 0, s: 1, a: 1, g: 1, z: 0 }));
+  let W = 0, H = 0, rot = 0, last = 0, frame = 0, running = false, pointer = null;
+  // k: how far each note moves toward where it belongs this frame (1 jumps there).
+  function render(now, k) {
+    const R = Math.min(W, H) * SIZE, wob = reduced ? 0 : 1;
+    let cx = W / 2, cy = H / 2, ax = 0.2 * wob * Math.sin(now * 0.5), ay = 0.16 * wob * Math.cos(now * 0.37);
+    if (pointer) {
+      const nx = clamp((pointer.x - cx) / (W / 2), -1, 1), ny = clamp((pointer.y - cy) / (H / 2), -1, 1);
+      ax = -ny * 0.55; ay = nx * 0.55; cx += nx * R * 0.12; cy += ny * R * 0.12;
+    }
+    notes.forEach((d, i) => {
+      // A circle tilted in 3D, in perspective: nearer notes larger and brighter.
+      const ang = rot + (i * TAU) / 8 - TAU / 4, px = R * Math.cos(ang), py = R * Math.sin(ang);
+      const y1 = py * Math.cos(ax), z1 = py * Math.sin(ax);
+      const x2 = px * Math.cos(ay) + z1 * Math.sin(ay), z = -px * Math.sin(ay) + z1 * Math.cos(ay), p = 800 / (800 + z);
+      const beat = reduced ? 0 : 0.22 * Math.max(0, Math.sin(now * 2 - (i * TAU) / 8)) ** 2;
+      const t = { x: cx + x2 * p, y: cy + y1 * p, s: p * (1 + beat), a: clamp(0.62 + 0.38 * p, 0, 1), g: 1 + beat * 2.5, z };
+      if (pointer) {
+        const near = Math.exp(-((Math.hypot(t.x - pointer.x, t.y - pointer.y) / (R * 0.6)) ** 2));
+        t.s *= 1 + 0.6 * near; t.g += 1.4 * near; t.a = clamp(t.a + 0.3 * near, 0, 1);
+      }
+      for (const key in t) d[key] += (t[key] - d[key]) * k;
+    });
+    ctx.clearRect(0, 0, W, H);
+    const size = R * DOT;
+    ctx.fillStyle = ctx.shadowColor = '#ff7a18';
+    for (const d of [...notes].sort((a, b) => b.z - a.z)) {
+      ctx.globalAlpha = d.a; ctx.shadowBlur = size * 1.2 * d.g;
+      ctx.beginPath(); ctx.arc(d.x, d.y, (size / 2) * d.s, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  new ResizeObserver(() => {
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    W = r.width; H = r.height; canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!running) render(performance.now() / 1000, 1);
+  }).observe(canvas);
+  const loop = (ms) => {
+    const now = ms / 1000, dt = last ? Math.min(0.05, now - last) : 0;
+    last = now;
+    if (!reduced) rot += 0.24 * dt;
+    render(now, 1 - Math.exp(-9 * dt));
+    frame = requestAnimationFrame(loop);
+  };
+  // It runs only while on screen.
+  new IntersectionObserver(([e]) => {
+    if (e.isIntersecting && !running) { running = true; last = 0; frame = requestAnimationFrame(loop); }
+    else if (!e.isIntersecting) { running = false; cancelAnimationFrame(frame); }
+  }).observe(canvas);
+  banner.addEventListener('pointermove', (e) => { const r = canvas.getBoundingClientRect(); pointer = { x: e.clientX - r.left, y: e.clientY - r.top }; });
+  banner.addEventListener('pointerleave', () => { pointer = null; });
+
+  // The note and the phone drift against the scroll.
+  const panel = banner.querySelector('.go__panel');
+  const drift = () => {
+    const r = panel.getBoundingClientRect();
+    panel.style.setProperty('--t', clamp((innerHeight / 2 - (r.top + r.height / 2)) / innerHeight, -1, 1).toFixed(3));
+  };
+  if (!reduced) { addEventListener('scroll', drift, { passive: true }); addEventListener('resize', drift); drift(); }
+
+  // The headline and the cards rise in once they're on screen.
+  const reveal = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (e.isIntersecting) { e.target.classList.add('is-in'); reveal.unobserve(e.target); }
+  }), { threshold: 0.2 });
+  document.querySelectorAll('[data-reveal]').forEach((el) => reveal.observe(el));
 })();
 </script>
 <script>
