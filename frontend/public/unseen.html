@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Opaque Unseen</title>
+<meta name="description" content="Opaque's next major upgrade: your wallet reads the chain through Ethereum Foundation's anon-rpc and the Nox mixnet, so no RPC provider learns who is asking. Not even us.">
+<meta name="theme-color" content="#070608">
+<meta property="og:title" content="Opaque Unseen: nobody sees who's asking">
+<meta property="og:description" content="Your wallet's reads and transactions, through EF's anon-rpc and the Nox mixnet.">
+<meta property="og:image" content="https://www.opaque.credit/unseen-og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&family=Quicksand:wght@600;700&display=swap">
+<link rel="stylesheet" href="/upgrade.css">
+</head>
+<body>
+<header class="top wrap">
+  <a class="brand" href="/" aria-label="opaque, home"><img src="/logo.png" alt="opaque" width="942" height="200"><span>Unseen</span></a>
+  <a class="btn btn--primary" href="/sepolia/app">Open the wallet</a>
+</header>
+
+<main>
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <div class="hero__copy">
+      <a class="pill rise" style="--d: 0" href="#how"><b>Next major upgrade</b> Opaque Unseen, with EF's anon-rpc</a>
+      <h1 class="display rise" id="hero-title" style="--d: 1">Nobody sees who's <em>asking.</em></h1>
+      <p class="lede rise" style="--d: 3">Every wallet reads the chain, and every read hands an RPC provider your IP beside your address. Opaque Unseen sends your wallet's reads and transactions through the Ethereum Foundation's anon-rpc and the Nox mixnet. The chain answers. Nobody learns who asked. Not even us.</p>
+      <div class="actions rise" style="--d: 4">
+        <a class="btn btn--primary" href="/sepolia/app">Turn it on</a>
+        <a class="btn btn--ghost" href="#how">How it works</a>
+      </div>
+    </div>
+    <div class="hero__stage rise" style="--d: 2" role="img" aria-label="Requests from many wallets, one of them yours, wrapped in layers, shuffled at each of three mixnet hops, and arriving at the RPC from exit nodes only.">
+      <canvas id="mix"></canvas>
+      <p class="stage__note">Your request is the orange one. By the exit, it looks like everyone else's.</p>
+      <div class="stage__log" aria-hidden="true"><p>What the RPC sees</p><ol id="log"></ol></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="seen" aria-labelledby="seen-title">
+    <div class="head">
+      <p class="eyebrow">One balance check, three ways</p>
+      <h2 class="display" id="seen-title">What your RPC sees.</h2>
+    </div>
+    <div class="views">
+      <article class="view">
+        <span class="tag">Any wallet</span>
+        <h3>Straight to the provider</h3>
+        <svg viewBox="0 0 300 70" aria-hidden="true">
+          <path class="flow" d="M40 35 H260"/>
+          <circle class="node" cx="28" cy="35" r="16"/><text x="28" y="66" text-anchor="middle">you</text>
+          <rect class="node" x="246" y="19" width="40" height="32" rx="8"/><text x="266" y="66" text-anchor="middle">RPC</text>
+        </svg>
+        <p class="seen"><b>203.0.113.7</b> eth_getBalance(<b>0x7a3f…c21e</b>)</p>
+        <p class="verdict">Your address, next to your IP. Every read, every day.</p>
+      </article>
+      <article class="view">
+        <span class="tag">Opaque until now</span>
+        <h3>Through Opaque's relays</h3>
+        <svg viewBox="0 0 300 70" aria-hidden="true">
+          <path class="flow" d="M40 35 H260"/>
+          <circle class="node" cx="28" cy="35" r="16"/><text x="28" y="66" text-anchor="middle">you</text>
+          <circle class="node" cx="94" cy="35" r="9"/><circle class="node" cx="140" cy="35" r="9"/><circle class="node" cx="186" cy="35" r="9"/>
+          <text x="140" y="66" text-anchor="middle">our relays and exit</text>
+          <rect class="node" x="246" y="19" width="40" height="32" rx="8"/><text x="266" y="66" text-anchor="middle">RPC</text>
+        </svg>
+        <p class="seen"><i>opaque-exit</i> eth_getBalance(<b>0x7a3f…c21e</b>)</p>
+        <p class="verdict">Your IP is hidden, but every relay is ours: one operator to trust.</p>
+      </article>
+      <article class="view view--now">
+        <span class="tag">Opaque Unseen</span>
+        <h3>Through EF's anon-rpc</h3>
+        <svg viewBox="0 0 300 70" aria-hidden="true">
+          <path class="flow" d="M40 35 H260"/>
+          <circle class="node" cx="28" cy="35" r="16"/><text x="28" y="66" text-anchor="middle">you</text>
+          <rect class="node" x="62" y="25" width="26" height="20" rx="5"/>
+          <circle class="node" cx="124" cy="35" r="9"/><circle class="node" cx="168" cy="35" r="9"/><circle class="node" cx="212" cy="35" r="9"/>
+          <text x="168" y="66" text-anchor="middle">Nox mixnet</text>
+          <rect class="node" x="246" y="19" width="40" height="32" rx="8"/><text x="266" y="66" text-anchor="middle">RPC</text>
+        </svg>
+        <p class="seen"><i>nox-exit</i> eth_getBalance(<b>0x7a3f…c21e</b>)</p>
+        <p class="verdict">A mixnet anyone can run. Nobody in the path knows it was you.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap" id="how" aria-labelledby="how-title">
+    <div class="head">
+      <p class="eyebrow">How a read leaves your browser</p>
+      <h2 class="display" id="how-title">Four steps. None of them trust us.</h2>
+    </div>
+    <div class="steps">
+      <article class="step">
+        <span class="n">01 · PINNED</span>
+        <svg viewBox="0 0 160 100" aria-hidden="true">
+          <rect class="s-raised" x="12" y="14" width="136" height="30" rx="8"/>
+          <text class="s-txt" x="22" y="33">Specifier on Sepolia</text>
+          <text class="s-mono pin-hash" x="14" y="64">keccak256 0x9f2c…e81a</text>
+          <rect class="s-raised" x="12" y="74" width="100" height="16" rx="5"/><text class="s-txt" x="20" y="86">worker bundle</text>
+          <circle class="s-or pin-check" cx="130" cy="82" r="10"/><path d="M125 82l4 4 7-8" fill="none" stroke="#070608" stroke-width="2.4" class="pin-check"/>
+        </svg>
+        <h3>The code is pinned on chain.</h3>
+        <p>The wallet reads the Nox worker's bundle hash from its <code>IWorkerSpecifier</code> contract and runs only bytes that match it. Nobody can quietly swap the code.</p>
+      </article>
+      <article class="step">
+        <span class="n">02 · SANDBOXED</span>
+        <svg viewBox="0 0 160 100" aria-hidden="true">
+          <rect class="s-line box-in" x="8" y="8" width="144" height="84" rx="10"/><text class="s-txt" x="16" y="22">this page: keys, notes</text>
+          <rect class="s-line box-in2" x="40" y="30" width="104" height="54" rx="8" style="stroke: var(--soft)"/><text class="s-txt" x="48" y="44">null-origin iframe</text>
+          <rect class="s-orl box-in3" x="54" y="52" width="84" height="24" rx="6"/><text class="s-txt" x="96" y="68" text-anchor="middle" style="fill: var(--cream)">Web Worker</text>
+          <g class="keys-block"><rect x="16" y="64" width="16" height="12" rx="2.5" class="s-or"/><path d="M19.5 64v-3.5a4.5 4.5 0 0 1 9 0V64" fill="none" stroke="#ff7a18" stroke-width="2"/></g>
+        </svg>
+        <h3>It runs where it can't see you.</h3>
+        <p>A Web Worker inside a sandboxed, null-origin iframe. It can't reach the page, its storage, or your keys. All it gets is the request.</p>
+      </article>
+      <article class="step">
+        <span class="n">03 · THREE HOPS</span>
+        <svg viewBox="0 0 280 100" aria-hidden="true">
+          <path class="s-line" d="M24 50 H258"/>
+          <circle class="s-raised" cx="102" cy="50" r="7"/><circle class="s-raised" cx="180" cy="50" r="7"/><circle class="s-raised" cx="258" cy="50" r="7"/>
+          <g class="hop">
+            <circle class="s-orl peel1" cx="24" cy="50" r="18" style="stroke-opacity: 0.45"/>
+            <circle class="s-orl peel2" cx="24" cy="50" r="13" style="stroke-opacity: 0.7"/>
+            <circle class="s-orl peel3" cx="24" cy="50" r="8"/>
+            <circle class="s-or" cx="24" cy="50" r="4"/>
+          </g>
+          <text class="s-txt" x="102" y="84" text-anchor="middle">entry</text><text class="s-txt" x="180" y="84" text-anchor="middle">mix</text><text class="s-txt" x="258" y="84" text-anchor="middle">exit</text>
+        </svg>
+        <h3>Wrapped in layers, mixed on the way.</h3>
+        <p>Each request becomes Sphinx packets. Each Nox node peels one layer, waits, and passes it on among everyone else's. TLS to the RPC runs inside the worker, so the exit relays bytes it can't read.</p>
+      </article>
+      <article class="step">
+        <span class="n">04 · ANSWERED</span>
+        <svg viewBox="0 0 160 100" aria-hidden="true">
+          <rect class="s-raised" x="104" y="34" width="44" height="32" rx="8"/><text class="s-txt" x="126" y="54" text-anchor="middle">RPC</text>
+          <circle class="s-raised" cx="24" cy="50" r="14"/><text class="s-txt" x="24" y="54" text-anchor="middle">you</text>
+          <path class="s-orl reply" d="M104 50 C80 20, 52 20, 38 46"/>
+          <text class="s-mono" x="14" y="90">0x…  balance, nonce, key</text>
+        </svg>
+        <h3>The chain answers the mixnet.</h3>
+        <p>Balances, your key's state, and your account's operations to the public bundler: all answered, none tied to you. That's about a second a read.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="through-title">
+    <div class="head">
+      <p class="eyebrow">What goes through it</p>
+      <h2 class="display" id="through-title">Names, your account, your way out.</h2>
+    </div>
+    <div class="through">
+      <article class="card"><span class="when">Always</span><h3>ENS names</h3><p>Pay <b>alice.opaque.eth</b>: the lookup on ENSv2's UniversalResolver goes through Nox, so no provider learns who you're about to pay.</p></article>
+      <article class="card"><span class="when">One switch</span><h3>Your whole account</h3><p>Turn on Unseen in Privacy. Balances, key state, nonces and every UserOperation then reach a public RPC and bundler through the mixnet, with nothing of Opaque's in the path.</p></article>
+      <article class="card"><span class="when">If we're gone</span><h3>Your way out</h3><p>If Opaque's servers ever stop or refuse you, your notes still leave their pools, signed by your own post-quantum key, with every call through Nox.</p></article>
+    </div>
+  </section>
+
+  <section class="wrap" aria-label="In numbers">
+    <div class="numbers">
+      <div class="num"><b data-to="0">0</b><span>servers of Opaque's in the path of a read</span></div>
+      <div class="num"><b data-to="3">0</b><span>mixnet hops, each one peeling a layer</span></div>
+      <div class="num"><b><span data-to="1.3">0</span><small> s</small></b><span>a read, once the worker is up (4.5 s the first time)</span></div>
+      <div class="num"><b data-to="1">0</b><span>switch, in the wallet's Privacy view</span></div>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="limits-title">
+    <div class="limits">
+      <div class="credit">
+        <p class="eyebrow">Honest about it</p>
+        <h2 class="display" id="limits-title" style="font-size: clamp(36px, 5vw, 72px)">What it doesn't hide.</h2>
+        <p>Built on the Ethereum Foundation's <a href="https://ethereum.github.io/anon-rpc/" target="_blank" rel="noopener">anon-rpc</a> and the <a href="https://demo.nox.hisoka.io/anon-rpc" target="_blank" rel="noopener">Nox</a> mixnet. Opaque's code is <a href="https://github.com/Opaque-wallet/opaque-wallet" target="_blank" rel="noopener">open source</a> (Apache-2.0). On Sepolia today.</p>
+      </div>
+      <ul>
+        <li><b>One bootstrap read.</b> The wallet reads the worker's hash from its contract once, directly, before anything is anonymized.</li>
+        <li><b>Payments still use Opaque's relays.</b> A private payment needs our attester, so it crosses our three-hop mesh, which hides your IP but is one operator.</li>
+        <li><b>Slower.</b> Mixing is the point: a read takes about a second instead of a blink.</li>
+        <li><b>The chain is still public.</b> anon-rpc hides who asks. Opaque's pools and stealth addresses hide who pays and who is paid.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="final wrap" aria-labelledby="final-title">
+    <h2 class="display" id="final-title">Go<br>unseen.</h2>
+    <p class="lede">Open the Sepolia wallet, go to Privacy, and turn on anon-rpc. The wallet reloads, and every read after that leaves through the mixnet.</p>
+    <div class="actions"><a class="btn btn--primary" href="/sepolia/app">Open the wallet</a><a class="btn btn--ghost" href="/">Opaque home</a></div>
+  </section>
+</main>
+<footer class="wrap"><span>Opaque · Apache-2.0</span><span><a href="/docs">Docs</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>
+
+<script>
+// The hero's mixnet: requests from several wallets, one of them yours (orange), each
+// wrapped in three layers. Each Nox node holds a packet a moment, peels a layer and
+// sends it on to any node of the next column, so the order that reaches the RPC is
+// not the order that left. The RPC's log names exit nodes only.
+(() => {
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canvas = document.getElementById('mix'), ctx = canvas.getContext('2d');
+  const log = document.getElementById('log');
+  const ORANGE = '255, 122, 24', CREAM = '244, 239, 233';
+  const METHODS = ['eth_getBalance', 'eth_call', 'eth_getCode', 'eth_blockNumber', 'eth_estimateUserOperationGas', 'eth_sendUserOperation', 'eth_getLogs'];
+  const COLS = [0.1, 0.32, 0.54, 0.75, 0.93];
+  const LABELS = ['WALLETS', 'ENTRY', 'MIX', 'EXIT', 'RPC'];
+  const counts = [6, 3, 3, 3, 1];
+  let W = 0, H = 0, nodes = [], packets = [], last = 0, spawnAt = 0, flashes = [];
+
+  function layout() {
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    W = r.width; H = r.height;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const top = H * 0.2, bottom = H * 0.86;
+    nodes = COLS.map((x, c) => Array.from({ length: counts[c] }, (_, i) => ({
+      x: x * W, y: counts[c] === 1 ? (top + bottom) / 2 : top + (bottom - top) * (i + 0.5) / counts[c], mine: c === 0 && i === 2,
+    })));
+  }
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  function spawn(now) {
+    const mine = Math.random() < 0.28, from = mine ? nodes[0][2] : pick(nodes[0].filter((n) => !n.mine));
+    packets.push({ mine, at: from, to: pick(nodes[1]), col: 0, t: 0, wait: 0, layers: 3, born: now });
+  }
+  function step(dt, now) {
+    for (const p of packets) {
+      if (p.wait > 0) { p.wait -= dt; continue; }
+      const dist = Math.hypot(p.to.x - p.at.x, p.to.y - p.at.y);
+      p.t += (dt * Math.max(140, W * 0.32)) / dist;
+      if (p.t < 1) continue;
+      p.col++; p.at = p.to; p.t = 0;
+      if (p.col >= 1 && p.col <= 3) { p.layers--; flashes.push({ x: p.at.x, y: p.at.y, life: 1, mine: p.mine }); p.wait = 0.25 + Math.random() * 1.1; }
+      if (p.col === 4) {
+        p.done = true;
+        flashes.push({ x: p.at.x, y: p.at.y, life: 1, mine: false });
+        const exit = nodes[3].indexOf(p.from3) + 1;
+        const li = document.createElement('li');
+        li.innerHTML = `<span>nox-exit-${exit}</span> ${pick(METHODS)}`;
+        log.prepend(li);
+        while (log.children.length > 6) log.lastChild.remove();
+        continue;
+      }
+      if (p.col === 3) p.from3 = p.at;
+      p.to = p.col === 3 ? nodes[4][0] : pick(nodes[p.col + 1]);
+    }
+    packets = packets.filter((p) => !p.done);
+    for (const f of flashes) f.life -= dt * 1.6;
+    flashes = flashes.filter((f) => f.life > 0);
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // Every link between neighbouring columns: any node may pass to any other.
+    ctx.lineWidth = 1;
+    for (let c = 0; c < 4; c++) for (const a of nodes[c]) for (const b of nodes[c + 1]) {
+      ctx.strokeStyle = `rgba(${CREAM}, 0.055)`; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    nodes.forEach((col, c) => col.forEach((n) => {
+      const big = c === 4 ? 22 : c === 0 ? 9 : 12;
+      ctx.fillStyle = '#151117'; ctx.strokeStyle = n.mine ? `rgba(${ORANGE}, 0.9)` : `rgba(${CREAM}, ${c === 4 ? 0.5 : 0.28})`;
+      ctx.lineWidth = n.mine ? 2 : 1.5;
+      ctx.beginPath();
+      if (c === 4) ctx.roundRect(n.x - big, n.y - big * 0.8, big * 2, big * 1.6, 8); else ctx.arc(n.x, n.y, big, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      if (c === 4) { ctx.fillStyle = `rgba(${CREAM}, 0.75)`; ctx.font = '600 11px Poppins, system-ui'; ctx.textAlign = 'center'; ctx.fillText('RPC', n.x, n.y + 4); }
+      if (n.mine) { ctx.fillStyle = `rgba(${ORANGE}, 1)`; ctx.font = '600 11px Poppins, system-ui'; ctx.textAlign = 'right'; ctx.fillText('you', n.x - 15, n.y + 4); }
+    }));
+    ctx.fillStyle = 'rgba(116, 107, 102, 1)'; ctx.font = '700 10.5px Quicksand, system-ui'; ctx.textAlign = 'center';
+    COLS.forEach((x, c) => ctx.fillText(LABELS[c], x * W, H - 18));
+    for (const f of flashes) {
+      ctx.strokeStyle = `rgba(${f.mine ? ORANGE : CREAM}, ${0.5 * f.life})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 14 + (1 - f.life) * 16, 0, Math.PI * 2); ctx.stroke();
+    }
+    for (const p of packets) {
+      const e = p.t < 0.5 ? 2 * p.t * p.t : 1 - (-2 * p.t + 2) ** 2 / 2;
+      const x = p.at.x + (p.to.x - p.at.x) * e, y = p.at.y + (p.to.y - p.at.y) * e;
+      // Its colour fades as its layers go: at the exit, yours looks like anyone's.
+      const tone = p.mine ? (p.col >= 3 ? CREAM : ORANGE) : CREAM;
+      const alpha = p.mine ? 0.95 : 0.6;
+      for (let l = p.layers; l > 0; l--) {
+        ctx.strokeStyle = `rgba(${tone}, ${alpha * (0.25 + 0.2 * (3 - l))})`; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(x, y, 3.5 + l * 3.2, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.fillStyle = `rgba(${tone}, ${alpha})`; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function frame(now) {
+    const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now;
+    if (now > spawnAt) { spawn(now); spawnAt = now + 260 + Math.random() * 380; }
+    step(dt, now); draw();
+    if (running) requestAnimationFrame(frame);
+  }
+  let running = false;
+  layout(); addEventListener('resize', layout);
+  for (let i = 0; i < 4; i++) { const li = document.createElement('li'); li.innerHTML = `<span>nox-exit-${(i % 3) + 1}</span> ${METHODS[(i * 3) % METHODS.length]}`; log.append(li); }
+  if (reduced) {
+    // A still: packets placed along the way, and a log already written.
+    for (let i = 0; i < 14; i++) { spawn(0); const p = packets[i]; p.col = i % 3; p.at = pick(nodes[p.col]); p.to = pick(nodes[p.col + 1]); p.t = Math.random(); p.layers = 3 - p.col; }
+    draw();
+    return;
+  }
+  new IntersectionObserver(([e]) => { if (e.isIntersecting && !running) { running = true; last = 0; requestAnimationFrame(frame); } else if (!e.isIntersecting) running = false; }).observe(canvas);
+})();
+
+// Steps animate as they come into view; the numbers count up once.
+(() => {
+  const seen = new IntersectionObserver((entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('on'); seen.unobserve(e.target); } }), { threshold: 0.3 });
+  document.querySelectorAll('.step').forEach((s) => seen.observe(s));
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const count = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (!e.isIntersecting) return;
+    count.unobserve(e.target);
+    const to = Number(e.target.dataset.to), places = String(e.target.dataset.to).includes('.') ? 1 : 0;
+    if (reduced) { e.target.textContent = to.toFixed(places); return; }
+    const t0 = performance.now();
+    const tick = (now) => { const k = Math.min(1, (now - t0) / 1200); e.target.textContent = (to * (1 - (1 - k) ** 3)).toFixed(places); if (k < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }), { threshold: 0.6 });
+  document.querySelectorAll('[data-to]').forEach((n) => count.observe(n));
+})();
+</script>
+</body>
+</html>

@@ -258,8 +258,8 @@ try {
   page.on('request', watch);
   await page.click('#tab-home');
   await page.click('#tile-privacy');
-  await page.check('#anon-reads');
-  await page.waitForLoadState('load');
+  // One click: the switch saves itself and reloads the wallet.
+  await Promise.all([page.waitForEvent('load'), page.click('#anon-reads')]);
   await unlockIfAsked(page);
   await page.waitForFunction(() => Number(/^(\d+) of/.exec(document.getElementById('anon-reads-count')?.textContent ?? '')?.[1] ?? 0) >= 3, undefined, { timeout: 300_000 });
   await page.waitForFunction(() => Number(document.getElementById('balance')?.textContent) > 0, undefined, { timeout: 300_000 });

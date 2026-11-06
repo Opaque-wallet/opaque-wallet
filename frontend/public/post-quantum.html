@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Post-Quantum, Today</title>
+<meta name="description" content="Opaque's next major upgrade: private payments, stealth addresses, ENSv2 names and Uniswap v4 swaps, all signed by hash-based FORS+C keys. Usable now on Sepolia and Ethereum's EIP-8141 devnet.">
+<meta name="theme-color" content="#070608">
+<meta property="og:title" content="Go post-quantum. Today.">
+<meta property="og:description" content="Payments, stealth addresses, ENSv2 names and Uniswap v4 swaps, signed by hash-based keys. Live now.">
+<meta property="og:image" content="https://www.opaque.credit/post-quantum-og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&family=Quicksand:wght@600;700&display=swap">
+<link rel="stylesheet" href="/upgrade.css">
+</head>
+<body>
+<header class="top wrap">
+  <a class="brand" href="/" aria-label="opaque, home"><img src="/logo.png" alt="opaque" width="942" height="200"><span>Post-quantum</span></a>
+  <a class="btn btn--primary" href="/sepolia/app">Open the wallet</a>
+</header>
+
+<main>
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <div class="hero__copy">
+      <a class="pill rise" style="--d: 0" href="#now"><b>Next major upgrade</b> Everything, post-quantum</a>
+      <h1 class="display rise" id="hero-title" style="--d: 1">Go post-<em>quantum.</em> Today.</h1>
+      <p class="lede rise" style="--d: 3">Pay, receive, hold a name and swap, every move signed by FORS+C: hash-based keys with no known quantum attack. It isn't a roadmap. Each one works now, on Sepolia and on Ethereum's EIP-8141 devnet.</p>
+      <div class="actions rise" style="--d: 4">
+        <a class="btn btn--primary" href="/sepolia/app">Open the Sepolia wallet</a>
+        <a class="btn btn--ghost" href="/testnet/devnet">Try the devnet</a>
+      </div>
+    </div>
+    <div class="hero__stage rise" style="--d: 2" role="img" aria-label="A FORS+C signature being made: one secret leaf is revealed in each of sixteen hash trees, with the path to its root, and the roots make the public key. Only hashes, nothing a quantum computer is known to break.">
+      <canvas id="fors"></canvas>
+      <div class="stage__log stage__log--left" aria-hidden="true"><p>Signing</p><ol id="signing"></ol></div>
+      <p class="stage__caption" aria-hidden="true">One secret leaf per tree, revealed with its path to the root. Hashes only: nothing for Shor's algorithm to attack.</p>
+    </div>
+  </section>
+
+  <section class="wrap feature" id="stealth" aria-labelledby="stealth-title">
+    <div class="feature__copy">
+      <p class="eyebrow">Receive · Live on Sepolia</p>
+      <h2 class="display" id="stealth-title">Paid at an address nobody can trace to you.</h2>
+      <p class="lede">Post-quantum stealth addresses. Your wallet publishes one ML-KEM-768 key in Ethereum's stealth-address registry (ERC-6538). Each payer uses it to make a fresh one-time address that only your key can find, and announces it on ERC-5564's Announcer. Your wallet spots its own and sweeps them into your notes.</p>
+      <ul class="facts">
+        <li><b>1,184-byte</b> ML-KEM-768 key, in the standard registry</li>
+        <li><b>1,088-byte</b> ciphertext per payment, on the standard Announcer</li>
+        <li><b>Today's stealth addresses</b> (secp256k1) can be linked by a quantum computer reading old announcements. These can't.</li>
+      </ul>
+    </div>
+    <div class="feature__stage" role="img" aria-label="A public ledger of one-time addresses. Payments keep arriving at fresh addresses that look unrelated. A scan with your key lights up the ones that are yours and moves them into your notes.">
+      <canvas id="ledger"></canvas>
+      <div class="vault"><b id="vault-n">0</b><span>found by your key, swept into your notes</span></div>
+    </div>
+  </section>
+
+  <section class="wrap feature feature--flip" id="names" aria-labelledby="names-title">
+    <div class="feature__copy">
+      <p class="eyebrow">Names · ENSv2 · Live on Sepolia</p>
+      <h2 class="display" id="names-title">A name no quantum computer can take.</h2>
+      <p class="lede">Claim <b>yourname.opaque.eth</b> in the wallet. ENSv2's resolver points it at your account, and only a post-quantum account can hold one. opaque.eth itself is held by a controller that acts only on a FORS+C signature, so a cracked ECDSA key changes nothing.</p>
+      <ul class="facts">
+        <li><b>Pay by name:</b> ENSv2's UniversalResolver, read through anon-rpc</li>
+        <li><b>ECDSA writes revert:</b> the old owner's key has no power over the name</li>
+        <li><b>Rotation built in:</b> a key signs up to 32 times, then hands over to the next</li>
+      </ul>
+    </div>
+    <div class="feature__stage ens" aria-hidden="true">
+      <div class="ens__card">
+        <span class="ens__tag">ENSv2 · Sepolia</span>
+        <b class="ens__name">alice.opaque.eth</b>
+        <span class="ens__row"><i>resolves to</i> 0x5cb6…3131</span>
+        <span class="ens__row"><i>held by</i> FORS+C key · <em class="ens__uses">12</em> of 32 used</span>
+        <div class="ens__seal">post-quantum</div>
+      </div>
+      <div class="ens__attack">
+        <span class="ens__who">ECDSA key, cracked on Q-Day</span>
+        <code>setResolver(alice.opaque.eth, 0xbad…)</code>
+        <span class="ens__stamp">reverted</span>
+      </div>
+      <div class="ens__ok">
+        <span class="ens__who">FORS+C signature</span>
+        <code>setAddr(alice.opaque.eth, 0x5cb6…)</code>
+        <span class="ens__stamp ens__stamp--ok">done</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap feature" id="swap" aria-labelledby="swap-title">
+    <div class="feature__copy">
+      <p class="eyebrow">Swap · Uniswap v4 hook · EIP-8141 devnet</p>
+      <h2 class="display" id="swap-title">A pool only post-quantum accounts can trade in.</h2>
+      <p class="lede"><b>PQPoolHook</b> is a Uniswap v4 hook that admits only accounts whose one authority is a FORS+C key. It checks every swap, every liquidity change and every donation, so a cracked ECDSA key can't touch the pool, and a position moved to an ECDSA wallet freezes instead of leaving. It's live on Ethereum's EIP-8141 devnet, where accounts validate themselves: no bundler, no paymaster.</p>
+      <ul class="facts">
+        <li><b>0.001 ETH → 1.974316 pqUSD:</b> a post-quantum account's swap in the pool, exactly the quote. <a href="https://altmempoolexplorer.forshtat.com/tx/0x6dbf99f3f32071afce69afa95a501e2b434c308018c808191c2c3d165b132e4b" target="_blank" rel="noopener">See the swap</a></li>
+        <li><b>The same swap from an ECDSA wallet</b>, through the same router, reverts with the hook's <code>NotPostQuantum</code></li>
+        <li><b>One FORS-signed transaction, four frames:</b> deploy the hook, admit the account, open ETH/pqUSD under the hook and add its liquidity. <a href="https://altmempoolexplorer.forshtat.com/tx/0x64034d552da8bf8bfa4656c51f74d8f489cb5b2eaa63ffcc42c26fe1dfeef6f4" target="_blank" rel="noopener">See the setup</a></li>
+        <li><b>Hook 0x3B28…caa0:</b> its last bits are v4's permission flags, so the address itself says which calls it checks</li>
+      </ul>
+    </div>
+    <div class="feature__stage swap" aria-hidden="true">
+      <svg viewBox="0 0 320 220" class="pool">
+        <circle cx="160" cy="110" r="78" class="pool__ring"/>
+        <circle cx="160" cy="110" r="78" class="pool__flow"/>
+        <g class="pool__tok pool__tok--a"><circle cx="82" cy="110" r="30"/><text x="82" y="115">ETH</text></g>
+        <g class="pool__tok pool__tok--b"><circle cx="238" cy="110" r="30"/><text x="238" y="115">pqUSD</text></g>
+        <text x="160" y="104" class="pool__mid">PQ pool</text><text x="160" y="122" class="pool__fee">PQPoolHook</text>
+        <circle r="5" class="pool__dot"><animateMotion dur="2.4s" repeatCount="indefinite" path="M82 110 A78 78 0 0 1 238 110"/></circle>
+        <circle r="5" class="pool__dot pool__dot--b"><animateMotion dur="2.4s" begin="1.2s" repeatCount="indefinite" path="M238 110 A78 78 0 0 1 82 110"/></circle>
+      </svg>
+      <div class="tx">
+        <span class="tx__head">Frame transaction · type 0x06</span>
+        <div class="tx__frame tx__frame--v"><b>VERIFY</b><span>FORS+C · 76,430 gas · approves itself</span></div>
+        <div class="tx__frame"><b>SENDER</b><span>UniversalRouter.execute(V4_SWAP)</span></div>
+        <div class="tx__frame tx__frame--x"><b>ECDSA</b><span>none</span></div>
+      </div>
+      <div class="ens__attack swap__attack">
+        <span class="ens__who">An ECDSA wallet, the same swap</span>
+        <code>UniversalRouter.execute(V4_SWAP)</code>
+        <span class="ens__stamp">NotPostQuantum</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="now" aria-labelledby="now-title">
+    <div class="head">
+      <p class="eyebrow">Available now</p>
+      <h2 class="display" id="now-title">Everything you can do post-quantum today.</h2>
+    </div>
+    <div class="table" role="table" aria-label="Post-quantum features and where to use them">
+      <div class="trow trow--head" role="row"><span role="columnheader">What</span><span role="columnheader">Where</span><span role="columnheader">Signed by</span></div>
+      <a class="trow" role="row" href="/sepolia/app"><span role="cell"><b>Private payments</b> in rings of eight notes, with a way out that needs no Opaque server</span><span role="cell">Sepolia · Arc · XRPL testnet</span><span role="cell">FORS+C</span></a>
+      <a class="trow" role="row" href="/sepolia/app"><span role="cell"><b>Stealth addresses</b>, ML-KEM-768</span><span role="cell">Sepolia</span><span role="cell">FORS+C · ML-KEM</span></a>
+      <a class="trow" role="row" href="/sepolia/app"><span role="cell"><b>ENSv2 names</b>: claim, resolve, pay by name</span><span role="cell">Sepolia</span><span role="cell">FORS+C</span></a>
+      <a class="trow" role="row" href="/testnet/devnet"><span role="cell"><b>Uniswap v4</b>: a pool only post-quantum accounts can trade in (PQPoolHook)</span><span role="cell">EIP-8141 devnet</span><span role="cell">FORS+C only</span></a>
+      <a class="trow" role="row" href="/unseen"><span role="cell"><b>Reads through a mixnet</b>, with EF's anon-rpc</span><span role="cell">Sepolia</span><span role="cell">n/a: nobody sees who asked</span></a>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="why-title">
+    <div class="limits">
+      <div class="credit">
+        <p class="eyebrow">Why now</p>
+        <h2 class="display" id="why-title" style="font-size: clamp(36px, 5vw, 72px)">Moving later means moving in a hurry.</h2>
+        <p>Every ECDSA signature ever published reveals its public key, so the day a large quantum computer exists, those accounts can be taken. The cheapest time to move is before anyone has to.</p>
+      </div>
+      <ul>
+        <li><b>Hash-based, not lattice-based.</b> FORS+C rests on the hash function alone, the most conservative assumption there is.</li>
+        <li><b>Few-time keys, rotated for you.</b> Each key signs a set number of times, and the wallet hands over to the next one before it runs out.</li>
+        <li><b>Bigger signatures.</b> About 9 KB instead of 65 bytes, which costs more calldata. The verifier is tuned to fit the public mempool's budget anyway.</li>
+        <li><b>Testnets first.</b> Sepolia and the devnet today, mainnet after an audit. The code is open (Apache-2.0).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="final wrap" aria-labelledby="final-title">
+    <h2 class="display" id="final-title">Go post-<br>quantum.</h2>
+    <p class="lede">Make a wallet on Sepolia: free test funds, a name under opaque.eth, private payments in and out. Every signature it makes is post-quantum.</p>
+    <div class="actions"><a class="btn btn--primary" href="/sepolia/app">Open the wallet</a><a class="btn btn--ghost" href="/unseen">See Opaque Unseen</a></div>
+  </section>
+</main>
+<footer class="wrap"><span>Opaque · Apache-2.0</span><span><a href="/docs">Docs</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>
+
+<script>
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ORANGE = '255, 122, 24', CREAM = '244, 239, 233';
+/** A canvas at its CSS size, redrawn by `draw(ctx, W, H, dt)` while on screen. */
+function stage(canvas, draw) {
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, last = 0, running = false;
+  const fit = () => { const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1); W = r.width; H = r.height; canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  fit(); addEventListener('resize', fit);
+  const frame = (now) => { const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; draw(ctx, W, H, dt); if (running) requestAnimationFrame(frame); };
+  if (reduced) { for (let i = 0; i < 90; i++) draw(ctx, W, H, 0.05); return; }
+  new IntersectionObserver(([e]) => { if (e.isIntersecting && !running) { running = true; last = 0; requestAnimationFrame(frame); } else if (!e.isIntersecting) running = false; }).observe(canvas);
+}
+
+// ── the hero: a FORS+C signature ─────────────────────────────────────────
+// Sixteen small hash trees (the real thing has 32 trees of 256 leaves). Each signature
+// reveals one secret leaf per tree, chosen by the message's hash, and the path from it
+// to the tree's root. The roots hash into the public key the account holds.
+(() => {
+  const log = document.getElementById('signing');
+  const MESSAGES = ['pay alice.opaque.eth 5 USDC', 'claim bob.opaque.eth', 'swap 0.001 ETH → pqUSD', 'deposit 2 notes', 'rotate to the next key', 'withdraw a note, alone'];
+  const TREES = 16, DEPTH = 4, LEAVES = 1 << DEPTH;
+  let t = 0, msg = 0, picks = [], phase = 0;
+  const pickAll = () => { picks = Array.from({ length: TREES }, () => Math.floor(Math.random() * LEAVES)); };
+  const say = () => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${MESSAGES[msg % MESSAGES.length]}</span>`;
+    log.prepend(li); while (log.children.length > 4) log.lastChild.remove();
+    msg++;
+  };
+  pickAll(); say(); say(); say();
+  stage(document.getElementById('fors'), (ctx, W, H, dt) => {
+    t += dt; phase = t / 3.2;
+    if (phase >= 1) { t = 0; phase = 0; pickAll(); say(); }
+    ctx.clearRect(0, 0, W, H);
+    const narrow = W < 520, cols = narrow ? 4 : 8, rows = TREES / cols;
+    const top = narrow ? H * 0.38 : H * 0.32, bottom = narrow ? H * 0.8 : H * 0.88, padX = W * 0.05;
+    const cw = (W - padX * 2) / cols, rh = (bottom - top) / rows;
+    const pk = { x: W - Math.min(110, W * 0.24), y: narrow ? H * 0.27 : H * 0.14 };
+    const reveal = Math.min(1, phase / 0.55), toPk = Math.max(0, Math.min(1, (phase - 0.55) / 0.3));
+    for (let k = 0; k < TREES; k++) {
+      const cx = padX + cw * (k % cols) + cw / 2, ty = top + rh * Math.floor(k / cols) + rh * 0.06, th = rh * 0.8, tw = cw * 0.9;
+      const at = (level, i) => ({ x: cx - tw / 2 + (tw * (i + 0.5)) / (1 << (DEPTH - level)), y: ty + th - (th * level) / DEPTH });
+      // The tree, faint.
+      ctx.strokeStyle = `rgba(${CREAM}, 0.1)`; ctx.lineWidth = 1;
+      for (let level = 0; level < DEPTH; level++) for (let i = 0; i < 1 << (DEPTH - level); i++) {
+        const a = at(level, i), b = at(level + 1, i >> 1);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+      // The revealed leaf's path, climbing to the root.
+      const leaf = picks[k], climbed = reveal * DEPTH;
+      ctx.strokeStyle = `rgba(${ORANGE}, 0.95)`; ctx.lineWidth = 1.8;
+      for (let level = 0; level < DEPTH && level < climbed; level++) {
+        const a = at(level, leaf >> level), b = at(level + 1, leaf >> (level + 1)), f = Math.min(1, climbed - level);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f); ctx.stroke();
+      }
+      for (let i = 0; i < LEAVES; i++) { const p = at(0, i); ctx.fillStyle = i === leaf ? `rgba(${ORANGE}, 1)` : `rgba(${CREAM}, 0.22)`; ctx.beginPath(); ctx.arc(p.x, p.y, i === leaf ? 2.6 : 1.4, 0, Math.PI * 2); ctx.fill(); }
+      const root = at(DEPTH, 0);
+      ctx.fillStyle = reveal >= 1 ? `rgba(${ORANGE}, 1)` : '#151117'; ctx.strokeStyle = `rgba(${CREAM}, 0.35)`;
+      ctx.beginPath(); ctx.arc(root.x, root.y, 3.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (toPk > 0) {
+        ctx.strokeStyle = `rgba(${ORANGE}, ${0.5 * (1 - Math.max(0, phase - 0.85) / 0.15)})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(root.x, root.y); ctx.lineTo(root.x + (pk.x - root.x) * toPk, root.y + (pk.y - root.y) * toPk); ctx.stroke();
+      }
+    }
+    // The public key: what the account's registry holds.
+    const glow = toPk >= 1 ? 1 : 0.35;
+    ctx.fillStyle = '#151117'; ctx.strokeStyle = `rgba(${ORANGE}, ${glow})`; ctx.lineWidth = 1.5;
+    const pw = Math.min(156, W * 0.4);
+    ctx.beginPath(); ctx.roundRect(pk.x - pw / 2, pk.y - 17, pw, 34, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = `rgba(${CREAM}, 0.9)`; ctx.font = '600 12px Poppins, system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(toPk >= 1 ? (narrow ? 'verified' : 'public key: verified') : 'public key', pk.x, pk.y + 4);
+  });
+})();
+
+// ── stealth: a public ledger of one-time addresses ───────────────────────
+// To everyone, a stream of unrelated addresses. Your key's scan finds yours.
+(() => {
+  const HEX = '0123456789abcdef', vault = document.getElementById('vault-n');
+  const addr = () => `0x${Array.from({ length: 4 }, () => HEX[Math.floor(Math.random() * 16)]).join('')}…${Array.from({ length: 4 }, () => HEX[Math.floor(Math.random() * 16)]).join('')}`;
+  let chips = Array.from({ length: 9 }, () => ({ text: addr(), mine: false, age: 1, lit: 0, fly: 0 })), scan = 0, found = 0, spawnIn = 0;
+  stage(document.getElementById('ledger'), (ctx, W, H, dt) => {
+    const cols = W < 460 ? 2 : 3, rowH = 34, colW = (W - 40) / cols, maxRows = Math.floor((H - 70) / rowH);
+    spawnIn -= dt;
+    if (spawnIn <= 0) {
+      spawnIn = 0.55 + Math.random() * 0.5;
+      chips.push({ text: addr(), mine: Math.random() < 0.22, age: 0, lit: 0, fly: 0 });
+      if (chips.length > cols * maxRows) chips.shift();
+    }
+    scan = (scan + dt * 0.28) % 1.25;
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = `rgba(${CREAM}, 0.4)`; ctx.font = '700 10px Quicksand, system-ui';
+    ctx.fillText('ERC-5564 ANNOUNCEMENTS · ONE-TIME ADDRESSES', 20, 22);
+    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+    const scanY = 40 + scan * (H - 40);
+    chips.forEach((c, i) => {
+      c.age += dt;
+      const x = 20 + colW * (i % cols), y = 50 + rowH * Math.floor(i / cols);
+      if (c.mine && !c.lit && scanY > y) { c.lit = 1; found++; vault.textContent = String(found); }
+      if (c.lit) c.fly = Math.min(1, c.fly + dt * 0.8);
+      const a = Math.min(1, c.age * 3);
+      ctx.fillStyle = c.lit ? `rgba(${ORANGE}, ${0.14 * a})` : `rgba(${CREAM}, ${0.05 * a})`;
+      ctx.strokeStyle = c.lit ? `rgba(${ORANGE}, ${0.85 * a})` : `rgba(${CREAM}, ${0.14 * a})`;
+      ctx.beginPath(); ctx.roundRect(x, y - 12, colW - 12, 24, 8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c.lit ? `rgba(${ORANGE}, ${a})` : `rgba(${CREAM}, ${0.6 * a})`;
+      ctx.fillText(c.text, x + 12, y + 1);
+      if (c.lit) { ctx.fillStyle = `rgba(${ORANGE}, ${a})`; ctx.font = '600 10px Poppins, system-ui'; ctx.textAlign = 'right'; ctx.fillText('yours', x + colW - 22, y + 1); ctx.textAlign = 'left'; ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace'; }
+    });
+    // Your key's scan: decapsulate each ciphertext; only yours make their own address.
+    if (scan < 1) {
+      const g = ctx.createLinearGradient(0, scanY - 30, 0, scanY);
+      g.addColorStop(0, `rgba(${ORANGE}, 0)`); g.addColorStop(1, `rgba(${ORANGE}, 0.16)`);
+      ctx.fillStyle = g; ctx.fillRect(0, scanY - 30, W, 30);
+      ctx.strokeStyle = `rgba(${ORANGE}, 0.6)`; ctx.beginPath(); ctx.moveTo(0, scanY); ctx.lineTo(W, scanY); ctx.stroke();
+    }
+  });
+})();
+
+// ── ENS and the swap: CSS loops, started once on screen ───────────────────
+(() => {
+  const io = new IntersectionObserver((entries) => entries.forEach((e) => e.target.classList.toggle('on', e.isIntersecting)), { threshold: 0.25 });
+  document.querySelectorAll('.feature__stage').forEach((s) => io.observe(s));
+  // The name's key counts its uses up, and hands over at 32.
+  const uses = document.querySelector('.ens__uses');
+  let n = 12;
+  if (!reduced) setInterval(() => { n = n >= 31 ? 1 : n + 1; uses.textContent = String(n); }, 1400);
+})();
+</script>
+</body>
+</html>

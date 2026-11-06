@@ -32,6 +32,10 @@
     <button class="bell" type="button" popovertarget="updates" aria-label="Updates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 1.8H4.4z"/><path d="M10 21h4"/></svg><span class="bell__dot"></span></button>
     <div class="updates" id="updates" popover>
       <p class="updates__label">Updates</p>
+      <a class="updates__item" href="/post-quantum">
+        <span class="updates__mark" data-dots="#070608"></span>
+        <span><time datetime="2026-11-07">7 Nov 2026</time><b>Opaque Unseen, and post-quantum ENS, stealth and swaps</b><small>Reads through EF's anon-rpc, one-time ML-KEM stealth addresses, yourname.opaque.eth on ENSv2, and a Uniswap v4 pool only post-quantum accounts can trade in.</small><em>See what's new →</em></span>
+      </a>
       <a class="updates__item" href="/testnet/xrpl">
         <span class="updates__mark" data-dots="#070608"></span>
         <span><time datetime="2026-10-18">18 Oct 2026</time><b>Opaque is now on XRPL testnet</b><small>You can now enjoy Opaque on XRPL testnet: hold and send XRP, RLUSD and USDC privately, right in your browser.</small><em>Open the wallet →</em></span>
@@ -44,6 +48,8 @@
         <p class="menu__heading">Product</p>
         <div class="menu__cols">
         <div class="menu__col"><p class="menu__label">Use Opaque</p>
+          <a class="menu__link" href="/unseen"><strong>Opaque Unseen <span class="badge">New</span></strong><span>Reads through EF's anon-rpc: nobody sees who's asking</span></a>
+          <a class="menu__link" href="/post-quantum"><strong>Post-quantum, today <span class="badge">New</span></strong><span>Stealth addresses, ENSv2 names and Uniswap v4 swaps</span></a>
           <a class="menu__link" href="/testnet/xrpl"><strong>Private wallet</strong><span>Deposit, hold and send on Ethereum, Arc and the XRP Ledger</span></a>
           <a class="menu__link" href="#story"><strong>How a payment hides</strong><span>One of eight notes, three relays, a fresh address</span></a>
           <a class="menu__link" href="#connect"><strong>An account per app</strong><span>Apps see an address that leads nowhere</span></a>
@@ -90,6 +96,7 @@
     <canvas class="hero__ledger" aria-hidden="true"></canvas>
     <canvas class="hero__ring" aria-hidden="true"></canvas>
     <div class="hero__copy">
+      <a class="hero__new rise" style="--d: 0" href="/unseen"><b>New</b> Opaque Unseen →</a>
       <h1 class="display hero__title" id="hero-title">
         <span class="line"><span class="word rise" style="--d: 1">Your</span></span>
         <span class="line"><span class="word rise" style="--d: 2">money,</span></span>

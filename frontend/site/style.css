@@ -175,6 +175,9 @@ a { color: inherit; }
 .hero__title { font-size: clamp(60px, 11vw, 176px); }
 .hero__title .line { display: block; overflow: hidden; padding-bottom: 0.04em; }
 .hero__title .word { display: inline-block; }
+.hero__new { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 14px; text-decoration: none; transition: border-color 0.25s, color 0.25s; }
+.hero__new:hover { border-color: rgba(255, 122, 24, 0.6); color: var(--cream); }
+.hero__new b { padding: 4px 10px; border-radius: 999px; background: var(--orange); color: var(--ink); font: 700 11px/1 var(--mark); letter-spacing: 0.12em; text-transform: uppercase; }
 .lede { max-width: 34rem; margin: 0; color: var(--muted); font-size: clamp(17px, 1.4vw, 20px); }
 @keyframes beacon { 70% { box-shadow: 0 0 0 10px rgba(255, 122, 24, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 122, 24, 0); } }
 .cue {
