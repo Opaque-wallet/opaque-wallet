@@ -65,6 +65,8 @@ import { toHex } from '@opaque/protocol-types/codecs.js';
 
 import { deployment } from '../../deployments/index.ts';
 
+const MIN_TIP = 10_000_000n;
+
 /** The Arc network this build targets (deployments/index.ts picks it). */
 export const ARC: Chain = {
   id: deployment.network.chainId,
@@ -75,7 +77,19 @@ export const ARC: Chain = {
   nativeCurrency: deployment.network.nativeCurrency,
   rpcUrls: { default: { http: [deployment.network.rpcUrl] } },
   blockExplorers: { default: { name: 'Arcscan', url: deployment.network.explorer } },
-};
+  // Sepolia's nodes suggest a tip of a few wei, and a transaction at that tip can wait minutes
+  // for a block. Some answers wait for their transaction (a stealth announcement, inside the
+  // relay's 30 s), so every write here tips at least 0.01 gwei there: a block or two, for a few
+  // millionths of an ETH. Arc's fees are left as they are.
+  ...(deployment.network.chainId === 11155111 ? {
+    fees: {
+      maxPriorityFeePerGas: async ({ client }: { client: { request(args: { method: 'eth_maxPriorityFeePerGas' }): Promise<unknown> } }) => {
+        const suggested = await client.request({ method: 'eth_maxPriorityFeePerGas' }).then((x) => BigInt(x as string), () => 0n);
+        return suggested > MIN_TIP ? suggested : MIN_TIP;
+      },
+    },
+  } : {}),
+} as Chain;
 
 /**
  * Arc's public RPCs, in order. Each limits requests per IP, and one box's boot
