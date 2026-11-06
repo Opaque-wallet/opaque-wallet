@@ -69,7 +69,7 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **Say this, as one paragraph:**
 
-> Twelve words make the wallet, and every FORS+C key comes from them; a password seals them in this browser. The faucet funds it, and the deposit is one ERC-4337 operation its FORS+C key signs. I pay five dollars privately; the ring proof is built in my browser. It crosses three relays sealed, and our attester signs it with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. A swap in Uniswap v4's post-quantum pool: its hook lets in only FORS+C accounts. One signature claims swarnim.opaque.eth on ENSv2, and the wallet takes the name. Paying it pays a one-time address that only my ML-KEM key can find. On the EIP-8141 devnet the account itself is FORS+C only; frame zero verifies it in 76,430 gas, thanks to LeanFors. Then every Opaque server goes down: the wallet finds my notes through anon-rpc and withdraws them, with no one's permission. From MetaMask, I deploy a protocol. The page finds its admin keys: an owner and a proxy admin, both one ECDSA key. One button hands them to PQAdmin. The cracked key is refused, and my guard key alone changes the fee. Last, Q-Day. The page hands an attacker this wallet's private key: it takes the wallet and its protocol, and the chain refuses everything behind Opaque. Then the owner moves it all with the FORS+C key alone.
+> Twelve words make the wallet, and every FORS+C key comes from them; a password seals them in this browser. The faucet funds it, and the deposit is one ERC-4337 operation its FORS+C key signs. I pay five dollars privately; the ring proof is built in my browser. It crosses three relays sealed, and our attester signs it with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. A swap in Uniswap v4's post-quantum pool: its hook lets in only FORS+C accounts. One signature claims my name on ENSv2, swarn.opaque.eth, and the wallet takes it. Paying it pays a one-time address that only my ML-KEM key can find. On the EIP-8141 devnet the account itself is FORS+C only; frame zero verifies it in 76,430 gas, thanks to LeanFors. Then every Opaque server goes down: the wallet finds my notes through anon-rpc and withdraws them, with no one's permission. From MetaMask, I deploy a protocol. The page finds its admin keys: an owner and a proxy admin, both one ECDSA key. One button hands them to PQAdmin. The cracked key is refused, and my guard key alone changes the fee. Last, Q-Day. The page hands an attacker this wallet's private key: it takes the wallet and its protocol, and the chain refuses everything behind Opaque. Then the owner moves it all with the FORS+C key alone.
 
 **On screen:**
 
@@ -81,7 +81,7 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 | 1:00 | Right: "mesh exit  a payment came out of the mesh…", then "settler … attested with the attester's FORS+C key" |
 | 1:06 | Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…" |
 | 1:11 | Swap: 0.001 ETH quoted, then Swapped on Uniswap v4 |
-| 1:17 | Names: the label typed, claimed; after a reload the header reads swarnim.opaque.eth |
+| 1:17 | Names: the label typed, claimed; after a reload the header reads swarn.opaque.eth |
 | 1:23 | Send 2 tUSDC to the name; Home: the payment found and swept into the notes (cut the wait) |
 | 1:29 | The devnet wallet: funded, created by its factory, a send through its signature request, a v4 swap |
 | 1:37 | Back on Sepolia, every Opaque server down: the exit card, Find my notes, announced, then Withdrawn (cut the delay) |
@@ -124,7 +124,7 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 ## Before you record
 
 - **The autopilot plays the demo, in the real site.**
-  - It's on now (`npm run demo:on` was deployed). Open a private window, so the wallet is a fresh one, and go to `opaque.credit/ethglobal-mumbai?demo=swarnim`. It claims `swarnim.opaque.eth`; `?demo` alone claims `mumbai-<4 hex>`.
+  - It's on now (`npm run demo:on` was deployed). Open a private window, so the wallet is a fresh one, and go to `opaque.credit/ethglobal-mumbai?demo=swarn`. It claims `swarn.opaque.eth` if it's free; a name an earlier take's wallet holds is taken, so the autopilot tries `swarn-2`, `swarn-3` and so on. `?demo` alone claims `mumbai-<4 hex>`.
   - Start the screen recording, then press **Play**. The ETHGlobal Mumbai page reloads and scrolls to the end by itself (0:00 to 0:35). The wallet opens and holds 12 seconds on the demo's aims (0:35). Then it types and clicks through 3.1 to 3.7, across the Sepolia wallet, the devnet and the Q-Day page, with a cursor and a caption. Every transaction is real, and Opaque's faucet funds the new wallets.
   - While the chain works, a **Waiting · cut** tag shows in the corner: cut those stretches. Uncut, a run takes about 30 minutes.
   - **Esc** or **Stop** ends a run. If a step fails, the caption says why; reload the page to try that step again.
