@@ -15,10 +15,10 @@ import { ETHEREUM_COIN, opaqueNameOf, resolveName } from '../ethereum/ens/ens-na
 
 const KEY = 'opaque-demo';
 const PASSWORD = 'opaque demo password';
-type Phase = 'aims' | 'wallet' | 'funds' | 'payment' | 'swap' | 'name' | 'named' | 'paid' | 'devnet' | 'leave' | 'withdraw' | 'protocol' | 'qday' | 'done';
+type Phase = 'aims' | 'wallet' | 'funds' | 'payment' | 'swap' | 'name' | 'named' | 'paid' | 'found' | 'devnet' | 'leave' | 'withdraw' | 'protocol' | 'qday' | 'done';
 interface State { phase: Phase; label: string; started: number; exitHost?: string; faucet?: boolean; block?: string; note?: string }
 const PAGE_OF: Record<Phase, string> = {
-  aims: '/sepolia/app', wallet: '/sepolia/app', funds: '/sepolia/app', payment: '/sepolia/app', swap: '/sepolia/app', name: '/sepolia/app', named: '/sepolia/app', paid: '/sepolia/app',
+  aims: '/sepolia/app', wallet: '/sepolia/app', funds: '/sepolia/app', payment: '/sepolia/app', swap: '/sepolia/app', name: '/sepolia/app', named: '/sepolia/app', paid: '/sepolia/app', found: '/sepolia/app',
   devnet: '/testnet/devnet', leave: '/sepolia/app', withdraw: '/sepolia/app', protocol: '/sepolia/quantum-safe', qday: '/sepolia/q-day', done: '/sepolia/q-day',
 };
 const here = (path: string) => location.pathname.replace(/\.html$/, '').endsWith(path);
@@ -314,10 +314,23 @@ const STEPS: Record<Exclude<Phase, 'done'>, () => Promise<void>> = {
   async paid() {
     await until('the wallet', ready, 180_000);
     await say('Paid by name', `2 tUSDC to ${name()}: the pool pays a one-time address only this wallet can find`);
-    await pay(name(), '2', 'the payment');
+    // Paid already, before a reload: the payment is in the wallet's stealth list, so it is not paid twice.
+    await maybe(until('the stealth list', () => document.querySelectorAll('#stealth-list .stealth-row').length > 0, 30_000));
+    if (document.querySelectorAll('#stealth-list .stealth-row').length === 0) await pay(name(), '2', 'the payment');
+    next('found');
+  },
+
+  async found() {
+    await until('the wallet', ready, 180_000);
     await press('#tab-home');
+    await press('#tile-privacy');
     await say('Found', 'Its ML-KEM-768 key finds the payment; it is swept into the wallet\'s notes');
-    await status('stealth-status', /is now in your notes/, /(?!)/, 'the wallet finding it', 900_000);
+    const inNotes = () => /is now in your notes/.test(text('stealth-status')) || [...document.querySelectorAll('#stealth-list .stealth-row span')].some((x) => / in your notes$/.test(x.textContent ?? ''));
+    q('#stealth-card')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    waiting('the wallet finding it');
+    // "Could not move a payment into your notes yet" is tried again by the wallet every 30 seconds.
+    await until('the payment in the notes', inNotes, 900_000, 1_000);
+    waiting();
     await sleep(4_000);
     next('devnet');
   },
