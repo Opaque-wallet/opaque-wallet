@@ -58,19 +58,20 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **Say this, as one paragraph:**
 
-> This is all of Opaque. At the bottom is the core: every orange box acts only on a FORS+C signature, a hash-based key checked in one registry. No key signs more than eight times. The Opaque wallet holds those keys. It signs EIP-8141 frame transactions on the devnet, ERC-4337 operations on Sepolia, and reads through EF's anon-rpc. Payments: a ring proof shows a note is one of eight, three relays carry it sealed with ML-KEM, our attester verifies and signs, and the pool pays. The payer's account sends nothing. Names: opaque.eth is held by a FORS+C-only controller, and name.opaque.eth goes only to post-quantum accounts. Paying a name pays a one-time account, hidden with ML-KEM. Nobody has to switch: MetaMask keeps funds in the Q-Day vault, protocols hand their admin keys to PQAdmin, and dapps list Opaque beside MetaMask. On EIP-8141, accounts verify themselves. On Uniswap v4, our hooks let only post-quantum accounts trade, and PQGuardHook protects any LP. And if Opaque disappears, every note still leaves its pool: announce, wait, reveal. One hash-based key under all of it: wallets, names, liquidity, admin keys and private payments.
+> Opaque runs on FORS+C keys: hash-based, checked in one registry, and never used for more than eight signatures. The Opaque wallet holds them, drawn from twelve words. It signs two ways: an EIP-8141 frame transaction through the alt mempool to the devnet, or an ERC-4337 operation through Pimlico to Sepolia. And it reads through anon-rpc, so no RPC sees who asks. A private payment: a ring proof, one of eight; three relays carry it sealed with ML-KEM; the attester verifies and signs; and the note pool pays the recipient, or a one-time account. Names: PQNameController holds opaque.eth, OpaqueNames gives out name.opaque.eth, and UniversalResolverV2 resolves it. A name pays a one-time account, announced on ERC-5564 and swept into notes. Others plug in as they are: MetaMask deposits into the Q-Day vault, a protocol team hands its admin keys to PQAdmin, and any dapp connects through EIP-6963. On the devnet, a FramePQAccount verifies itself, its factory creates it with no signature, and pqUSDC pools sit behind PQPoolHook. A Uniswap LP adds and removes through v4's PoolManager, which calls our hooks: only post-quantum accounts trade, and PQGuardHook needs a signed removal. And every note can leave without us: announce, wait, reveal, and AES-128 on chain recomputes it. Everything orange answers to the core.
 
 **On screen:**
 
 | Time | Show |
 |---|---|
-| 0:38 | GitHub: diagrams/opaque.svg, the README top: the PQ auth core at the bottom |
-| 0:52 | Same diagram: Who, then How it's sent |
-| 1:02 | Same diagram: Private payments, left to right |
-| 1:16 | Same diagram: ENS, then Stealth addresses |
-| 1:28 | Same diagram: Keep what you have, then EIP-8141 devnet |
-| 1:41 | Same diagram: Uniswap v4, then Leave without Opaque |
-| 1:55 | Same diagram, whole |
+| 0:38 | diagrams/opaque.svg: the PQ AUTH CORE box at the bottom, then up to the Opaque wallet |
+| 0:49 | Follow: signs → EIP-8141 frame tx → Alt mempool → devnet; signs → ERC-4337 UserOperation → Pimlico bundler → Sepolia; reads → anon-rpc → Public RPC |
+| 1:02 | Follow the row: Ring proof → Three relays → Attester → Note pool → Recipient, and the "or" arrow down to One-time account |
+| 1:15 | Follow: PQNameController → OpaqueNames ← UniversalResolverV2 → One-time account; then ERC-5564 and ERC-6538 |
+| 1:26 | Follow: MetaMask user → deposits → Q-Day vault; Protocol team → admin keys → PQAdmin → acts on FORS+C → Your protocol; Any dapp → EIP-6963 → Connect with Opaque |
+| 1:38 | The EIP-8141 devnet frame: FramePQAccount, Factory, pqUSDC pools |
+| 1:47 | Follow: Uniswap LP → add · remove → v4 PoolManager → PQ pool hooks, and the arrow round to PQGuardHook |
+| 1:58 | Follow: Exitable pools → AES-128 on chain; then back down to the PQ AUTH CORE |
 
 ## 3. The demo (2:08–4:13)
 
