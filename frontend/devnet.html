@@ -53,16 +53,6 @@
         <span><b>Get devnet ETH</b><small>For gas: from the devnet's faucet, or Opaque's when that one is dry. Test ETH, no value.</small></span>
       </button>
     </div>
-    <div class="deposit-card" id="deposit-card">
-      <div class="deposit-copy"><p class="eyebrow">Deposit</p><p id="deposit-copy">pqUSDC at your address becomes private notes.</p></div>
-      <div class="deposit-row">
-        <label class="deposit-amount" for="deposit-amount"><input id="deposit-amount" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="10" aria-describedby="deposit-split"><span>pqUSDC</span></label>
-        <button class="primary" id="deposit" type="button">Deposit</button>
-      </div>
-      <button class="secondary" id="usdc-faucet" type="button">Get 100 test pqUSDC and gas: free, nothing to sign</button>
-      <small class="deposit-split" id="deposit-split">As notes of 1 to 100 pqUSDC, each hidden among notes its size. Your FORS+C key signs the deposit.</small>
-      <p class="status" id="deposit-status" role="status"></p>
-    </div>
     <p class="status" id="home-status" role="status" aria-live="polite"></p>
 
     <div class="tabs" role="tablist" aria-label="Home">
@@ -80,6 +70,20 @@
         <p>Your account answers to one hash-based key, FORS+C, drawn from your recovery phrase. Nothing else signs: not its creation (its factory pays for that), not a transaction, not a bundler, because an EIP-8141 frame transaction has no envelope signature to need one.</p>
         <p>Its 0x address is a contract's, fixed by its factory and your key's commitment: only a FORS+C signature moves what it holds. The key signs up to 8 transactions, counted by the account's nonce, and its last one hands the account to your next key.</p>
       </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-deposit" aria-labelledby="tab-deposit" hidden>
+    <div class="screen-head"><button class="back" data-back type="button" aria-label="Back">←</button><h1>Deposit</h1><span></span></div>
+    <div class="deposit-card" id="deposit-card">
+      <div class="deposit-copy"><p class="eyebrow">Deposit</p><p id="deposit-copy">pqUSDC at your address becomes private notes.</p></div>
+      <div class="deposit-row">
+        <label class="deposit-amount" for="deposit-amount"><input id="deposit-amount" type="text" autocomplete="off" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="10" aria-describedby="deposit-split"><span>pqUSDC</span></label>
+        <button class="primary" id="deposit" type="button">Deposit</button>
+      </div>
+      <button class="secondary" id="usdc-faucet" type="button">Get 100 test pqUSDC and gas: free, nothing to sign</button>
+      <small class="deposit-split" id="deposit-split">As notes of 1 to 100 pqUSDC, each hidden among notes its size. Your FORS+C key signs the deposit.</small>
+      <p class="status" id="deposit-status" role="status"></p>
     </div>
   </section>
 
@@ -158,7 +162,7 @@
       <button class="secondary" id="address-usdc" type="button">Get 100 test pqUSDC</button>
       <button class="secondary" id="address-create" type="button" hidden>Create the account</button>
       <p class="status" id="address-status" role="status"></p>
-      <p class="fine-print">An account contract's address on Ethereum's EIP-8141 devnet (chain 1337), made by its factory from your FORS key: only a FORS+C signature moves what it holds. Test ETH and pqUSDC, no value. pqUSDC that arrives here becomes private notes when you deposit it on Home.</p>
+      <p class="fine-print">An account contract's address on Ethereum's EIP-8141 devnet (chain 1337), made by its factory from your FORS key: only a FORS+C signature moves what it holds. Test ETH and pqUSDC, no value. pqUSDC that arrives here becomes private notes when you deposit it (Deposit, on the left).</p>
     </div>
   </section>
 
@@ -174,6 +178,7 @@
     <a class="side-logo" href="/" aria-label="About opaque"><img src="media/logo.png" alt="opaque" width="942" height="200"></a>
     <button id="tab-home" aria-selected="true" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4.5l8 6.5v8.5H14.5V14h-5v5.5H4z"/></svg></i>Home</button>
     <button id="tab-send" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 10 14M20.5 3.5 14 20.5l-4-6.5-6.5-4z"/></svg></i>Send</button>
+    <button id="tab-deposit" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></svg></i>Deposit</button>
     <button id="tab-swap" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5 3.5 8 7 11.5M3.5 8h13M17 12.5l3.5 3.5-3.5 3.5M20.5 16h-13"/></svg></i>Swap</button>
     <button id="tab-ring" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 5 6.5v5c0 4.2 3 7.6 7 9 4-1.4 7-4.8 7-9v-5z"/><path d="m9 12 2 2 4-4"/></svg></i>Privacy</button>
     <button id="tab-receive" aria-selected="false" type="button"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><path d="M13.5 13.5h2.5v2.5M20 13.5v6.5h-6.5M16.8 16.8h.2"/></svg></i>Receive</button>

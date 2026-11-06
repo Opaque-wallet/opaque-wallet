@@ -55,6 +55,8 @@ try {
   check(true, `an account, created by its factory: ${account}`);
 
   check((await page.textContent('.hero-label')) === 'Private balance', 'Home shows the private balance first, as Arc does');
+  await page.click('#tab-deposit');
+  check(!(await page.isHidden('#view-deposit')) && (await page.isHidden('#view-home')), 'Deposit is a tab of its own');
   await page.click('#usdc-faucet');
   const got = await statusIs('deposit-status', 'Got 100 test pqUSDC');
   check(got.includes('and devnet ETH for gas'), `the pqUSDC faucet also gave the empty account its gas: ${got}`);

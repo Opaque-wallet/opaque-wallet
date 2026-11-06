@@ -53,7 +53,7 @@ let noteCount = 0;
 let sendPrivate = true;
 
 // ── views, as the XRPL page has them ──────────────────────────────────────
-const VIEWS = ['home', 'send', 'swap', 'ring', 'receive', 'activity'] as const;
+const VIEWS = ['home', 'send', 'deposit', 'swap', 'ring', 'receive', 'activity'] as const;
 type View = (typeof VIEWS)[number];
 function showView(name: View): void {
   for (const v of VIEWS) {
@@ -63,7 +63,7 @@ function showView(name: View): void {
   window.scrollTo(0, 0);
   if (name === 'swap') void quoteSwap().catch(() => undefined);
   if (name === 'ring') void refreshRing();
-  if (name === 'home' || name === 'activity' || name === 'send') void refreshPrivate();
+  if (name === 'home' || name === 'activity' || name === 'send' || name === 'deposit') void refreshPrivate();
 }
 const HOME_TABS = [['hometab-assets', 'home-assets'], ['hometab-pq', 'home-pq']] as const;
 function showHomeTab(tab: string): void {
@@ -145,7 +145,7 @@ function render(): void {
   );
   el('assets').replaceChildren(
     assetRow('tok-usdc', 'U', 'pqUSDC, private', `${noteCount} notes in Opaque's pools: Send pays from these`, priv),
-    assetRow('tok-usdc', 'U', 'pqUSDC, at your address', 'Public until you deposit it on Home', usdc(usdcPublic)),
+    assetRow('tok-usdc', 'U', 'pqUSDC, at your address', 'Public until you deposit it: Deposit, on the left', usdc(usdcPublic)),
     assetRow('tok-eth', 'E', 'ETH', 'Gas for deposits, swaps and public sends', amount(eth)),
     assetRow('tok-usdc', 'U', 'pqUSD', 'Post-Quantum Test Dollar, from Uniswap v4', amount(usd)),
   );
@@ -235,7 +235,11 @@ async function step(statusId: string, doing: string, run: () => Promise<string>)
   try {
     said = await run();
   } catch (error) {
-    said = `Didn't go through: ${(error as Error).message}`;
+    const e = error as { message: string; code?: string };
+    // The devnet's gateway and miner are run by its operator; when both stop answering, say so plainly.
+    said = e.code === 'RPC_UNREACHABLE' || e.code === 'RPC_BAD_RESPONSE'
+      ? 'Didn\'t go through: the EIP-8141 devnet isn\'t answering right now (its gateway and miner, run by the devnet\'s operator, not Opaque). Refresh in a minute to see whether anything went through, then try again.'
+      : `Didn't go through: ${e.message}`;
   }
   await refresh().catch(() => undefined);
   for (const b of buttons) b.disabled = false;
@@ -281,7 +285,7 @@ for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('cl
 for (const [t] of HOME_TABS) el(t).addEventListener('click', () => showHomeTab(t));
 el('action-send').addEventListener('click', () => showView('send'));
 el('action-receive').addEventListener('click', () => showView('receive'));
-el('action-deposit').addEventListener('click', () => { el('deposit-card').scrollIntoView({ behavior: 'smooth', block: 'center' }); el('deposit-amount').focus(); });
+el('action-deposit').addEventListener('click', () => { showView('deposit'); el('deposit-amount').focus(); });
 el('action-privacy').addEventListener('click', () => showView('ring'));
 el('action-activity').addEventListener('click', () => showView('activity'));
 el('action-swap').addEventListener('click', () => showView('swap'));
@@ -541,7 +545,7 @@ el('deposit').addEventListener('click', () => {
 function sendPrivately(to: string, text: string, label = to): void {
   const whole = Number(text);
   if (!Number.isInteger(whole) || whole <= 0) { el('send-status').textContent = 'Send a whole number of pqUSDC, like 3.'; return; }
-  if (privateUnits !== null && whole * 1e6 > privateUnits) { el('send-status').textContent = `You have ${usdc(privateUnits)} private pqUSDC: deposit some on Home first.`; return; }
+  if (privateUnits !== null && whole * 1e6 > privateUnits) { el('send-status').textContent = `You have ${usdc(privateUnits)} private pqUSDC: deposit some first (Deposit, on the left).`; return; }
   void (async () => {
     if (!(await confirmSign('Confirm private payment', [
       ['Pay', `${whole} pqUSDC`],
