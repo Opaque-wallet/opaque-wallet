@@ -51,7 +51,8 @@ import { createIntentSealer } from '../../../backend/cre/seal-client.ts';
 import { ARC_AUTHORITY, checkSwapCall, createPqAccountOps, livePqWalletOptions, pendingDeployment } from '../../../backend/chain/pq-wallet-chain.ts';
 import { browserPayer, createBrowserPool, createMeshChainObserver, type DepositMany } from '../../../backend/chain/wallet-chain.ts';
 import { capabilitiesOf } from '../../../backend/chain/pool.ts';
-import { createWalletRpcAnswerer, ethBalance, readOne, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
+import { createWalletRpcAnswerer, ethBalance, readOne, readState, swapQuote, tokenBalances, type SwapQuote, type WalletRpcSend } from '../../../backend/chain/wallet-rpc.ts';
+import { extsloadCall } from '../../../backend/chain/uniswap-v4.ts';
 import { exitClient } from '../../../backend/chain/ring-exit.ts';
 import { anonFetch, anonReadsOn } from './anon-rpc.ts';
 import { MarkovPathPolicy } from '../../../graph/src/path-policy.ts';
@@ -144,6 +145,8 @@ export interface WalletRuntime {
   execute(address: `0x${string}`, calls: readonly { readonly to: `0x${string}`; readonly data: `0x${string}`; readonly value?: bigint }[]): Promise<TxHash>;
   /** The account's ETH, where gas is ETH (Sepolia). */
   ethBalance(address: `0x${string}`): Promise<bigint>;
+  /** One word of Uniswap v4's PoolManager storage, read across the mesh: a pool's price and liquidity. */
+  v4Slot(slot: `0x${string}`): Promise<bigint>;
   /** Post-quantum stealth payments (lib/stealth.ts), where the network has them, for a phrase's account. */
   readonly stealth?: Stealth;
   /** Notes made as a deposit makes them, paid for by `depositMany` instead of this account: a stealth sweep. */
@@ -428,6 +431,7 @@ export async function startWallet(config?: StackConfig, account: AccountKeys | '
     withdraw: (address, to) => opsFor(address).withdraw(to.toLowerCase() as never),
     execute: (address, calls) => opsFor(address).execute(calls.map((c) => ({ to: c.to.toLowerCase() as never, data: c.data, ...(c.value === undefined ? {} : { value: c.value }) }))),
     ethBalance: (address) => ethBalance(walletRpc, address as never),
+    v4Slot: async (slot) => BigInt((await readState(walletRpc, [extsloadCall(slot) as never])).results[0]!),
     // ponytail: phrase accounts only; this browser's own pre-phrase account has no key to draw it from.
     ...(account === 'browser' || deployment.stealth === undefined ? {} : {
       stealth: createStealth({ account, walletRpc, keys, publicClient: browserPool.publicClient as never, storageKey: `${names.notes}:stealth` }),

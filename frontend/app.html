@@ -120,6 +120,16 @@
       <small class="deposit-split"><button class="link" id="name-owner" type="button">Hold opaque.eth itself? Claim it with the code</button></small>
       <p class="status" id="sub-status" role="status"></p>
     </div>
+    <div class="deposit-card" id="v4-card" hidden>
+      <div class="deposit-copy"><p class="eyebrow">Swap · Uniswap v4</p><p id="v4-copy">ETH and tUSDC in Uniswap's post-quantum pool. Its hook lets only post-quantum accounts trade, and this wallet's FORS+C key signs the swap.</p></div>
+      <div class="deposit-row">
+        <label class="deposit-amount" for="v4-amount"><input id="v4-amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.001"><span id="v4-in">ETH</span></label>
+        <button class="secondary" id="v4-flip" type="button" aria-label="Swap the other way">⇄</button>
+        <button class="primary" id="v4-go" type="button">Swap</button>
+      </div>
+      <small class="deposit-split" id="v4-quote">Enter an amount for a quote from the pool.</small>
+      <p class="status" id="v4-status" role="status"></p>
+    </div>
     <div class="deposit-card" id="stealth-card" hidden>
       <div class="deposit-copy"><p class="eyebrow">Receive privately</p><p id="stealth-copy">Reading this wallet's stealth key…</p></div>
       <button class="primary" id="stealth-on" type="button" hidden>Turn on</button>

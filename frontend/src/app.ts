@@ -23,6 +23,7 @@ import { backupTransport, hasBrowserAccount, startWallet, type WalletRuntime } f
 import { addressOfKey, arcAddressOf, arcState, arcStorageOf, deployerKey, saveArcState } from './lib/arc-keys.ts';
 import { withoutOpaque, type WithoutOpaque } from './lib/without-opaque.ts';
 import { anonReadsOn, setAnonReads } from './lib/anon-rpc.ts';
+import { keyOf as v4Key, quote as v4Quote, swapCalls as v4SwapCalls, V4 } from '../../backend/chain/uniswap-v4.ts';
 import { exitablePools } from '../../backend/chain/ring-exit.ts';
 import { keyStoreName } from './lib/backup.ts';
 import { asHexBytes, CREATE2_FACTORY, deployment as deployOf, MAX_INITCODE, newSalt, riskOfCall } from './lib/contracts.ts';
@@ -1075,6 +1076,68 @@ function setupStealth(): void {
   tick();
 }
 
+// ── swap on Uniswap v4, in the post-quantum pool ──────────────────────────
+// backend/chain/uniswap-v4.ts. The pool's hook (PQAccountPoolHook) admits only PQ
+// accounts; the quote is the pool's own state, read across the mesh, and the swap is
+// one UserOperation this account's FORS+C key signs.
+
+function setupV4Swap(): void {
+  const pool = V4?.pq;
+  if (pool === undefined) return;
+  const key = v4Key(pool);
+  el('v4-card').hidden = false;
+  let ethIn = true;
+  const input = el<HTMLInputElement>('v4-amount');
+  /** The amount in the input token's smallest units: ETH's 18 decimals or tUSDC's 6. */
+  const amount = (): bigint | undefined => {
+    const v = input.value.trim();
+    if (!/^\d+(\.\d+)?$/.test(v)) return undefined;
+    const places = ethIn ? 18 : 6;
+    const [whole, frac = ''] = v.split('.');
+    if (frac.length > places) return undefined;
+    const n = BigInt(whole!) * 10n ** BigInt(places) + BigInt((frac + '0'.repeat(places)).slice(0, places) || '0');
+    return n > 0n ? n : undefined;
+  };
+  const show = (n: bigint, eth: boolean) => eth ? formatEther(n).replace(/(\.\d{6})\d+$/, '$1') : (Number(n) / 1e6).toFixed(6).replace(/\.?0+$/, '');
+  let quoted: bigint | undefined;
+  const requote = async () => {
+    const a = amount();
+    quoted = undefined;
+    if (a === undefined || !runtimeReady) { el('v4-quote').textContent = 'Enter an amount for a quote from the pool.'; return; }
+    try {
+      quoted = await v4Quote((slot) => rt.v4Slot(slot), key, a, ethIn);
+      el('v4-quote').textContent = `≈ ${show(quoted, !ethIn)} ${ethIn ? 'tUSDC' : 'ETH'}, from the pool's own price and liquidity. At least 99% of that, or nothing.`;
+    } catch (error) { el('v4-quote').textContent = `No quote: ${(error as Error).message}`; }
+  };
+  input.addEventListener('input', () => void requote());
+  el('v4-flip').addEventListener('click', () => {
+    ethIn = !ethIn;
+    el('v4-in').textContent = ethIn ? 'ETH' : 'tUSDC';
+    input.placeholder = ethIn ? '0.001' : '1';
+    void requote();
+  });
+  el('v4-go').addEventListener('click', () => void (async () => {
+    const a = amount();
+    if (a === undefined) { setStatus('v4-status', `Enter an amount of ${ethIn ? 'ETH, like 0.001' : 'tUSDC, like 1'}.`); return; }
+    if (opaqueAddress === '') { setStatus('v4-status', 'Opaque is still starting.'); return; }
+    const me = opaqueAddress as `0x${string}`;
+    await requote();
+    if (quoted === undefined) { setStatus('v4-status', 'No quote from the pool yet.'); return; }
+    // A swap that reverts still spends one of the key's signatures: check the balance first.
+    const have = ethIn ? await rt.ethBalance(me) : BigInt(Math.round((await rt.accountFunds(me)).usdc * 1e6));
+    if (have < a) { setStatus('v4-status', ethIn ? `This account holds ${show(have, true)} ETH.` : `This account holds ${show(have, false)} tUSDC at its address (deposited notes don't count).`); return; }
+    setStatus('v4-status', 'Signing the swap with this wallet\'s post-quantum key; the public bundler submits it…');
+    try {
+      const tx = await rt.execute(me, v4SwapCalls(key, a, (quoted * 99n) / 100n, ethIn) as never);
+      setStatus('v4-status', `Swapped ${show(a, ethIn)} ${ethIn ? 'ETH' : 'tUSDC'} for about ${show(quoted, !ethIn)} ${ethIn ? 'tUSDC' : 'ETH'} in the post-quantum pool: ${tx}`);
+      input.value = '';
+      void requote();
+      void refreshTokens().catch(() => undefined);
+      void renderBudget().catch(() => undefined);
+    } catch (error) { setStatus('v4-status', `Not swapped: ${gasWhy(error)}`); }
+  })());
+}
+
 // ── your way out (exitable pools) ─────────────────────────────────────────
 // A note leaves its pool alone: lib/without-opaque.ts, through anon-rpc, signed by the
 // account's key, with no server of Opaque's asked anything.
@@ -1763,6 +1826,7 @@ async function init(): Promise<void> {
   runtimeReady = true;
   void refreshSubname();
   setupStealth();
+  setupV4Swap();
 
   // One failed read must not stop the rest of the page from starting.
   await Promise.all([

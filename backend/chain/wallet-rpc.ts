@@ -50,6 +50,7 @@ import { deployment, entryPoint, requireContract } from '../../deployments/index
 import { rateLimit } from '../mesh/limit.ts';
 import { writeInTurn } from './pool.ts';
 import { ANNOUNCEMENT, ANNOUNCER, ANNOUNCER_ABI, CIPHERTEXT_BYTES, META_REGISTRY, SCHEME_ID } from './stealth.ts';
+import { V4 } from './uniswap-v4.ts';
 
 /** The one thing the page hands the mesh: an operation and its JSON, as hex. */
 export type WalletRpcSend = (operation: WalletRpcOperation, encodedRequest: Hex) => Promise<Hex>;
@@ -90,6 +91,8 @@ export function walletRpcAllowlist(): ReadonlyMap<string, ReadonlySet<string>> {
   if (deployment.network.nativeCurrency.symbol !== 'USDC') add(MULTICALL3, 'getEthBalance(address)');
   // A payee's stealth meta-address, read before paying it.
   if (deployment.stealth !== undefined) add(META_REGISTRY, 'stealthMetaAddressOf(address,uint256)');
+  // A v4 pool's price and liquidity, for a swap quote (chain/uniswap-v4.ts).
+  if (V4 !== undefined) add(V4.poolManager, 'extsload(bytes32)');
   return allow;
 }
 

@@ -172,6 +172,19 @@ try {
   await page.click('#send-asset');
   await page.click('#asset-usdc');
 
+  // Uniswap v4, in the post-quantum pool: a quote from the pool's state, then one UserOperation the
+  // account's FORS+C key signs. The pool's hook admits only PQ accounts, so this is the only kind that can.
+  const swapFrom = await pub.getBlockNumber();
+  await page.click('#tab-home');
+  await page.fill('#v4-amount', '0.001');
+  await page.waitForFunction(() => (document.getElementById('v4-quote')?.textContent ?? '').startsWith('≈'), undefined, { timeout: 120_000 });
+  check(true, `the post-quantum pool quotes: ${await page.textContent('#v4-quote')}`);
+  await page.click('#v4-go');
+  await page.waitForFunction(() => /^(Swapped|Not swapped)/.test(document.getElementById('v4-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
+  check((await page.textContent('#v4-status'))?.startsWith('Swapped'), `swapped on Uniswap v4 from the page: ${await page.textContent('#v4-status')}`);
+  await until('the swap\'s tUSDC from the PoolManager', async () => (await pub.getLogs({ address: d.tokens.usdc.address, event: TRANSFER, args: { from: (d as { uniswap: { poolManager: `0x${string}` } }).uniswap.poolManager, to: account }, fromBlock: swapFrom })).length > 0, 120_000);
+  check(true, 'Uniswap v4\'s PoolManager paid the account its tUSDC, through the post-quantum pool\'s hook');
+
   // name.opaque.eth: the wallet claims its own name; ENS resolves it to the wallet; a payment by that name arrives.
   const label = `e2e-${randomBytes(4).toString('hex')}`;
   await page.click('#tab-home');

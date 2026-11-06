@@ -212,6 +212,27 @@
     "resolver": "0x9320d93186255e122214bd22270d168d5d8f676f",
     "names": "0x01f3419d2c8747f6b72032caf21a02fd0db44a28"
   },
+  "uniswap": {
+    "$comment": "Uniswap v4 on Sepolia: Uniswap's own deployment (docs.uniswap.org, code read on chain), and our two hooked ETH/tUSDC pools (backend/chain/uniswap-v4.ts, made by backend/ethereum/uniswap-sepolia.ts).",
+    "poolManager": "0xe03a1074c86cfedd5c142c4f04f1a1536e203543",
+    "positionManager": "0x429ba70129df741b2ca2a85bc3a2a3328e5c09b4",
+    "universalRouter": "0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b",
+    "permit2": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+    "pq": {
+      "hook": "0xa68b63f17fe7926812d8591247b5a718a7244aa0",
+      "fee": 3000,
+      "tickSpacing": 60
+    },
+    "guard": {
+      "hook": "0xd0cfd61eb5ef783f6d70ea83b58d2c87fc034b01",
+      "fee": 3000,
+      "tickSpacing": 60
+    },
+    "guardPosition": {
+      "owner": "0x9cdb3ebbe744a78916672c780ff009d9326340aa",
+      "tokenId": "41441"
+    }
+  },
   "stealth": {
     "$comment": "Post-quantum stealth payments (backend/chain/stealth.ts): ML-KEM-768 meta-addresses in ERC-6538's registry, announcements on ERC-5564's Announcer, both the standard deployments. fromBlock: where a wallet starts looking for announcements.",
     "fromBlock": 12075232
