@@ -16,7 +16,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: { app: 'app.html', xrpl: 'xrpl.html', connect: 'xrpl-connect.html', devnet: 'devnet.html', vault: 'vault.html', ethconnect: 'eth-connect.html', quantumsafe: 'quantum-safe.html' },
+      input: { app: 'app.html', xrpl: 'xrpl.html', connect: 'xrpl-connect.html', devnet: 'devnet.html', vault: 'vault.html', ethconnect: 'eth-connect.html', quantumsafe: 'quantum-safe.html', qday: 'q-day.html' },
     },
   },
   server: {

@@ -98,6 +98,7 @@ What breaks on the day elliptic-curve discrete logs become computable, and what 
 
 | You want to… | Opaque does it with… | Live on |
 |---|---|---|
+| **See Q-Day happen** | **The Q-Day simulator.** It plays the quantum computer on live Sepolia: an attacker is handed a wallet's ECDSA private key and tries to take everything. It takes the plain wallet, a protocol the wallet owns and a secp256k1 stealth payment; the chain refuses it the Q-Day vault, a protocol behind PQAdmin and opaque.eth. Then the owner moves it all with the FORS+C guard key alone. | [Sepolia](https://www.opaque.credit/sepolia/q-day) |
 | **Make any protocol quantum-safe** | **`PQAdmin`.** One button finds a contract's admin keys (an Ownable owner, an OpenZeppelin ProxyAdmin, an AccessControl admin role) and hands each to a contract that acts only on a FORS+C signature from your guard key. Upgrades, pauses and fee changes then need the hash-based key, and the guard key rotates without the admin changing. | [Sepolia](https://www.opaque.credit/sepolia/quantum-safe) |
 | **Protect any LP position** | **`PQGuardHook`**, a Uniswap v4 hook: a FORS+C second factor for any LP, MetaMask's included. A removal needs a signature that names its recipient, and the hook pays only that recipient. | Sepolia (Uniswap's v4) |
 | **Keep MetaMask** | **The Q-Day vault.** Your ECDSA key puts money in, and only your FORS+C key takes it out. | [Sepolia](https://www.opaque.credit/sepolia/vault) |
@@ -347,6 +348,7 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 | `scripts/e2e-sepolia-eth.ts` | 0.0015 ETH made private as 0.001 + 0.0005 notes in one operation, then sent privately. The payee holds exactly 0.0015 WETH, with no transfer from the wallet's address. |
 | `scripts/e2e-eth-connect.ts` | 19 checks: the extension's provider found by EIP-6963, connected, a mined transaction, a rejection returned as 4001 |
 | `scripts/e2e-vault.ts` | MetaMask's flow: register, deposit, the thief refused, a signed withdrawal |
+| `scripts/e2e-qday.ts` | The Q-Day simulator: a victim set up on Sepolia, seven attacks with its private key (the plain wallet, protocol and secp256k1 stealth payment taken; the vault, the PQAdmin protocol and opaque.eth refused), then the owner's rescue with the guard key, all checked on chain |
 | `scripts/e2e-admin.ts` | Any protocol: a demo protocol with two ECDSA admin keys, the button hands both to the `PQAdmin`, the cracked key is refused, and a signed fee change and upgrade land on chain |
 | `scripts/e2e-devnet-private.ts` | From an account with no ETH: deposit, then a private payment in which every signature is FORS+C |
 | `scripts/e2e-devnet-page.ts` | The devnet account's whole life: created with no signature, a FORS+C-only send, a v4 swap |

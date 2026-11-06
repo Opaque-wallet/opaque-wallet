@@ -98,6 +98,7 @@ Every note can leave its pool with all of Opaque's servers switched off.
 | 2 | **Send** 5 tUSDC privately to any address. | On Etherscan, the transaction that pays is sent by Opaque's settler, from the pool. Your account sent nothing. |
 | 3 | **Names**: claim `yourname.opaque.eth`. | One signature claims the name and publishes the ML-KEM-768 meta-address. Paying the name pays a one-time account. |
 | 4 | Open [/testnet/devnet](https://www.opaque.credit/testnet/devnet) and send. | On the devnet explorer: a type 0x06 frame transaction, VERIFY first, signed by FORS+C alone. |
+| 4½ | Open [/sepolia/q-day](https://www.opaque.credit/sepolia/q-day), press **Set up the victim**, then **Run Q-Day**. | The attacker holds the wallet's private key. It takes the plain wallet and the protocol it owned; the chain refuses it the vault, the protocol behind PQAdmin and opaque.eth, with the reason on each failed transaction. |
 | 5 | In **Privacy**, turn on **Opaque Unseen** (anon-rpc), or block opaque.credit's hosts and use **Leave without Opaque**. | The wallet keeps working, and the note still leaves its pool. |
 
 ## Prize tracks

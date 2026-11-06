@@ -38,7 +38,7 @@ try {
   // The network drop-down also offers what needs no switching.
   await page.click('#network-switch');
   const tools = await page.$$eval('#network-dialog [data-tool]', (as: Element[]) => as.map((a) => (a as HTMLAnchorElement).getAttribute('href')));
-  check(tools.length === 2 && tools[0]!.endsWith('sepolia/vault.html') && tools[1]!.endsWith('sepolia/quantum-safe.html'), `the network drop-down lists the Q-Day vault and the quantum-safe admin: ${tools.join(', ')}`);
+  check(tools.length === 3 && tools[0]!.endsWith('sepolia/vault.html') && tools[1]!.endsWith('sepolia/quantum-safe.html') && tools[2]!.endsWith('sepolia/q-day.html'), `the network drop-down lists the Q-Day vault, the quantum-safe admin and the Q-Day simulator: ${tools.join(', ')}`);
   await page.keyboard.press('Escape');
   check((await received()).includes('Nothing received yet.'), `a new account has received nothing: ${address}`);
 

@@ -77,6 +77,7 @@ export function networkPicker(button: HTMLButtonElement, current: WalletPage): v
   for (const [page, name, note] of [
     ['vault', 'Q-Day vault', 'Keep MetaMask: only a FORS+C key takes funds out'],
     ['quantum-safe', 'Quantum-safe admin', 'Any protocol\'s admin keys, moved to a FORS+C key'],
+    ['q-day', 'Q-Day simulator', 'Hand an attacker the private key, and watch what it can take'],
   ] as const) {
     const row = document.createElement('a');
     row.className = 'net-row';

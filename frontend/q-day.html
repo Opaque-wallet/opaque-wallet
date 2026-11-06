@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Q-Day Simulator</title>
+<meta name="description" content="Q-Day, simulated on live Sepolia: an attacker is handed a wallet's private key, as a quantum computer would recover it, and tries to take everything. What Opaque guards, the chain refuses.">
+<meta name="theme-color" content="#070608">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&family=Quicksand:wght@700&display=swap">
+<style>
+  :root {
+    --ink: #070608; --surface: #0d0b0f; --raised: #151117; --cream: #f4efe9; --muted: #aaa19b; --faint: #746b66;
+    --line: rgba(244, 239, 233, 0.12); --orange: #ff7a18; --soft: #ffa052; --tint: rgba(255, 122, 24, 0.12);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--ink); color: var(--cream); font: 400 16px/1.6 "Poppins", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--soft); }
+  .wrap { width: min(100%, 980px); margin: 0 auto; padding: 0 max(18px, env(safe-area-inset-left, 0px)) 0 max(18px, env(safe-area-inset-right, 0px)); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; border-bottom: 1px solid var(--line); }
+  header img { height: 28px; width: auto; display: block; }
+  header span { color: var(--muted); font-size: 14px; padding-left: 12px; border-left: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .hero { padding-block: 56px 28px; display: grid; gap: 16px; }
+  .eyebrow { margin: 0; color: var(--orange); font: 700 12px/1 "Quicksand", system-ui; letter-spacing: 0.16em; text-transform: uppercase; }
+  h1 { margin: 0; font: 800 clamp(40px, 6.4vw, 80px)/0.95 "Poppins", system-ui; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; }
+  h1 em { color: var(--orange); font-style: normal; }
+  .lede { margin: 0; max-width: 44em; color: var(--muted); font-size: 17px; }
+  .steps { display: grid; gap: 16px; padding-block: 12px 72px; }
+  .step { display: grid; gap: 14px; padding: 24px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); }
+  .step.done { border-color: rgba(255, 122, 24, 0.45); }
+  .step.locked { opacity: 0.5; pointer-events: none; }
+  .step h2 { margin: 0; display: flex; align-items: center; gap: 12px; font: 600 20px/1.2 "Poppins", system-ui; }
+  .step h2 i { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--raised); color: var(--orange); font: 700 13px "Quicksand", system-ui; font-style: normal; }
+  .step.done h2 i { background: var(--orange); color: var(--ink); }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: 600 15px "Poppins", system-ui; border-radius: 999px; padding: 0 22px; min-height: 48px; cursor: pointer; border: 1px solid var(--line); background: var(--raised); color: var(--cream); }
+  button.primary { background: var(--orange); border-color: var(--orange); color: var(--ink); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  input, select { min-height: 48px; padding: 0 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); color: var(--cream); font: 500 16px "Poppins", system-ui; min-width: 0; }
+  input:focus, select:focus { outline: none; border-color: var(--orange); }
+  .grow { flex: 1 1 200px; }
+  .words { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: w; }
+  .words li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--ink); font: 500 15px var(--mono); counter-increment: w; }
+  .key-words:not([hidden]) { display: grid; gap: 12px; }
+  .words li::before { content: counter(w) ". "; color: var(--faint); }
+  .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; font-size: 15px; }
+  .kv dt { color: var(--faint); } .kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+  .status { min-height: 1.4em; margin: 0; color: var(--soft); font-size: 14px; overflow-wrap: anywhere; }
+  .bal { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .bal div { padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--ink); }
+  .bal b { display: block; font: 700 24px "Poppins", system-ui; } .bal small { color: var(--muted); }
+  .note { padding: 14px 16px; border-radius: 14px; background: var(--tint); color: var(--cream); font-size: 14px; }
+  .attack { border-style: dashed; }
+  @media (max-width: 480px) { header span { display: none; } }
+  .keys { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .keys li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--ink); font-size: 15px; }
+  .keys li span { color: var(--muted); }
+  .keys li.yours span { color: var(--soft); }
+  .keys li.safe { border-color: rgba(255, 122, 24, 0.45); }
+  .keys li.safe span { color: var(--orange); font-weight: 600; }
+  .keys li.info { border-style: dashed; color: var(--muted); }
+  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .side { display: grid; gap: 10px; align-content: start; padding: 18px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+  .side.opaque { border-color: rgba(255, 122, 24, 0.45); }
+  .side h3 { margin: 0 0 4px; font: 600 17px/1.2 "Poppins", system-ui; }
+  .asset { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--ink); }
+  .asset b { font-weight: 600; } .asset small { grid-column: 1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .chip { grid-row: 1 / span 2; grid-column: 2; justify-self: end; font: 700 11px/1 "Quicksand", system-ui; letter-spacing: 0.12em; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .chip-taken { background: var(--cream); color: var(--ink); border-color: var(--cream); }
+  .chip-safe { background: var(--orange); color: var(--ink); border-color: var(--orange); }
+  .steps-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .steps-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; color: var(--faint); }
+  .steps-list li::before { content: "○"; color: var(--faint); }
+  .steps-list li[data-state="now"]::before { content: "◐"; color: var(--soft); }
+  .steps-list li[data-state="done"]::before { content: "●"; color: var(--orange); }
+  .steps-list li[data-state="done"], .steps-list li[data-state="now"] { color: var(--cream); }
+  .steps-list small { display: block; color: var(--muted); font-size: 13px; }
+  .crack { display: grid; gap: 8px; padding: 18px; border-radius: 18px; background: var(--ink); border: 1px dashed rgba(255, 122, 24, 0.5); }
+  .crack code { font: 500 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; overflow-wrap: anywhere; color: var(--cream); }
+  .crack .sk { color: var(--orange); }
+  .qbtn { font-size: 18px; min-height: 58px; padding: 0 32px; }
+  .hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .hit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--ink); }
+  .hit .chip { grid-row: auto; grid-column: auto; }
+  .hit small { display: block; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .score { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .score div { padding: 16px; border-radius: 16px; border: 1px solid var(--line); }
+  .score div.opaque { border-color: var(--orange); background: var(--tint); }
+  .score b { display: block; font: 800 22px/1.2 "Poppins", system-ui; margin-bottom: 4px; }
+  .rescue-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+  footer { padding-block: 28px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
+</style>
+</head>
+<body>
+<header class="wrap"><a class="brand" href="/" aria-label="opaque, home"><img src="./media/logo.png" alt="opaque" width="942" height="200"><span>Q-Day simulator</span></a><a href="/ethglobal-mumbai">What's this?</a></header>
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">Q-Day, simulated · Live on Sepolia</p>
+    <h1>Hand the attacker <em>the private key.</em></h1>
+    <p class="lede">A quantum computer does one thing to Ethereum: from the public key a wallet published with its first transaction, Shor's algorithm recovers the private key. We can't run it yet, so this page plays its result. The attacker gets the victim's ECDSA private key and tries to take everything. FORS+C keys have no such shortcut: their secret sits behind keccak, which no quantum algorithm inverts.</p>
+  </section>
+
+  <section class="steps">
+    <article class="step" id="s-setup">
+      <h2><i>1</i>The victim, before Q-Day</h2>
+      <p>One click makes a fresh MetaMask-style wallet and gives it what people really hold. Run it before you record; it takes about two minutes on Sepolia.</p>
+      <ul class="steps-list">
+        <li id="st-fund" data-state="wait"><span>A wallet with ETH and tUSDC<small>funded by Opaque's faucet</small></span></li>
+        <li id="st-guard" data-state="wait"><span>A FORS+C guard key<small>registered once, with an ordinary transaction</small></span></li>
+        <li id="st-vault" data-state="wait"><span>Money in the Q-Day vault<small>0.01 ETH and 50 tUSDC</small></span></li>
+        <li id="st-protocols" data-state="wait"><span>Two protocols<small>one owned by the wallet, one handed to its PQAdmin</small></span></li>
+        <li id="st-rescue" data-state="wait"><span>The owner's new wallet<small>a little gas, for after Q-Day</small></span></li>
+        <li id="st-stealth" data-state="wait"><span>Two stealth payments<small>secp256k1 (ERC-5564) and ML-KEM-768</small></span></li>
+      </ul>
+      <div class="row"><button class="primary" id="setup" type="button">Set up the victim</button><button id="again" type="button">Start over with a new victim</button></div>
+      <p class="status" id="setup-status" role="status"></p>
+    </article>
+
+    <article class="step" id="board" hidden>
+      <h2><i>2</i>What the victim holds</h2>
+      <div class="board">
+        <div class="side">
+          <h3>Without Opaque</h3>
+          <div class="asset"><b>The wallet</b><span class="chip" id="w-chip">READY</span><small id="w-bal">—</small></div>
+          <div class="asset"><b>A protocol it owns</b><span class="chip" id="p-chip">READY</span><small id="p-owner">—</small></div>
+          <div class="asset"><b>A secp256k1 stealth payment</b><span class="chip" id="st1-chip">READY</span><small id="st1">—</small></div>
+        </div>
+        <div class="side opaque">
+          <h3>With Opaque</h3>
+          <div class="asset"><b>The Q-Day vault</b><span class="chip" id="v-chip">READY</span><small id="v-bal">—</small></div>
+          <div class="asset"><b>A protocol behind PQAdmin</b><span class="chip" id="s-chip">READY</span><small id="s-owner">—</small></div>
+          <div class="asset"><b>opaque.eth</b><span class="chip" id="n-chip">READY</span><small>held by PQNameController, which obeys only FORS+C</small></div>
+          <div class="asset"><b>An ML-KEM-768 stealth payment</b><span class="chip" id="st2-chip">READY</span><small id="st2">—</small></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="step" id="s-qday">
+      <h2><i>3</i>Q-Day</h2>
+      <div class="crack" id="crack" hidden>
+        <code>public key, on chain since its first transaction: <span id="pk"></span></code>
+        <code>private key, as Shor's algorithm would return it: <span class="sk" id="sk"></span></code>
+      </div>
+      <div class="row"><button class="primary qbtn" id="qday" type="button" disabled>Run Q-Day</button></div>
+      <p class="status" id="qday-status" role="status"></p>
+      <ol class="hits" id="hits"></ol>
+      <div class="score" id="score" hidden>
+        <div><b>Taken</b>the wallet's ETH and tUSDC · the protocol it owned · who was paid secp256k1 stealth payments</div>
+        <div class="opaque"><b>Refused by the chain</b>the vault · the protocol behind PQAdmin · opaque.eth · ML-KEM stealth payments</div>
+      </div>
+    </article>
+
+    <article class="step" id="rescue-card" hidden>
+      <h2><i>4</i>The owner, after Q-Day</h2>
+      <p>The cracked key took the wallet. The guard key still decides everything Opaque protects: it signs in this page, and a brand-new wallet submits, because paying authorises nothing.</p>
+      <div class="row"><button class="primary" id="rescue" type="button">Move it all with the guard key</button></div>
+      <p class="status" id="rescue-status" role="status"></p>
+      <ul class="rescue-list" id="rescue-list"></ul>
+    </article>
+
+    <p class="note">Testnet only, with throwaway keys made in this page. The private key shown is the victim's own, generated here: that is the simulation. FORS+C keys never leave the page.</p>
+  </section>
+</main>
+<footer class="wrap">Opaque · Apache-2.0 · <a href="/sepolia/quantum-safe">Quantum-safe admin</a> · <a href="/sepolia/vault">The Q-Day vault</a></footer>
+<script type="module" src="./src/qday/qday.ts"></script>
+</body>
+</html>

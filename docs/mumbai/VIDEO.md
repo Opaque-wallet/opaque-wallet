@@ -77,21 +77,23 @@ What each part does, for reading before you record. The voiceover in part 2 cove
 
 **Say this, as one paragraph:**
 
-> On the devnet, a deposit. Frame zero verifies the FORS+C signature in 76,430 gas, under the 100,000 cap, and the account pays its own gas. From the wallet's menu, the quantum-safe page. This contract's beacon and three roles sit on my MetaMask. One button hands them to my PQAdmin. The cracked key is refused on all four; a signed upgrade goes through. On Uniswap's own v4, an ordinary wallet's swap reverts, and a guarded removal pays only its signed recipient. MetaMask deposits into the Q-Day vault. The cracked key is refused; only the FORS+C signature takes money out. I pay five dollars privately; the proof is built in my browser. It crosses three relays and arrives still sealed. Our attester verifies the proof and signs with its own FORS+C key. The pool pays. On Etherscan, the sender is our settler, not me. One signature claims a real ENSv2 name and publishes my ML-KEM key. Paying it pays a fresh one-time account. I block every Opaque server. The wallet still finds my notes through anon-rpc. It announces the exit, waits, reveals the note, and AES-128 on chain recomputes it. No permission needed, not even ours.
+> On the devnet, a deposit. Frame zero verifies the FORS+C signature in 76,430 gas, under the 100,000 cap, and the account pays its own gas. Now, Q-Day itself. This wallet holds money, a protocol, a vault and stealth payments. I press Q-Day. The page plays the quantum computer: from the public key on chain, it recovers the private key. With that key, the attacker takes the wallet and the protocol it owned, and unmasks the old stealth payment. Everything behind Opaque is refused by the chain. Then the owner signs with the FORS+C key alone, and moves the vault and runs the protocol from a new wallet. I pay five dollars privately; the proof is built in my browser. It crosses three relays and arrives still sealed. Our attester verifies it and signs with its own FORS+C key. The pool pays; on Etherscan, the sender is our settler, not me. On Uniswap's own v4, an ordinary wallet's swap into our pool reverts. One signature claims a real ENSv2 name; paying it pays a fresh one-time account. I block every Opaque server. The wallet still finds my notes through anon-rpc. It announces the exit, waits, reveals the note, and AES-128 on chain recomputes it. No permission needed, not even ours.
 
 **On screen:**
 
 | Time | Show |
 |---|---|
 | 2:36 | opaque.credit/testnet/devnet → Activity → a Deposit transaction → Explorer ↗ (frames view) |
-| 2:47 | Wallet's network drop-down → Keep what you have · Sepolia → Quantum-safe admin → Make a demo with roles → Make it quantum-safe → Take it back with the cracked key → Sign and upgrade |
-| 3:04 | GitHub: diagrams/uniswap.svg, then the terminal output of uniswap-sepolia.ts |
-| 3:13 | opaque.credit/sepolia/vault → Deposit → Withdraw with the cracked key → "Refused by the chain: BadSignature" |
-| 3:22 | Split screen. Left: opaque.credit/sepolia/app → Send 5 tUSDC. Right: railway logs --service opaque-sepolia |
-| 3:28 | Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" |
-| 3:33 | Right: "settler  opened payment…", then "ring proof verified in 2.0 s; attested with the attester's FORS+C key…" |
-| 3:39 | Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…". Click the link. |
-| 3:45 | Sepolia wallet → Names → claim yourname.opaque.eth → Send → type the name |
+| 2:47 | opaque.credit/sepolia/q-day (set up before recording): the board, Without Opaque and With Opaque |
+| 2:54 | Press Run Q-Day: the public key, then the private key scrolling in |
+| 3:02 | The attack log filling in: TAKEN, TAKEN, LINKED; REFUSED with BadSignature and OwnableUnauthorizedAccount; open one refused transaction on Etherscan |
+| 3:12 | Press Move it all with the guard key: the vault withdrawals and the fee change land |
+| 3:20 | Split screen. Left: opaque.credit/sepolia/app → Send 5 tUSDC. Right: railway logs --service opaque-sepolia |
+| 3:25 | Right: "mesh exit  a payment came out of the mesh: 35 chunks through three relays…" |
+| 3:30 | Right: "settler … ring proof verified in 2.0 s; attested with the attester's FORS+C key…" |
+| 3:35 | Right: "egress  sent pool.spend: …etherscan…", then "chain  settled in block…". Click the link. |
+| 3:40 | The terminal output of uniswap-sepolia.ts: "an ECDSA wallet's swap … reverts with NotPostQuantum" |
+| 3:47 | Sepolia wallet → Names → claim yourname.opaque.eth → Send → type the name |
 | 3:55 | DevTools → Network → block *opaque* and *railway.app* → reload |
 | 3:58 | Privacy → Leave without Opaque → Find my notes, without Opaque |
 | 4:03 | The withdrawal step (cut the 300-second wait in the edit) |
@@ -118,32 +120,27 @@ What each part does, for reading before you record. The voiceover in part 2 cove
     - created already;
     - devnet ETH from **Get devnet ETH**;
     - pqUSDC deposited, so a Deposit transaction with eight frames is in Activity for 3.1.
-  - **MetaMask:** on Sepolia, with a little ETH, for 3.2 and 3.4. At Sepolia's fees, 0.01 ETH covers all three many times over.
-    - For 3.2, either make the guard key and the demo with roles beforehand and record from **Find its admin keys**, or record straight through and cut the waits. The roles demo hands over in up to eight MetaMask transactions (one creates your PQAdmin if this address has none yet, one hands over the beacon, two for each of the three roles); cut between them.
-    - **Copy the 12 words** when you make the guard key, and keep them: they're the only way to act as the contract's admin, and the page never offers a new key over a registered one.
-    - The vault and the quantum-safe page share one guard key per MetaMask address.
+  - **The Q-Day simulator, for 3.2:** open `/sepolia/q-day` and press **Set up the victim** a few minutes before recording. It needs nothing from you: the page makes its own wallets, and Opaque's faucet funds them. Record from the board; **Start over with a new victim** resets it for another take.
   - **A name:** claim it before recording, or have a fresh label ready to claim on camera.
 - **The exit.** It waits 300 s between announcing and withdrawing:
   - either announce the exit before recording and show the withdrawal;
   - or record straight through and cut the wait.
-- **Uniswap terminal output.** For 3.3, run `OPAQUE_NETWORK=sepolia node --use-system-ca ethereum/uniswap/uniswap-sepolia.ts` (in `backend/`) beforehand and keep the output on screen.
+- **Uniswap terminal output.** For 3.4, run `OPAQUE_NETWORK=sepolia node --use-system-ca ethereum/uniswap/uniswap-sepolia.ts` (in `backend/`) beforehand and keep the output on screen.
 - **Tabs, open in order:**
   1. the Mumbai page;
   2. the README on GitHub;
   3. the devnet wallet;
   4. the devnet explorer;
-  5. `/sepolia/quantum-safe`;
+  5. `/sepolia/q-day`, set up;
   6. `diagrams/uniswap.svg` and the terminal;
-  7. `/sepolia/vault`;
-  8. `/connect-opaque`;
   9. the Sepolia wallet;
   10. Sepolia Etherscan.
-- **The backend's logs, for 3.5.**
+- **The backend's logs, for 3.3.**
   - Deploy the services first, so they print one line per payment step (the user's step, below).
   - Then, in a terminal beside the browser: `railway logs --service opaque-sepolia`. Or open the Railway dashboard → the `opaque-sepolia` service → **Logs**.
   - Make the font large. The lines to look for start with `mesh exit`, `settler`, `egress` and `chain`.
   - The devnet's stack prints the same lines: `railway logs --service opaque-eth-devnet`.
-- **DevTools request blocking** set up in advance for 3.7, but switched off until that beat.
+- **DevTools request blocking** set up in advance for 3.6, but switched off until that beat.
 - **Make sure each page loads:** the devnet stack at `opaque-eth-devnet-production.up.railway.app`, the Sepolia stack at `opaque-sepolia-production.up.railway.app`.
 - **Screen:** browser zoom at 110–125%, notifications off, and a clean profile with no wallet extensions on screen except MetaMask and Opaque.
 
