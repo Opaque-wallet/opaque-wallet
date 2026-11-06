@@ -21,6 +21,8 @@ import { paymentDeadline } from './lib/payment-deadline.js';
 import { runPaymentLanes } from './lib/payment-lanes.js';
 import { backupTransport, hasBrowserAccount, startWallet, type WalletRuntime } from './lib/runtime.js';
 import { addressOfKey, arcAddressOf, arcState, arcStorageOf, deployerKey, saveArcState } from './lib/arc-keys.ts';
+import { withoutOpaque, type WithoutOpaque } from './lib/without-opaque.ts';
+import { exitablePools } from '../../backend/chain/ring-exit.ts';
 import { keyStoreName } from './lib/backup.ts';
 import { asHexBytes, CREATE2_FACTORY, deployment as deployOf, MAX_INITCODE, newSalt, riskOfCall } from './lib/contracts.ts';
 import { accountKeys, accountLabel, activeAccount, saveWalletState, storedPhrase, walletState, type AccountKeys } from './lib/wallet-keys.ts';
@@ -997,6 +999,65 @@ function setupSubname(): void {
   })());
 }
 
+// ── your way out (exitable pools) ─────────────────────────────────────────
+// A note leaves its pool alone: lib/without-opaque.ts, through anon-rpc, signed by the
+// account's key, with no server of Opaque's asked anything.
+
+let exitStarted = false;
+function offerExit(account: AccountKeys, why?: string): void {
+  el('exit-card').hidden = false;
+  if (why !== undefined) el('exit-copy').textContent = why;
+  if (exitStarted) return;
+  exitStarted = true;
+  const address = arcAddressOf(account);
+  let api: WithoutOpaque | undefined;
+  const status = (text: string) => setStatus('exit-status', text);
+  const render = async (): Promise<void> => {
+    const notes = await api!.notes();
+    const now = Math.floor(Date.now() / 1000);
+    const rows = notes.filter((n) => n.state !== 'spent').map((n) => {
+      const row = document.createElement('div');
+      row.className = 'exit-row';
+      const left = n.payableAt === undefined ? 0 : n.payableAt - now;
+      const what = { held: 'In its pool', waiting: `Exit announced: ready in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`, payable: 'Ready to withdraw', spent: 'Withdrawn' }[n.state];
+      row.innerHTML = '<span><b></b><small></small></span>';
+      row.querySelector('b')!.textContent = `${n.pool.denomination / 1e6} tUSDC note`;
+      row.querySelector('small')!.textContent = what;
+      if (n.state === 'held' || n.state === 'payable') {
+        const go = Object.assign(document.createElement('button'), { className: n.state === 'held' ? 'secondary' : 'primary', type: 'button', textContent: n.state === 'held' ? 'Start exit' : 'Withdraw to this wallet' });
+        go.dataset['note'] = n.id;
+        go.addEventListener('click', () => void (async () => {
+          go.disabled = true;
+          status(n.state === 'held' ? 'Announcing the exit: this wallet\'s key signs it, and it goes to the bundler through anon-rpc…' : 'Withdrawing: the pool checks the note\'s secret on chain and pays this wallet…');
+          try {
+            const tx = n.state === 'held' ? await api!.announce(n) : await api!.withdraw(n);
+            status(n.state === 'held' ? `Exit announced in ${tx}. Withdraw once the pool's delay has passed.` : `Withdrawn in ${tx}: ${n.pool.denomination / 1e6} tUSDC at this wallet's address.`);
+          } catch (error) { status(`Not done: ${gasWhy(error)}`); go.disabled = false; }
+          await render().catch(() => undefined);
+        })());
+        row.append(go);
+      }
+      return row;
+    });
+    el('exit-notes').replaceChildren(...rows);
+    if (rows.length === 0) status(notes.length === 0 ? 'No notes in an exitable pool on this account.' : 'Every note has left its pool.');
+  };
+  el('exit-find').addEventListener('click', () => void (async () => {
+    el<HTMLButtonElement>('exit-find').disabled = true;
+    status('Starting anon-rpc (the Nox mixnet) and reading your notes from the chain through it…');
+    try {
+      api ??= await withoutOpaque(account, address);
+      await render();
+      if (el('exit-status').textContent?.startsWith('Starting')) status('');
+      // Waiting rows count down; payable ones appear by themselves.
+      setInterval(() => void render().catch(() => undefined), 15_000);
+    } catch (error) {
+      status(`Could not read your notes: ${(error as Error).message}`);
+      el<HTMLButtonElement>('exit-find').disabled = false;
+    }
+  })());
+}
+
 // ── ETH, where gas is ETH (Sepolia) ─────────────────────────────────────
 // Public, at the account's address: it pays gas, and Send can move it as an
 // ordinary transfer the account's FORS+C key signs. Only USDC goes privately.
@@ -1568,6 +1629,10 @@ async function init(): Promise<void> {
     picker.addEventListener('click', (e) => { if (e.target === picker) picker.close(); });
     el('receive-eth').hidden = false;
   }
+  if (account !== 'browser' && exitablePools().length > 0) {
+    el('exit-link-wrap').hidden = false;
+    el('exit-link').addEventListener('click', () => { offerExit(account as AccountKeys); showView('home'); el('exit-card').scrollIntoView({ behavior: 'smooth' }); });
+  }
   if (NETWORK === 'sepolia') {
     el<HTMLInputElement>('recipient').placeholder = '0x… or an ENS name, like opaque.eth';
     el('recipient').nextElementSibling!.textContent = 'A Sepolia address or an ENS name.';
@@ -1583,6 +1648,8 @@ async function init(): Promise<void> {
     await rt.open();
   } catch (error) {
     showBootError(`Could not start: ${(error as Error).message}`);
+    // Opaque's servers are not answering: the notes still leave their pools, without them.
+    if (account !== 'browser') offerExit(account, `Opaque's servers are not answering, so private payments are paused. Your notes are still yours: each one can leave its pool on its own, through EF's anon-rpc to a public RPC and bundler, signed by this wallet's post-quantum key. Two steps, a few minutes apart; the note you take out is no longer private.`);
     return;
   }
   try { await rt.app.walletState(); } catch (error) {

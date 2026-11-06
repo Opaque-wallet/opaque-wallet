@@ -35,32 +35,32 @@
     },
     "singleNotePqVerifier": null,
     "attestedRingVerifier": {
-      "address": "0xa36268c8c95c10be43b087d3bbc4c7e611335e7c",
-      "deployedAtBlock": 12072931
+      "address": "0x5da782e6666d6f3a94d5e8d866dcc9c332534ae7",
+      "deployedAtBlock": 12075078
     },
     "attestedRingVerifier2": {
-      "address": "0x5789049537837382ebd33d53cbc4be0a3ae39d8e",
-      "deployedAtBlock": 12072933
+      "address": "0xf8ec5fdb455a7598592edae196e85340507aab25",
+      "deployedAtBlock": 12075095
     },
     "attestedRingVerifier5": {
-      "address": "0x9d0fc82bdb1cc094f1832cc115cbfa092b6626d8",
-      "deployedAtBlock": 12072935
+      "address": "0xb0478e87ba1399408161814e931732e27ccb8bb8",
+      "deployedAtBlock": 12075099
     },
     "attestedRingVerifier10": {
-      "address": "0x598c3f88ab0ac981f6a0db76bb418b6199c2d00c",
-      "deployedAtBlock": 12072937
+      "address": "0xd0dbf6bb9991e467e506e0f63f92e7d09d9b1763",
+      "deployedAtBlock": 12075102
     },
     "attestedRingVerifier20": {
-      "address": "0xe3cfaa9896a2a1c5deda3f5318b27b39047fd289",
-      "deployedAtBlock": 12072939
+      "address": "0x97bd2d596e2276a97659200c159802745a3afb47",
+      "deployedAtBlock": 12075105
     },
     "attestedRingVerifier50": {
-      "address": "0x953e738166c09190661c0d01574c68b04ca2101a",
-      "deployedAtBlock": 12072941
+      "address": "0x12a33e3b7a60dc8f2d11cfe928623c63dd60e529",
+      "deployedAtBlock": 12075109
     },
     "attestedRingVerifier100": {
-      "address": "0x6beccf3dbaf670d796913a4d6a3a9607214e3e5b",
-      "deployedAtBlock": 12072948
+      "address": "0xfb73991f97cdde6bd67e51e82f6b6ccf3041e56a",
+      "deployedAtBlock": 12075112
     },
     "relayDirectory": {
       "address": "0xcaec9e595377103731d04d34bbce7da215f3725f",
@@ -86,6 +86,133 @@
     "attester": "0x00385d7592000211587c6139317c069d51b1e3ce"
   },
   "pools": [
+    {
+      "address": "0xf5408a8e98773ed5fded3decb805bd6cb10b8668",
+      "denomination": 1000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier",
+      "deployedAtBlock": 12075079,
+      "decoys": 8,
+      "exit": {
+        "attested": "0xb13b13aa7d817810352c0c416d9b0e67864ce465",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0x73066fbfbbd97781d8a409017dd7fdfad0e3b268",
+      "denomination": 2000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier2",
+      "deployedAtBlock": 12075096,
+      "decoys": 8,
+      "exit": {
+        "attested": "0xb5d07b63eb472b11cfe9e03b63b07a253733d0df",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0x5b0287f1b5b57dc50769551a9511faeaeb475d42",
+      "denomination": 5000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier5",
+      "deployedAtBlock": 12075100,
+      "decoys": 8,
+      "exit": {
+        "attested": "0x90458336192929413945080e374f3957946633a7",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0xb812a927daa8b22983737d689d1f3af649530ed9",
+      "denomination": 10000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier10",
+      "deployedAtBlock": 12075103,
+      "decoys": 8,
+      "exit": {
+        "attested": "0xf45f4defd283bba6b65268ef585ea0a09e387e00",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0x9905c992d43c531b0973d25209877f448fd660cf",
+      "denomination": 20000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier20",
+      "deployedAtBlock": 12075106,
+      "decoys": 8,
+      "exit": {
+        "attested": "0x789dc821bdd0a2e8b11512b40abcf0db2116d6fe",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0xa1b56dbc554bef4e9d6caecf0346a97f3102ff8b",
+      "denomination": 50000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier50",
+      "deployedAtBlock": 12075110,
+      "decoys": 8,
+      "exit": {
+        "attested": "0x1b2db840b290e6f1a7880ce761c99294cdf38601",
+        "delaySeconds": 300
+      }
+    },
+    {
+      "address": "0x839dde4a593a4f669540efc8d699ae66118fc25c",
+      "denomination": 100000000,
+      "proofMode": "RING_8",
+      "verifier": "attestedRingVerifier100",
+      "deployedAtBlock": 12075114,
+      "decoys": 8,
+      "exit": {
+        "attested": "0x11976f09aa7fecb7b82e3c0c765f7b9f5d030397",
+        "delaySeconds": 300
+      }
+    }
+  ],
+  "erc4337": {
+    "$comment": "All three EntryPoints have code on Sepolia, and Pimlico's keyless endpoint serves them (eth_supportedEntryPoints, chain 0xaa36a7, checked 2026-11-05).",
+    "entryPoints": {
+      "v0.6": "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",
+      "v0.7": "0x0000000071727de22e5e9d8baf0edac6f37da032",
+      "v0.8": "0x4337084d9e255ff0702461cf8895ce9e3b5ff108"
+    },
+    "preferredEntryPoint": "v0.7",
+    "bundlerUrl": "https://public.pimlico.io/v2/11155111/rpc",
+    "bundlerApiKeyEnv": "PIMLICO_API_KEY"
+  },
+  "mesh": {
+    "$comment": "Sepolia's own relay directory root, from a master Arc never uses. Filled in by `node scripts/new-mesh-master.ts eth-sepolia` (in backend/), which keeps the master in backend/.stack/eth-sepolia/mesh-master.",
+    "genesis": 1793924361,
+    "trustRoot": {
+      "signerCommitment": "0x48756a9a3b551c7bcea0c5ecb6a229a27a0ae0a1d948fa68b777c91024603a14",
+      "minVersion": 0
+    }
+  },
+  "services": {
+    "$comment": "Endpoints, not keys. Each is null until that service is hosted.",
+    "graphUrl": null,
+    "meshExitUrl": "https://opaque-sepolia-production.up.railway.app/v1/mesh",
+    "releaseEgressUrl": null,
+    "creTriggerUrl": null,
+    "relayDirectoryUrl": null
+  },
+  "swap": {
+    "$comment": "LI.FI has no testnets, so there is no router here yet. Uniswap v4's Universal Router takes its place in docs/mumbai/PLAN.md T8.",
+    "router": null,
+    "tokens": []
+  },
+  "ens": {
+    "$comment": "ENSv2 on Sepolia: ENS's own contracts as docs.ens.domains lists them (the ENS app's set; code read on chain), and ours. opaque.eth is held by PQNameController, which acts only on a FORS+C signature (docs/mumbai/PLAN.md T7).",
+    "ethRegistry": "0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4",
+    "universalResolverV2": "0x24e1d8e068620b647ca097f961a61055f4f42d72",
+    "pqKeyRegistry": "0x8b47560d32bcda788ab5233ab2bda55204cacca3",
+    "controller": "0x4d4df91933bb30640908f5cd4a42e2cac546c131",
+    "resolver": "0x9320d93186255e122214bd22270d168d5d8f676f",
+    "names": "0x01f3419d2c8747f6b72032caf21a02fd0db44a28"
+  },
+  "retiredPools": [
     {
       "address": "0xac3944e5f40eeae02a216008dfc4939827b75fd9",
       "denomination": 1000000,
@@ -142,46 +269,5 @@
       "deployedAtBlock": 12072949,
       "decoys": 8
     }
-  ],
-  "erc4337": {
-    "$comment": "All three EntryPoints have code on Sepolia, and Pimlico's keyless endpoint serves them (eth_supportedEntryPoints, chain 0xaa36a7, checked 2026-11-05).",
-    "entryPoints": {
-      "v0.6": "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",
-      "v0.7": "0x0000000071727de22e5e9d8baf0edac6f37da032",
-      "v0.8": "0x4337084d9e255ff0702461cf8895ce9e3b5ff108"
-    },
-    "preferredEntryPoint": "v0.7",
-    "bundlerUrl": "https://public.pimlico.io/v2/11155111/rpc",
-    "bundlerApiKeyEnv": "PIMLICO_API_KEY"
-  },
-  "mesh": {
-    "$comment": "Sepolia's own relay directory root, from a master Arc never uses. Filled in by `node scripts/new-mesh-master.ts eth-sepolia` (in backend/), which keeps the master in backend/.stack/eth-sepolia/mesh-master.",
-    "genesis": 1793924361,
-    "trustRoot": {
-      "signerCommitment": "0x48756a9a3b551c7bcea0c5ecb6a229a27a0ae0a1d948fa68b777c91024603a14",
-      "minVersion": 0
-    }
-  },
-  "services": {
-    "$comment": "Endpoints, not keys. Each is null until that service is hosted.",
-    "graphUrl": null,
-    "meshExitUrl": "https://opaque-sepolia-production.up.railway.app/v1/mesh",
-    "releaseEgressUrl": null,
-    "creTriggerUrl": null,
-    "relayDirectoryUrl": null
-  },
-  "swap": {
-    "$comment": "LI.FI has no testnets, so there is no router here yet. Uniswap v4's Universal Router takes its place in docs/mumbai/PLAN.md T8.",
-    "router": null,
-    "tokens": []
-  },
-  "ens": {
-    "$comment": "ENSv2 on Sepolia: ENS's own contracts as docs.ens.domains lists them (the ENS app's set; code read on chain), and ours. opaque.eth is held by PQNameController, which acts only on a FORS+C signature (docs/mumbai/PLAN.md T7).",
-    "ethRegistry": "0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4",
-    "universalResolverV2": "0x24e1d8e068620b647ca097f961a61055f4f42d72",
-    "pqKeyRegistry": "0x8b47560d32bcda788ab5233ab2bda55204cacca3",
-    "controller": "0x4d4df91933bb30640908f5cd4a42e2cac546c131",
-    "resolver": "0x9320d93186255e122214bd22270d168d5d8f676f",
-    "names": "0x01f3419d2c8747f6b72032caf21a02fd0db44a28"
-  }
+  ]
 }

@@ -56,13 +56,17 @@ const d = JSON.parse(readFileSync(FILE, 'utf8'));
 const save = () => writeFileSync(FILE, `${JSON.stringify(d, null, 2)}\n`);
 const tx = (hash: Hex) => `https://sepolia.etherscan.io/tx/${hash}`;
 
-async function deploy(name: string, args: readonly unknown[] = [], out = 'out', value?: bigint): Promise<{ address: Address; block: number }> {
+async function deploy(name: string, args: readonly unknown[] = [], out = 'out', value?: bigint, nonce?: number, gas?: bigint): Promise<{ address: Address; block: number }> {
   const a = artifact(name, out);
-  const hash = await wallet.deployContract({ abi: a.abi, bytecode: a.bytecode.object, args, ...(value === undefined ? {} : { value }) } as never);
+  const hash = await wallet.deployContract({ abi: a.abi, bytecode: a.bytecode.object, args, ...(value === undefined ? {} : { value }), ...(nonce === undefined ? {} : { nonce }), ...(gas === undefined ? {} : { gas }) } as never);
   const r = await pub.waitForTransactionReceipt({ hash });
   if (r.status !== 'success') throw new Error(`${name} reverted: ${tx(hash)}`);
   console.log(`${name} ${r.contractAddress}: ${tx(hash)}`);
-  return { address: r.contractAddress!.toLowerCase() as Address, block: Number(r.blockNumber) };
+  const address = r.contractAddress!.toLowerCase() as Address;
+  // The public RPC is load-balanced: a node a block behind has no code here yet, and a
+  // constructor that reads this contract would revert in its gas estimate. Wait it out.
+  for (let i = 0; i < 40 && ((await pub.getCode({ address }).catch(() => undefined)) ?? '0x') === '0x'; i++) await new Promise((res) => setTimeout(res, 3_000));
+  return { address, block: Number(r.blockNumber) };
 }
 async function send(to: Address, data: Hex, what: string, value?: bigint, gas?: bigint): Promise<void> {
   const hash = await wallet.sendTransaction({ to, data, ...(value === undefined ? {} : { value }), ...(gas === undefined ? {} : { gas }) } as never);
@@ -132,19 +136,34 @@ if (d.accounts.attester === null) {
   console.log(`attester ${d.accounts.attester} registered its FORS key: ${tx(hash)}`);
 }
 
-// 4. A verifier and pool per size. The pool's address follows from the deployer's nonce.
+// 4. A verifier and pool per size, each with its own way out: ExitableRingVerifier takes
+//    the attester's private path unchanged (an AttestedRingVerifier) and adds an exit any
+//    note's owner can take alone, after EXIT_DELAY. The verifiers bind the pool before it
+//    exists: its address follows from the deployer's nonce. Pools from before the exit
+//    (6 November) move to `retiredPools`; their notes stay spendable through the attester.
+const EXIT_DELAY = 300n; // Sepolia: five minutes, so the whole exit fits a demo. A real pool would wait days.
+const exitable = (p: { exit?: unknown }) => p.exit !== undefined;
+if (!d.pools.every(exitable)) {
+  d.retiredPools = [...(d.retiredPools ?? []), ...d.pools.filter((p: { exit?: unknown }) => !exitable(p))];
+  d.pools = d.pools.filter(exitable);
+  save();
+}
 for (const size of SIZES) {
   const denomination = size * 1_000_000;
   if (d.pools.some((p: { denomination: number }) => p.denomination === denomination)) continue;
+  // Explicit nonces: the pool's address is predicted from them, so no stale read may move it
+  // (a nonce a stale node handed out already is refused, which stops here before anything lands).
   const nonce = await pub.getTransactionCount({ address: deployer.address, blockTag: 'pending' });
-  const predicted = getContractAddress({ from: deployer.address, nonce: BigInt(nonce + 1) }).toLowerCase() as Address;
+  const predicted = getContractAddress({ from: deployer.address, nonce: BigInt(nonce + 2) }).toLowerCase() as Address;
   const id = poolId({ chainId: BigInt(sepolia.id), pool: predicted, denomination } as never);
-  const v = await deploy('AttestedRingVerifier', [d.contracts.pqKeyRegistry.address, d.accounts.attester, id, BigInt(denomination)]);
-  const p = await deploy('PrivatePool', [d.tokens.usdc.address, BigInt(denomination), v.address]);
+  const a = await deploy('AttestedRingVerifier', [d.contracts.pqKeyRegistry.address, d.accounts.attester, id, BigInt(denomination)], 'out', undefined, nonce);
+  const v = await deploy('ExitableRingVerifier', [a.address, predicted, EXIT_DELAY], 'out', undefined, nonce + 1, 12_000_000n); // no estimate (a stale node reverts it); code costs ~7M gas here
+  const p = await deploy('PrivatePool', [d.tokens.usdc.address, BigInt(denomination), v.address], 'out', undefined, nonce + 2);
   if (p.address !== predicted) throw new Error(`the ${size} pool landed at ${p.address}, not ${predicted}`);
   contract(verifierName(size), v.address, v.block);
-  d.pools.push({ address: p.address, denomination, proofMode: 'RING_8', verifier: verifierName(size), deployedAtBlock: p.block, decoys: 0 });
+  d.pools.push({ address: p.address, denomination, proofMode: 'RING_8', verifier: verifierName(size), deployedAtBlock: p.block, decoys: 0, exit: { attested: a.address, delaySeconds: Number(EXIT_DELAY) } });
   save();
+  console.log(`${size} tUSDC: pool ${p.address}, exitable verifier ${v.address}`);
 }
 
 // 5. Eight decoys a ring, made as real notes are (deriveCommitment), their secrets dropped.

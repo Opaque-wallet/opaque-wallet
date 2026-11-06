@@ -3,7 +3,9 @@
 // faucet, a deposit its FORS key signs (an ERC-4337 operation, made into notes by
 // itself), a private payment through the mesh, and the recipient's tUSDC on chain;
 // the account's ETH listed and sent publicly from Send; a name.opaque.eth claimed
-// by the wallet, resolved by ENS, paid by name and released;
+// by the wallet, resolved by ENS (through anon-rpc), paid by name and released; then
+// every Opaque server refused, and a note leaving its pool anyway (announce, wait the
+// pool's delay, withdraw) through anon-rpc and a public bundler;
 // then opaque.eth claimed from the page with the stack's claim code, pointed at the
 // wallet by a FORS+C signature, and paid by name. The name goes back to the stack's
 // key at the end (two rotations the test wallet's name keys sign), so the claim
@@ -23,7 +25,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 
 import { chromium } from '../../packages/pq-wallet/node_modules/playwright/index.mjs';
-import { ARC_READY, createWallet } from './wallet-page.ts';
+import { ARC_READY, createWallet, unlockIfAsked } from './wallet-page.ts';
 import { commitmentOf, masterKey, REGISTRY_ABI, CONTROLLER_ABI, signExecute, signRotation } from '../ethereum/ens.ts';
 import { accountKeys, stream } from '../../frontend/src/lib/wallet-keys.ts';
 import { dnsEncode, ETHEREUM_COIN, resolveName } from '../../frontend/src/ethereum/ens-name.ts';
@@ -215,6 +217,38 @@ try {
     .catch(async (e: Error) => { throw new Error(`${e.message}; Send says: ${await page.textContent('#send-status')}`); });
   check(true, 'paid opaque.eth by name: 5 tUSDC from the pool to the address ENS names');
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
+
+  // ── Without Opaque: every server of ours refuses; a note still leaves its pool ──
+  const OURS = new URL(d.services.meshExitUrl).host;
+  let refused = 0;
+  const direct: string[] = [];
+  await page.route(`**://${OURS}/**`, (route: any) => { refused++; return route.abort(); });
+  page.on('request', (r: any) => { if (/publicnode|pimlico/.test(r.url())) direct.push(`${r.url()} ${(r.postData() ?? '').slice(0, 160)}`); });
+  await page.reload();
+  await unlockIfAsked(page);
+  await page.waitForSelector('#exit-card', { state: 'visible', timeout: 120_000 });
+  check(refused > 0, `Opaque's servers refuse the page (${refused} requests): it offers the way out instead of a dead end`);
+  await page.click('#exit-find');
+  await page.waitForFunction(() => document.querySelectorAll('#exit-notes .exit-row').length > 0 || /^(No notes|Could not)/.test(document.getElementById('exit-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
+  const rows = await page.$$eval('#exit-notes .exit-row b', (bs: Element[]) => bs.map((b) => b.textContent ?? ''));
+  check(rows.length > 0, `the notes, read from the chain through anon-rpc alone: ${rows.join(', ')} (${await page.textContent('#exit-status')})`);
+  const noteId = (await page.getAttribute('#exit-notes .exit-row button', 'data-note'))!;
+  const exiting = await page.$eval(`#exit-notes button[data-note="${noteId}"]`, (b: Element) => b.closest('.exit-row')!.querySelector('b')!.textContent ?? '');
+  const amount = BigInt(parseInt(exiting, 10)) * 1_000_000n;
+  await page.click(`#exit-notes button[data-note="${noteId}"]`);
+  await page.waitForFunction(() => /^(Exit announced|Not done)/.test(document.getElementById('exit-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
+  check((await page.textContent('#exit-status'))?.startsWith('Exit announced'), `${exiting}: ${await page.textContent('#exit-status')}`);
+  const exitFrom = await pub.getBlockNumber();
+  // The pool's delay (five minutes on Sepolia), then the withdrawal.
+  await page.waitForSelector(`#exit-notes button.primary[data-note="${noteId}"]`, { timeout: 600_000 });
+  await page.click(`#exit-notes button.primary[data-note="${noteId}"]`);
+  await page.waitForFunction(() => /^(Withdrawn|Not done)/.test(document.getElementById('exit-status')?.textContent ?? ''), undefined, { timeout: 300_000 });
+  check((await page.textContent('#exit-status'))?.startsWith('Withdrawn'), `${await page.textContent('#exit-status')}`);
+  await until('the exit to pay', async () => (await pub.getLogs({ address: d.tokens.usdc.address, event: parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])[0], args: { to: account }, fromBlock: exitFrom })).some((l) => l.args.value === amount), 180_000);
+  check(true, `${exiting} left its pool with no attester, relay or server of Opaque's: ${account} received it`);
+  // Only the harness's bootstrap (reading the network's specifier, once) goes straight to an RPC; every account read and UserOperation went through the mixnet.
+  const named = direct.filter((r) => r.toLowerCase().includes(account.slice(2).toLowerCase()));
+  check(named.length === 0, `no RPC or bundler saw this account from this browser (${direct.length} direct requests, none naming it)${named.length ? `: ${named[0]}` : ''}`);
 } finally {
   await browser.close();
   // A failed hand-back must not hide why the test failed; HAND_BACK=1 finishes it.

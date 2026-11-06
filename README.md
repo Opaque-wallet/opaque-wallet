@@ -11,9 +11,54 @@ Keys are post-quantum: hash-based (FORS+C) on Ethereum and Arc, single-use on th
 |---|---|---|
 | Arc | Live on mainnet (not yet audited) and testnet | The rest of this README |
 | XRP Ledger | Live on testnet: XRP, RLUSD and USDC, built on Batch and Credentials | [docs/xrpl.md](docs/xrpl.md) |
-| Ethereum | In progress: Sepolia, and an EIP-8141 devnet | [docs/mumbai/PLAN.md](docs/mumbai/PLAN.md) |
+| Ethereum | Live on Sepolia (private payments, `name.opaque.eth`, an exit that needs nobody) and on an EIP-8141 devnet | [docs/mumbai/PLAN.md](docs/mumbai/PLAN.md) |
 
-To run the whole site locally: `cd frontend && npm run preview:site`, then open http://localhost:5174. To run the XRPL wallet against a local stack: start `cd backend && npm run xrpl:stack`, then `cd frontend && npm run dev`, and open `/xrpl.html`.
+To run the whole site locally: `cd frontend && npm install && npm run preview:site`, then open http://localhost:5174 (the Sepolia wallet is at `/sepolia/app`). To run the XRPL wallet against a local stack: start `cd backend && npm run xrpl:stack`, then `cd frontend && npm run dev`, and open `/xrpl.html`. Contracts: `cd contracts && forge test`.
+
+## CROPS
+
+**New in this hackathon: C. Your money leaves without us.**
+- **Before:** every withdrawal from an Opaque pool needed Opaque's attester to sign it, and every read and transaction crossed Opaque's relays and exit. If Opaque went away, or refused you, your notes were stuck in the pool.
+- **Now (Sepolia):** each pool's verifier ([`ExitableRingVerifier`](contracts/src/opaque/pool/ExitableRingVerifier.sol)) keeps the private path unchanged and adds an exit that needs nobody:
+  - the wallet announces the note's nullifier, bound to its payout;
+  - after the pool's delay (5 minutes on Sepolia, days for a real pool), it reveals the note's secret;
+  - the contract recomputes the note's commitment and nullifier with AES-128 on chain ([`AES128.sol`](contracts/src/opaque/lib/AES128.sol), checked byte for byte against the wallet's own derivation) and pays.
+- **The wallet does this with every Opaque server unreachable.** Reads and UserOperations go to a public RPC and the public bundler through EF's [anon-rpc](https://ethereum.github.io/anon-rpc/) (the Nox mixnet), signed by the account's own FORS+C key ([`without-opaque.ts`](frontend/src/lib/without-opaque.ts)).
+- **The proof:** [`backend/scripts/e2e-sepolia.ts`](backend/scripts/e2e-sepolia.ts) blocks every Opaque host and still takes a note out of its pool, end to end.
+
+**C: what users depend on, and what happens without it.**
+- **What we run:** the site (opaque.credit; also the extension, and buildable from this repo), the relay mesh and its exit, the attester and the settler (Railway), and the test faucet.
+- **If those go away or refuse you:**
+  - private payments stop;
+  - your notes still leave their pools through the exit above, with no server of ours;
+  - the Arc and XRPL pools have no such exit yet (a pool's verifier is fixed when it is deployed).
+
+**O: open source.**
+- [Apache-2.0](LICENSE).
+- Contracts, wallet, extension and stack all build and run from this repo alone.
+- Our hosted stack's secrets (mesh master, attester keys) are ours. Anyone can run their own stack with their own keys.
+
+**P: what each third party learns.**
+- **Each relay:** one hop; never both you and your payment.
+- **Our exit:**
+  - answers reads and relays UserOperations;
+  - never sees your IP (three hops away);
+  - does see which account's state is read.
+- **The attester:** the ring proof, not which of the 8 notes is yours.
+- **The chain:** the payer is hidden among 8 deposits; the recipient and amount are public.
+- **Public RPCs and the bundler:** our exit's address, or the mixnet's (anon-rpc), never yours.
+- **ENS lookups** in the wallet go through anon-rpc.
+- **Leaks to know about:**
+  - anon-rpc's bootstrap reads its network's specifier contract directly, once;
+  - an exit makes that one note public, because its secret is revealed;
+  - the homepage and docs load Google Fonts (the wallet pages load nothing third-party).
+- No analytics, no trackers.
+
+**S: keys, data and trust.**
+- **Keys:** FORS+C (hash-based, post-quantum), kept in the browser, sealed by the wallet password (PBKDF2 and AES-GCM).
+- **The recovery phrase** never leaves the device. The optional passkey backup is encrypted on the device and stored on our server.
+- **Trust in the attester:** a dishonest attester could approve a spend no proof supports, so it could drain a pool; it cannot learn who paid. The exit removes the need for the attester to get out, not to pay privately.
+- **Contracts:** the new contracts (`ExitableRingVerifier`, `AES128`, `OpaqueNames`) are tested with forge, not audited. The audited contracts are unchanged.
 
 The rest of this README is Opaque on Arc, which the other chains build on.
 

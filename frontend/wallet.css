@@ -691,3 +691,9 @@ dialog.terms:not([open]) { display: none; }
 .mm-resolved:empty { display: none; }
 .mm-resolved.pq { color: var(--soft); }
 .mm-continue:disabled { opacity: 0.45; cursor: default; }
+
+/* Your way out: one row a note. */
+#exit-notes { display: grid; gap: 8px; }
+.exit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); }
+.exit-row span { display: grid; gap: 2px; min-width: 0; }
+.exit-row small { color: var(--muted); }

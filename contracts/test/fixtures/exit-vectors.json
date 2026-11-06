@@ -1,0 +1,42 @@
+{
+  "fips": {
+    "key": "0x000102030405060708090a0b0c0d0e0f",
+    "block": "0x00112233445566778899aabbccddeeff",
+    "out": "0x69c4e0d86a7b0430d8cdb78070b4c55a"
+  },
+  "pairs": [
+    {
+      "key": "0x2b7e151628aed2a6abf7158809cf4f3c",
+      "block": "0x6bc1bee22e409f96e93d7e117393172a",
+      "out": "0x3ad77bb40d7a3660a89ecaf32466ef97"
+    },
+    {
+      "key": "0xffffffffffffffffffffffffffffffff",
+      "block": "0x00000000000000000000000000000000",
+      "out": "0xa1f6258c877d5fcd8964484538bfc92c"
+    },
+    {
+      "key": "0x0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "block": "0xdeadbeefcafef00d0123456789abcdef",
+      "out": "0x1fc17a005b729a24022a2c93b8f67e9a"
+    }
+  ],
+  "pool": {
+    "poolId": "0x1a4de351fa8004433f018908fe8e66eb072f4a7239e9666677943baf1ce60100",
+    "denomination": 5000000,
+    "noteBlock": "0xf3398f30fd99648c1a6e8f500297a773",
+    "nullifierBlock": "0x177d8b55bba04e6a33c8e465d9f01637",
+    "notes": [
+      {
+        "secret": "0x00112233445566778899aabbccddeeff",
+        "commitment": "0x6c42347602bdba39e49a6cf5f9cea95700000000000000000000000000000000",
+        "nullifier": "0xc3aa2241d236d76923d7e3b1247049f400000000000000000000000000000000"
+      },
+      {
+        "secret": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "commitment": "0x2ec9232a15d81d745521f49714e6b1f100000000000000000000000000000000",
+        "nullifier": "0xd55fa2e5fcb9294555baf61b8e6eb1c000000000000000000000000000000000"
+      }
+    ]
+  }
+}

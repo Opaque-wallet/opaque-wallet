@@ -104,6 +104,12 @@
       <p class="status" id="deposit-status" role="status"></p>
     </div>
 
+    <div class="deposit-card" id="exit-card" hidden>
+      <div class="deposit-copy"><p class="eyebrow">Your way out</p><p id="exit-copy">Each note can leave its pool on its own: no Opaque server, relay or attester is asked. Requests go to a public RPC and bundler through EF's anon-rpc (the Nox mixnet), and this wallet's post-quantum key signs. Two steps, a few minutes apart. The note you take out is no longer private.</p></div>
+      <button class="secondary" id="exit-find" type="button">Find my notes, without Opaque</button>
+      <div id="exit-notes"></div>
+      <p class="status" id="exit-status" role="status"></p>
+    </div>
     <div class="deposit-card" id="sub-card" hidden>
       <div class="deposit-copy"><p class="eyebrow">Your ENS name</p><p id="sub-copy">A name under opaque.eth for this wallet: anyone can pay it by name, and only this wallet's post-quantum key holds it.</p></div>
       <div class="deposit-row" id="sub-claim-row">
@@ -255,6 +261,7 @@
     <div class="card ring-card"><div id="ring-wrap"></div><p>One member signed. No member is singled out.</p></div>
     <dl class="stats"><div><dt>Pool freshness</dt><dd id="freshness-now">—</dd></div><div><dt>Pool deposits</dt><dd id="pool-size">—</dd></div></dl>
     <div class="card route"><p class="eyebrow">Relay path · 3 hops</p><div class="hops" id="hops"></div><p class="fine-print">Each payment draws a fresh route from the verified relay directory.</p></div>
+    <p class="fine-print" id="exit-link-wrap" hidden>If Opaque's servers ever go away or refuse you, your notes still leave their pools. <button class="link" id="exit-link" type="button">Leave without Opaque</button></p>
   </section>
 
   <section class="view" id="view-activity" aria-labelledby="tab-activity" hidden>

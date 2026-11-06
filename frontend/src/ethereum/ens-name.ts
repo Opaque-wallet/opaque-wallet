@@ -1,7 +1,8 @@
 // A name in Send's "To": ENSv2 on Sepolia answers with the name's address on the
 // devnet (ENSIP-11: coin type 0x80000000 | chainId), through ENS's own
-// UniversalResolverV2, as any ENS client would ask. A public Sepolia RPC learns
-// which name was looked up; never who pays it, nor how much, nor when.
+// UniversalResolverV2, as any ENS client would ask. In the browser every lookup
+// goes through EF's anon-rpc (lib/anon-rpc.ts, the Nox mixnet): the public RPC
+// learns a name was looked up, never by whom. Node (scripts, tests) asks directly.
 //
 // `pq` says the name is held by our PQNameController (deployments/eth-sepolia.json
 // `ens`): a name only a FORS+C signature can change, records included; or that it
@@ -28,7 +29,13 @@ export function dnsEncode(name: string): `0x${string}` {
   return `0x${[...bytes, 0].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
+const IN_BROWSER = typeof window !== 'undefined' && typeof document !== 'undefined';
+
 export async function ethCall(to: `0x${string}`, data: `0x${string}`): Promise<`0x${string}`> {
+  if (IN_BROWSER) {
+    const { anonRpc } = await import('../lib/anon-rpc.ts');
+    return anonRpc<`0x${string}`>(RPCS[0]!, 'eth_call', [{ to, data }, 'latest']);
+  }
   let last: unknown;
   for (const url of RPCS) {
     try {
