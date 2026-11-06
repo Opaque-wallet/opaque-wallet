@@ -10,9 +10,9 @@
 
 | Partner | Page | What's in it |
 |---|---|---|
-| **Uniswap** | [uniswap.md](uniswap.md) | The three v4 hooks; every flag and every callback (`beforeSwap`, and why there's no `afterSwap`); the guard's signature, transient storage and delta; the flows; errors and events; deployment addresses; tests |
-| **ENS** | [ens.md](ens.md) | How ENSv2 lets a contract hold every role; `PQNameController` and `OpaqueNames` function by function; how opaque.eth was handed to the key, step by step; how a name resolves; the wallet; deployment addresses; tests |
-| **Ethereum Foundation** | [ethereum-foundation.md](ethereum-foundation.md) | anon-rpc in the wallet; the exit that needs nobody (AES-128 on chain); ML-KEM-768 stealth payments; the private path; EIP-8141 frame transactions, `LeanFors` and the 100k budget; CROPS; deployment addresses |
+| **Uniswap** | [uniswap.md](uniswap.md) | [The Continuity prize, requirement by requirement](uniswap.md#continuity-track-build-with-uniswap-requirement-by-requirement), with permalinks to the code lines, and [`FEEDBACK.md`](../../FEEDBACK.md); the three v4 hooks; every flag and every callback (`beforeSwap`, and why there's no `afterSwap`); the guard's signature, transient storage and delta; the flows; errors and events; deployment addresses; tests |
+| **ENS** | [ens.md](ens.md) | [The Continuity prize, requirement by requirement](ens.md#continuity-track-ensv2-in-an-existing-project-requirement-by-requirement); how ENSv2 lets a contract hold every role; `PQNameController` and `OpaqueNames` function by function; how opaque.eth was handed to the key, step by step; how a name resolves; the wallet; deployment addresses; tests |
+| **Ethereum Foundation** | [ethereum-foundation.md](ethereum-foundation.md) | [Best CROPS Upgrade, requirement by requirement](ethereum-foundation.md#continuity-track-best-crops-upgrade-requirement-by-requirement): before and after, and the new property, C; anon-rpc in the wallet; the exit that needs nobody (AES-128 on chain); ML-KEM-768 stealth payments; the private path; EIP-8141 frame transactions, `LeanFors` and the 100k budget; CROPS; deployment addresses |
 
 ## The diagrams
 

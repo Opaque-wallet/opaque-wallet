@@ -4,7 +4,7 @@
 
 ### A wallet you can leave without us, reads nobody can trace, payees hidden against quantum computers, and transactions signed by a hash-based key alone.
 
-[![CROPS](https://img.shields.io/badge/CROPS-C%20·%20O%20·%20P%20·%20S-FF7A18?style=flat-square)](#crops-stated-plainly)
+[![CROPS](https://img.shields.io/badge/CROPS-C%20·%20O%20·%20P%20·%20S-FF7A18?style=flat-square)](#crops)
 [![anon-rpc](https://img.shields.io/badge/anon--rpc-Nox%20on%20Sepolia-FF7A18?style=flat-square)](https://ethereum.github.io/anon-rpc/)
 [![EIP-8141](https://img.shields.io/badge/EIP--8141-FORS%2BC%20frame%20txs-FF7A18?style=flat-square)](#s-eip-8141-a-transaction-signed-by-forsc-alone)
 
@@ -14,17 +14,65 @@
 
 ## Contents
 
-1. [Why this matters](#why-this-matters)
-2. [anon-rpc: reads nobody can trace](#anon-rpc-reads-nobody-can-trace)
-3. [C: your money leaves without us](#c-your-money-leaves-without-us)
-4. [P: who was paid is hidden too, against quantum computers as well](#p-who-was-paid-is-hidden-too-against-quantum-computers-as-well)
-5. [P: who paid is hidden: the private path](#p-who-paid-is-hidden-the-private-path)
-6. [S: EIP-8141, a transaction signed by FORS+C alone](#s-eip-8141-a-transaction-signed-by-forsc-alone)
-7. [CROPS, stated plainly](#crops-stated-plainly)
-8. [Deployment addresses](#deployment-addresses)
-9. [Reproduce it](#reproduce-it)
-10. [Drafts for the ecosystem](#drafts-for-the-ecosystem)
-11. [Where the code is](#where-the-code-is)
+1. [Continuity Track: Best CROPS Upgrade, requirement by requirement](#continuity-track-best-crops-upgrade-requirement-by-requirement)
+2. [Why this matters](#why-this-matters)
+3. [anon-rpc: reads nobody can trace](#anon-rpc-reads-nobody-can-trace)
+4. [C: your money leaves without us](#c-your-money-leaves-without-us)
+5. [P: who was paid is hidden too, against quantum computers as well](#p-who-was-paid-is-hidden-too-against-quantum-computers-as-well)
+6. [P: who paid is hidden: the private path](#p-who-paid-is-hidden-the-private-path)
+7. [S: EIP-8141, a transaction signed by FORS+C alone](#s-eip-8141-a-transaction-signed-by-forsc-alone)
+8. [CROPS](#crops)
+9. [Deployment addresses](#deployment-addresses)
+10. [Reproduce it](#reproduce-it)
+11. [Drafts for the ecosystem](#drafts-for-the-ecosystem)
+12. [Where the code is](#where-the-code-is)
+
+## Continuity Track: Best CROPS Upgrade, requirement by requirement
+
+**The new property is C, censorship resistance: your money leaves without us.** It's the prize's first example, recovery that needs nothing from you, and it's structural. The exit lives in each pool's verifier contract. The pool's verifier is `immutable`, and neither contract has an owner or a pause, so Opaque can't switch the exit off.
+
+### Before and after
+
+| If Opaque's servers go away, or refuse you | **Before** the hackathon (Opaque on Arc, to commit `dc17963`, 27 October) | **After** (Sepolia, built 5–7 November from commit [`7d15d96`](https://github.com/Opaque-wallet/opaque-wallet/commit/7d15d96)) |
+|---|---|---|
+| Your notes | Stuck. Every spend needed Opaque's attester to sign it. | They leave. [`announceExit`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/opaque/pool/ExitableRingVerifier.sol#L88-L93), wait `exitDelay`, then [`spend`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/opaque/pool/ExitableRingVerifier.sol#L101-L119). AES-128 on chain checks the note, and no attester is asked. |
+| Reading your balance | Through Opaque's mesh | From a public RPC, through EF's anon-rpc ([`anonFetch`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/frontend/src/lib/anon-rpc.ts#L54-L65)) |
+| Sending | Through Opaque's relays | To Pimlico's public bundler through anon-rpc, signed by the account's FORS+C key ([`withoutOpaque`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/frontend/src/lib/without-opaque.ts#L50-L94)) |
+| The wallet page | opaque.credit | opaque.credit, the extension's bundled copy, or a build from this repo |
+| Licence | Proprietary | Apache-2.0 |
+
+**The moment it matters, in the demo:**
+1. Every Opaque host is blocked in the browser.
+2. The wallet doesn't show an error. It shows **"Your way out"**: *Find my notes, without Opaque*.
+3. It reads the notes through anon-rpc, announces, waits, and withdraws.
+4. The receiving address gets the money, and no RPC or bundler saw the account.
+
+[`e2e-sepolia.ts`](../../backend/scripts/e2e-sepolia.ts) checks this against the live site: a 50 tUSDC note leaves its pool with every Opaque host blocked.
+
+### The qualification requirements
+
+| Requirement | Met by |
+|---|---|
+| Public repo under a FOSS licence | [github.com/Opaque-wallet/opaque-wallet](https://github.com/Opaque-wallet/opaque-wallet), [Apache-2.0](../../LICENSE) |
+| A README that explains how to run it | [Main README, *Proof: run it yourself*](../../README.md#proof-run-it-yourself): the site (`cd frontend && npm install && npm run preview:site`), the contracts (`forge test`) and the browser suites; the stack in [`backend/README.md`](../../backend/README.md) |
+| A section titled CROPS, a line or two per letter | [Main README § CROPS](../../README.md#crops), and [CROPS](#crops) below |
+| What the project was before, and which property is new | [Main README § CROPS](../../README.md#crops), and the table above |
+| A demo video showing the before and after, and the moment it matters | The exit step: Opaque blocked, notes found through anon-rpc, announced, withdrawn |
+| No third-party trackers or analytics in the client | None, on any page. The [privacy policy](https://www.opaque.credit/privacy) says so. |
+| Keys and personal data stay on the device | The recovery phrase, FORS+C and ML-KEM keys, note secrets and history are kept in the browser, sealed under the wallet password ([`lock.ts`](../../frontend/src/lib/lock.ts)). |
+
+### The judging criteria
+
+| Criterion | How the upgrade meets it |
+|---|---|
+| **Works end to end in the demo** | Live on Sepolia: blocked hosts, then notes found, announced, waited on and withdrawn, from the real site. The same run is a browser test. |
+| **Structural, not cosmetic** | It's a contract path, not a setting. The pool's verifier is `immutable`, and neither the pool nor the verifier has an owner or a pause. It needs only the note's secret, which the user's recovery phrase derives. |
+| **The other three still hold** | **O** improved too: proprietary before, Apache-2.0 now. **S:** a revealed secret can't be raced, because announcing closes the private path (`NoteIsExiting`) and the payout is bound in the announcement. **P:** the trade-off is that the note you take out is no longer private, and the wallet says so before you start. Every trade-off is in [CROPS](#crops). |
+| **UX without knowing what CROPS means** | No settings, and no words to learn. When Opaque's hosts don't answer, the wallet offers the way out instead of an error: one button to find the notes, one to start, one to withdraw. |
+| **Could ship after the hackathon** | It wraps the audited `AttestedRingVerifier`, unchanged. `exitDelay` is a constructor value: 300 s on Sepolia, days on a real pool. The pattern is written up as an ERC draft ([`erc-exitable-pools.md`](../../docs/mumbai/erc-exitable-pools.md)), and the anon-rpc adopter entry is drafted. Before mainnet: an audit of `ExitableRingVerifier` and `AES128.sol`. |
+| **Only new work is judged** | Everything in the *After* column was built at the event. [What existed before](../../docs/mumbai/README.md#what-existed-before-the-event-and-what-we-built-at-it) is listed separately. |
+
+**EF tooling used:** anon-rpc for every read and send in the exit, and for ENS always. The alt mempool for FORS+C-only frame transactions on the EIP-8141 devnet ([below](#s-eip-8141-a-transaction-signed-by-forsc-alone)).
 
 ## Why this matters
 
@@ -181,14 +229,28 @@ Post-quantum stealth payments, on the **standard** contracts ([`backend/chain/st
 
 **Try it:** [opaque.credit/testnet/devnet](https://www.opaque.credit/testnet/devnet), "Ethereum Devnet (Fully post-quantum)".
 
-## CROPS, stated plainly
+## CROPS
 
-| | What we do | What we don't, yet |
-|---|---|---|
-| **C**, censorship resistance | Notes leave their pools with every Opaque server unreachable (exitable pools, anon-rpc, a public bundler). | Arc and XRPL pools have no such exit: a pool's verifier is fixed when it's deployed. Private *payments* still need our attester. |
-| **O**, open source | [Apache-2.0](../../LICENSE). Contracts, wallet, extension and stack build and run from this repo alone. | Our hosted stack's secrets are ours. Anyone can run a stack with their own. |
-| **P**, privacy | Ring of 8, a three-hop relay mesh, a fresh account per app, ML-KEM stealth payments, reads through anon-rpc, no analytics. | anon-rpc's bootstrap reads its specifier contract directly, once. An exit makes that one note public. Amounts are public. |
-| **S**, security | FORS+C hash-based keys, sealed in the browser under the wallet password; few-time keys that rotate themselves; forge tests; the audited contracts unchanged. | The new contracts aren't audited. The relays are **one operator today; before mainnet they'll be run by multiple independent operators.** |
+**Before the hackathon,** Opaque ran on Arc and the XRP Ledger, under a proprietary licence, and every withdrawal needed our attester. **The new property is C:** on Sepolia, every note leaves its pool with all of Opaque switched off.
+
+- **C, what we control and what happens without it.**
+  - *Servers* (six relays, the attester, the settler, the egress): if they go or refuse you, private payments, stealth announcements and sweep gas stop, but every note still leaves its pool through the exit.
+  - *Domain* (opaque.credit): the extension carries the wallet pages, and anyone can build and serve the site from this repo.
+  - *RPC and bundler:* we run neither. A public RPC and Pimlico's public bundler answer through anon-rpc. Any ERC-4337 v0.7 bundler carries the same signed UserOperation, and the URL is one line in [`deployments/eth-sepolia.json`](../../deployments/eth-sepolia.json).
+  - *Not covered:* Arc and XRPL pools have no such exit, because a pool's verifier is fixed when it's deployed.
+- **O.** [Apache-2.0](../../LICENSE). The contracts, the wallet, the extension and the stack build and run from this repo alone. Only our hosted stack's secrets are ours, and anyone can run a stack with their own.
+- **P, what each third party learns.**
+  - *Opaque's relays:* the first hop sees your IP and not the payment; the last sees the payment and not your IP. One operator runs all six today, so it could correlate them by timing.
+  - *Opaque's egress:* with Opaque Unseen off, the account's reads and UserOperations, which arrive over the mesh, without your IP. With it on, none of them.
+  - *The attester:* the proof, the nullifier, the recipient and the amount, never which of the 8 notes paid.
+  - *The RPC provider and the bundler:* through anon-rpc, the mixnet's exit, not you. anon-rpc's bootstrap reads its specifier contract directly, once.
+  - *Our host:* page loads, as for any website. The landing and info pages (not the wallet) load their fonts from Google Fonts.
+  - *Analytics and indexers:* none. Rings and notes are read from the pools' own events.
+  - *Everyone, on chain:* deposits and amounts. A payment hides among 8 notes, and a note taken out through the exit is public.
+- **S, keys and trust.**
+  - Keys come from a recovery phrase that never leaves the browser. With a wallet password, every secret record is sealed with AES-GCM under a key the PBKDF2-stretched password wraps.
+  - Every action needs a FORS+C signature that `PQKeyRegistry` counts. A key signs at most 8 times, then hands over to a successor it committed to in advance.
+  - *Trusted today:* the attester, for the soundness of private spends: a dishonest one could approve a spend no proof supports, but it can't block the exit. One operator runs the relays, and **before mainnet they'll be run by multiple independent operators.** The new contracts are tested, not audited; the audited ones are deployed unchanged.
 
 ## Deployment addresses
 

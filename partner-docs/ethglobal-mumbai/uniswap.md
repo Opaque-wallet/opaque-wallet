@@ -14,21 +14,66 @@
 
 ## Contents
 
-1. [Why this matters](#why-this-matters)
-2. [The three hooks](#the-three-hooks)
-3. [How v4 decides which callbacks to call: the flags](#how-v4-decides-which-callbacks-to-call-the-flags)
-4. [Every callback, hook by hook](#every-callback-hook-by-hook), including [`beforeSwap`](#beforeswap-in-detail) and [why there's no `afterSwap`](#why-theres-no-afterswap)
-5. [Who is acting: `actor(sender)`](#who-is-acting-actorsender)
-6. [`PQAccountPoolHook` (Sepolia)](#pqaccountpoolhook-sepolia-post-quantum-accounts-only)
-7. [`PQPoolHook` (EIP-8141 devnet)](#pqpoolhook-eip-8141-devnet-the-same-rule-for-frame-accounts)
-8. [`PQGuardHook` (Sepolia)](#pqguardhook-sepolia-a-forsc-second-factor-for-any-lp)
-9. [The flows](#the-flows)
-10. [How the wallet and scripts call them](#how-the-wallet-and-scripts-call-them)
-11. [Errors and events](#errors-and-events)
-12. [Deployment addresses](#deployment-addresses)
-13. [What it shows on chain](#what-it-shows-on-chain)
-14. [Where the code is](#where-the-code-is)
-15. [The boundary](#the-boundary)
+1. [Continuity Track: Build with Uniswap, requirement by requirement](#continuity-track-build-with-uniswap-requirement-by-requirement)
+2. [Why this matters](#why-this-matters)
+3. [The three hooks](#the-three-hooks)
+4. [How v4 decides which callbacks to call: the flags](#how-v4-decides-which-callbacks-to-call-the-flags)
+5. [Every callback, hook by hook](#every-callback-hook-by-hook), including [`beforeSwap`](#beforeswap-in-detail) and [why there's no `afterSwap`](#why-theres-no-afterswap)
+6. [Who is acting: `actor(sender)`](#who-is-acting-actorsender)
+7. [`PQAccountPoolHook` (Sepolia)](#pqaccountpoolhook-sepolia-post-quantum-accounts-only)
+8. [`PQPoolHook` (EIP-8141 devnet)](#pqpoolhook-eip-8141-devnet-the-same-rule-for-frame-accounts)
+9. [`PQGuardHook` (Sepolia)](#pqguardhook-sepolia-a-forsc-second-factor-for-any-lp)
+10. [The flows](#the-flows)
+11. [How the wallet and scripts call them](#how-the-wallet-and-scripts-call-them)
+12. [Errors and events](#errors-and-events)
+13. [Deployment addresses](#deployment-addresses)
+14. [What it shows on chain](#what-it-shows-on-chain)
+15. [Where the code is](#where-the-code-is)
+16. [The boundary](#the-boundary)
+
+## Continuity Track: Build with Uniswap, requirement by requirement
+
+### Before and after
+
+| | **Before** the hackathon (Opaque on Arc, to commit `dc17963`, 27 October) | **After** (built 5–7 November from commit [`7d15d96`](https://github.com/Opaque-wallet/opaque-wallet/commit/7d15d96)) |
+|---|---|---|
+| Uniswap in Opaque | None. Swaps went through LI.FI. | Uniswap's own v4 on Sepolia, plus v4 on the EIP-8141 devnet |
+| Liquidity | No protection | `PQGuardHook`: a FORS+C second factor for **any** LP, MetaMask's included |
+| Pools | n/a | `PQAccountPoolHook` and `PQPoolHook`: pools only post-quantum accounts can trade in or provide to |
+| The wallet | n/a | A Swap tab: a quote read from PoolManager storage, and one UserOperation signed by FORS+C through the Universal Router |
+
+**How it improves Opaque:** a post-quantum wallet whose liquidity still answers to an ECDSA key isn't post-quantum. With the hooks, the pool itself refuses a cracked key. And the guard protects LPs who never switch wallets.
+
+### The requirements
+
+| Requirement | Met by |
+|---|---|
+| Build on or integrate the Uniswap stack (v4 hooks count) | Three v4 hooks, deployed at Uniswap's own Sepolia PoolManager, called through Uniswap's own PositionManager and Universal Router |
+| Public, open-source repository | [github.com/Opaque-wallet/opaque-wallet](https://github.com/Opaque-wallet/opaque-wallet), [Apache-2.0](../../LICENSE) |
+| `FEEDBACK.md` | [`FEEDBACK.md`](../../FEEDBACK.md) at the repo root: what worked, and what cost us time, building on v4 |
+| The Uniswap Developer Feedback Form | Links to `FEEDBACK.md` |
+| The README points to the contracts and code lines | The table below |
+
+### The contracts and code lines
+
+Permalinks at commit `0f29d16`:
+
+| What | Where |
+|---|---|
+| `PQGuardHook`: the flags `0xB01`, and the constructor's self-check | [`PQGuardHook.sol#L32`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQGuardHook.sol#L32), [`#L55-L61`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQGuardHook.sol#L55-L61) |
+| What the guard key signs: the position, delta, recipient and deadline | [`payload`, #L67-L70](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQGuardHook.sol#L67-L70) |
+| The first funding binds the position to its funder's FORS+C key | [`beforeAddLiquidity`, #L76-L89](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQGuardHook.sol#L76-L89) |
+| A removal needs the signature, consumed once in `PQKeyRegistry`, and the recipient goes to transient storage | [`beforeRemoveLiquidity`, #L91-L106](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQGuardHook.sol#L91-L106) |
+| The return delta claims what the removal released, and pays only the signed recipient | [`afterRemoveLiquidity`, #L108-L129](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQGuardHook.sol#L108-L129) |
+| `PQAccountPoolHook`: the flags `0xAA0`, admission by code hash, the real caller through `msgSender()` | [`PQAccountPoolHook.sol#L16`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQAccountPoolHook.sol#L16), [`#L37-L49`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQAccountPoolHook.sol#L37-L49) |
+| `beforeSwap` returns `(selector, 0, 0)`, so a passing swap is exactly a hookless one | [`PQAccountPoolHook.sol#L69-L76`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQAccountPoolHook.sol#L69-L76) |
+| `PQPoolHook` (devnet): admission by the factory's CREATE2 address, then the same gate | [`register`, #L79-L84](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQPoolHook.sol#L79-L84), [`actor` and `_only`, #L87-L95](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/uniswap/PQPoolHook.sol#L87-L95) |
+| The quote from PoolManager storage (`extsload`), with v4's swap-step math | [`uniswap-v4.ts#L68-L83`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/backend/ethereum/uniswap/uniswap-v4.ts#L68-L83) |
+| The swap through the Universal Router (V4_SWAP), and the guarded removal through the PositionManager | [`swapCalls`, #L92-L111](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/backend/ethereum/uniswap/uniswap-v4.ts#L92-L111), [`decreaseCall`, #L138-L147](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/backend/ethereum/uniswap/uniswap-v4.ts#L138-L147) |
+| The wallet's Swap tab | [`setupV4Swap`, `app.ts#L1181-L1264`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/frontend/src/app.ts#L1181-L1264) |
+| The tests, with real FORS+C signatures | [`PQGuardHook.t.sol`](../../contracts/test/uniswap/PQGuardHook.t.sol) (8), [`PQPoolHook.t.sol`](../../contracts/test/uniswap/PQPoolHook.t.sol) (7) |
+
+**Try it:** the Swap tab at [opaque.credit/sepolia/app](https://www.opaque.credit/sepolia/app). On chain, an ECDSA wallet's swap in the same pool reverts with `NotPostQuantum`, and a cracked key's removal from a guarded position reverts with `BadSignature` ([what it shows on chain](#what-it-shows-on-chain)).
 
 ## Why this matters
 

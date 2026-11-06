@@ -47,12 +47,13 @@ It's live on Sepolia and on Ethereum's EIP-8141 devnet, built for ETHGlobal Mumb
 5. [The cryptography, layer by layer](#the-cryptography-layer-by-layer)
 6. [Architecture: the moving parts](#architecture-the-moving-parts)
 7. [Partner tracks: Uniswap, ENS, Ethereum Foundation](#partner-tracks)
-8. [Hard problems we solved](#hard-problems-we-solved)
-9. [The numbers](#the-numbers)
-10. [Deployment addresses](#deployment-addresses)
-11. [Proof: run it yourself](#proof-run-it-yourself)
-12. [Threat model, and what we don't claim](#threat-model-and-what-we-dont-claim)
-13. [Repository map](#repository-map)
+8. [CROPS](#crops)
+9. [Hard problems we solved](#hard-problems-we-solved)
+10. [The numbers](#the-numbers)
+11. [Deployment addresses](#deployment-addresses)
+12. [Proof: run it yourself](#proof-run-it-yourself)
+13. [Threat model, and what we don't claim](#threat-model-and-what-we-dont-claim)
+14. [Repository map](#repository-map)
 
 ---
 
@@ -276,6 +277,19 @@ There's no indexer between the wallet and the chain: rings, notes and names are 
 - **O: Apache-2.0.** Every contract, the wallet, the extension and the stack build from this repository.
 
 → [partner-docs/ethglobal-mumbai/ethereum-foundation.md](partner-docs/ethglobal-mumbai/ethereum-foundation.md): CROPS letter by letter, the exit's every check, stealth, frame transactions and addresses.
+
+## CROPS
+
+**Before the hackathon:** Opaque ran on Arc and the XRP Ledger, under a proprietary licence. Every withdrawal needed our attester's signature, so if our servers went away or refused you, your notes stayed in the pool. **New at ETHGlobal Mumbai: C.** On Sepolia, every note leaves its pool with all of Opaque switched off. The exit lives in the pool's verifier, which nobody can change or pause. ([Before and after in detail](partner-docs/ethglobal-mumbai/ethereum-foundation.md#continuity-track-best-crops-upgrade-requirement-by-requirement).)
+
+- **C:** We run the relays, the attester, the settler and opaque.credit. Without them, private payments stop, but every note still leaves its pool: announce, wait, withdraw, read and sent through EF's anon-rpc to a public RPC and bundler, with the wallet from the extension or a build of this repo. We run no RPC and no bundler.
+- **O:** [Apache-2.0](LICENSE) since this hackathon. The contracts, wallet, extension and stack build and run from this repo alone ([run it yourself](#proof-run-it-yourself)).
+- **P:**
+  - Relays: the first hop sees your IP but not the payment, and the last sees the payment but not your IP. One operator runs all of them today.
+  - The attester sees the proof, but not which of 8 notes paid.
+  - Through anon-rpc, the RPC provider and the bundler see the mixnet, not you.
+  - There are no analytics and no indexers. Amounts are public on chain.
+- **S:** Keys come from a recovery phrase that never leaves the browser, sealed under the wallet password. Every action needs a FORS+C signature counted on chain. We trust the attester for the soundness of private spends, but not for exits. The new contracts are tested, not audited.
 
 ## Hard problems we solved
 

@@ -14,18 +14,62 @@
 
 ## Contents
 
-1. [Why this matters](#why-this-matters)
-2. [Why it works without changing ENS](#why-it-works-without-changing-ens)
-3. [`PQNameController`: opaque.eth, owned by FORS+C](#pqnamecontroller-opaqueeth-owned-by-forsc)
-4. [How opaque.eth was handed to the key, step by step](#how-opaqueeth-was-handed-to-the-key-step-by-step)
-5. [`OpaqueNames`: name.opaque.eth for post-quantum accounts](#opaquenames-nameopaqueeth-for-post-quantum-accounts)
-6. [How a name resolves](#how-a-name-resolves)
-7. [In the wallet](#in-the-wallet)
-8. [Errors and events](#errors-and-events)
-9. [Deployment addresses](#deployment-addresses)
-10. [Try it and test it](#try-it-and-test-it)
-11. [Where the code is](#where-the-code-is)
-12. [The boundary](#the-boundary)
+1. [Continuity Track: ENSv2 in an existing project, requirement by requirement](#continuity-track-ensv2-in-an-existing-project-requirement-by-requirement)
+2. [Why this matters](#why-this-matters)
+3. [Why it works without changing ENS](#why-it-works-without-changing-ens)
+4. [`PQNameController`: opaque.eth, owned by FORS+C](#pqnamecontroller-opaqueeth-owned-by-forsc)
+5. [How opaque.eth was handed to the key, step by step](#how-opaqueeth-was-handed-to-the-key-step-by-step)
+6. [`OpaqueNames`: name.opaque.eth for post-quantum accounts](#opaquenames-nameopaqueeth-for-post-quantum-accounts)
+7. [How a name resolves](#how-a-name-resolves)
+8. [In the wallet](#in-the-wallet)
+9. [Errors and events](#errors-and-events)
+10. [Deployment addresses](#deployment-addresses)
+11. [Try it and test it](#try-it-and-test-it)
+12. [Where the code is](#where-the-code-is)
+13. [The boundary](#the-boundary)
+
+## Continuity Track: ENSv2 in an existing project, requirement by requirement
+
+### Before and after
+
+| | **Before** the hackathon (Opaque on Arc, to commit `dc17963`, 27 October) | **After** (built 5–7 November from commit [`7d15d96`](https://github.com/Opaque-wallet/opaque-wallet/commit/7d15d96)) |
+|---|---|---|
+| Paying someone | Paste a 0x address | Type `alice.opaque.eth`. The wallet resolves it through UniversalResolverV2, over anon-rpc. |
+| Your account | "Account 1" and an address | `yourname.opaque.eth`, claimed in one FORS+C signature, shown in the header and the account list |
+| Who a name can point to | n/a | Only a post-quantum account: `OpaqueNames` admits claims by the `PQAccount` clone's code hash |
+| Receiving privately | Not possible | The same signature that claims the name publishes an ML-KEM-768 stealth key, so paying the name pays a fresh one-time account |
+| The name itself | n/a | opaque.eth is held by `PQNameController`, which acts only on a FORS+C signature. The old owner's ECDSA key is refused. |
+
+**How it improves Opaque:** a post-quantum wallet that pays 0x strings has two problems. Payers can't tell a post-quantum payee from an ECDSA one, and anyone watching the address sees every payment to it. With ENSv2, a name tells the payer the money lands where only a hash-based key can move it, and stealth keeps payments to that name unlinkable from its holder.
+
+### The ENSv2 features it rests on
+
+- **Enhanced access control.** Every role over opaque.eth moved with its ERC-1155 token to `PQNameController`, so the controller is the only holder of every role.
+- **A Permissioned Resolver**, made by ENS's own `VerifiableFactory`, with the controller as its only admin from its first block.
+- **Hierarchical registries.** `OpaqueNames` is opaque.eth's subregistry and the resolver of every name under it. UniversalResolverV2 walks to it unchanged.
+
+### The requirements
+
+| Requirement | Met by |
+|---|---|
+| ENSv2 integrated into an existing project | Opaque (on Arc since 16 October) gained names, name payments and a name held by a post-quantum key |
+| Make clear how it improves the project | [Before and after](#before-and-after), above |
+| A functional demo, with no hard-coded values | Names are claimed live from the page. Send resolves whatever name you type through UniversalResolverV2. [`e2e-sepolia.ts`](../../backend/scripts/e2e-sepolia.ts) claims, resolves, pays and releases a name against the live site. |
+| A live demo link | [opaque.credit/sepolia/app](https://www.opaque.credit/sepolia/app), **Names** tab |
+| Open source | [github.com/Opaque-wallet/opaque-wallet](https://github.com/Opaque-wallet/opaque-wallet), [Apache-2.0](../../LICENSE) |
+| Ethereum mainnet | **Not yet: we're live on Sepolia**, on ENS's official Sepolia ENSv2 deployment. The contracts take every address in their constructors. A mainnet deployment is the same five steps in [`ens-sepolia.ts`](../../backend/ethereum/ens/ens-sepolia.ts), plus Opaque's key registry and account factory on mainnet. |
+
+### The contracts and code lines
+
+Permalinks at commit `0f29d16`:
+
+| What | Where |
+|---|---|
+| The controller's only way to act: a FORS+C signature over the target, the calldata hash and the deadline, consumed once | [`PQNameController.execute`, #L45-L57](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/ens/PQNameController.sol#L45-L57) |
+| What the key signs | [`payload`, #L40-L42](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/ens/PQNameController.sol#L40-L42) |
+| Only a post-quantum account can claim, one name each | [`OpaqueNames.claim`, #L51-L61](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/ens/OpaqueNames.sol#L51-L61) |
+| The registry walk and ENSIP-10 resolution | [`getResolver`, #L80-L82](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/ens/OpaqueNames.sol#L80-L82), [`resolve`, #L100](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/contracts/src/ethereum/ens/OpaqueNames.sol#L100) |
+| The wallet's lookup, through UniversalResolverV2 and anon-rpc | [`resolveName`, `ens-name.ts#L61-L83`](https://github.com/Opaque-wallet/opaque-wallet/blob/0f29d16010b6e210ddd3fa4f859aba222b4a4bf9/frontend/src/ethereum/ens/ens-name.ts#L61-L83) |
 
 ## Why this matters
 
